@@ -1,0 +1,40 @@
+[33ma027dd2[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m update
+ .gitignore     | 19 [32m+++++++++++++++++++[m
+ app/config.php | 16 [32m++++++++++++++++[m
+ 2 files changed, 35 insertions(+)
+[33mf51660f[m updated
+ admin/activity_logs.php      |   64 [32m+++[m
+ admin/dashboard.php          |  544 [32m+++++++++++++++++++[m
+ admin/manage_departments.php |   41 [32m++[m
+ admin/manage_students.php    |   68 [32m+++[m
+ admin/manage_subjects.php    |   80 [32m+++[m
+ admin/manage_teachers.php    |  206 [32m+++++++[m
+ admin/manage_users.php       |  231 [32m++++++++[m
+ dashboard.php                |    0
+ includes/security.php        |   38 [32m++[m
+ index.php                    |  463 [32m++++++++++++++++[m
+ logout.php                   |    7 [32m+[m
+ student/dashboard.php        | 1238 [32m++++++++++++++++++++++++++++++++++++++++++[m
+ student/export_pdf.php       |  123 [32m+++++[m
+ teacher/backup.php           |  146 [32m+++++[m
+ teacher/create_exam.php      |  229 [32m++++++++[m
+ teacher/dashboard.php        |  790 [32m+++++++++++++++++++++++++++[m
+ teacher/generate_ai.php      |  475 [32m++++++++++++++++[m
+ teacher/manage_students.php  |  223 [32m++++++++[m
+ teacher/profile_settings.php |  365 [32m+++++++++++++[m
+ teacher/reports.php          |  211 [32m+++++++[m
+ teacher/upload_check.php     |  539 [32m++++++++++++++++++[m
+ teacher/upload_lessons.php   |  227 [32m++++++++[m
+ 22 files changed, 6308 insertions(+)
+[33m59dc17c[m[33m ([m[1;31morigin/main[m[33m)[m Merge branch 'main' of https://github.com/gutierrez-nicole/Quest_bank
+[33m1cdb085[m Initial commit
+ README.md | 1 [32m+[m
+ 1 file changed, 1 insertion(+)
+[33m2e3b209[m bank_quest
+ app/config.php   | 0
+ app/database.php | 0
+ app/session.php  | 0
+ index.php        | 0
+ login.php        | 0
+ register.php     | 0
+ 6 files changed, 0 insertions(+), 0 deletions(-)
