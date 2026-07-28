@@ -80,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['restore_backup'])) {
 </head>
 <body class="bg-[#fffbf7] min-h-screen flex">
     <?php require_once __DIR__ . '/../includes/teacher_sidebar.php'; ?>
-    <main class="flex-1 lg:ml-64 p-6 md:p-12 overflow-y-auto min-h-screen">
+    <main class="flex-1 ml-16 lg:ml-64 p-6 md:p-12 overflow-y-auto min-h-screen">
         <div class="max-w-4xl mx-auto space-y-6">
             <div>
                 <a href="dashboard.php" class="text-xs font-bold text-orange-600 hover:underline"><i class="fa-solid fa-arrow-left mr-1"></i> Back to Dashboard</a>

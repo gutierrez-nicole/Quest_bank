@@ -147,7 +147,7 @@ $students = $stmtStud->fetchAll(PDO::FETCH_ASSOC);
     <?php require_once __DIR__ . '/../includes/teacher_sidebar.php'; ?>
 
     <!-- ================= MAIN CONTENT AREA ================= -->
-    <main class="flex-1 lg:ml-64 p-6 md:p-12 overflow-y-auto min-h-screen">
+    <main class="flex-1 ml-16 lg:ml-64 p-6 md:p-12 overflow-y-auto min-h-screen">
         <div class="max-w-6xl mx-auto space-y-6">
             <div class="flex items-center justify-between">
                 <div>

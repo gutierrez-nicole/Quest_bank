@@ -80,7 +80,7 @@ try {
 </head>
 <body class="bg-[#f3f4f6] min-h-screen flex">
     <?php require_once __DIR__ . '/../includes/admin_sidebar.php'; ?>
-    <main class="flex-1 lg:ml-64 p-6 md:p-12 overflow-y-auto min-h-screen">
+    <main class="flex-1 ml-16 lg:ml-64 p-6 md:p-12 overflow-y-auto min-h-screen">
         <div class="max-w-6xl mx-auto space-y-6">
         
         <!-- HEADER -->

@@ -119,7 +119,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
     <?php require_once __DIR__ . '/../includes/teacher_sidebar.php'; ?>
 
     <!-- ================= MAIN CONTENT AREA ================= -->
-    <main class="flex-grow flex flex-col min-w-0 lg:ml-64 min-h-screen">
+    <main class="flex-grow flex flex-col min-w-0 ml-16 lg:ml-64 min-h-screen">
         
         <!-- TOP NAV HEADERBAR -->
         <header class="bg-white border-b border-stone-200 px-6 py-4 flex items-center justify-between flex-shrink-0">
