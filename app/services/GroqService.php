@@ -52,7 +52,7 @@ class GroqService {
                 . "Format response strictly as a JSON array of objects without markdown fences or code blocks. "
                 . "Each object MUST have: \"question\" (string), \"type\" (\"multiple_choice\" or \"identification\"), "
                 . "\"opt_a\" (string or null), \"opt_b\" (string or null), \"opt_c\" (string or null), \"opt_d\" (string or null), "
-                . "and \"correct_answer\" (string).";
+                . "\"correct_answer\" (string), and \"explanation\" (string containing detailed step-by-step Civil Engineering formula/concept solution).";
 
         $payload = [
             'model' => GROQ_DEFAULT_MODEL,
@@ -88,7 +88,7 @@ class GroqService {
                 . "Student Answers extracted: {$simulatedOrExtractedText}. "
                 . "Calculate score parameters meticulously: Total items, Correct count, Wrong count, Percentage Grade (0-100), Status ('Pass' if percentage >= 75, else 'Fail'). "
                 . "Return ONLY a valid JSON object string matching schema: "
-                . "{\"correct\": 4, \"wrong\": 1, \"total_items\": 5, \"percentage\": 80, \"status\": \"Pass\", \"questions\": [{\"num\": 1, \"q\": \"Question text\", \"student_ans\": \"Ans\", \"key_ans\": \"Key\", \"is_correct\": true}]}";
+                . "{\"correct\": 4, \"wrong\": 1, \"total_items\": 5, \"percentage\": 80, \"status\": \"Pass\", \"questions\": [{\"num\": 1, \"q\": \"Question text\", \"student_ans\": \"Ans\", \"key_ans\": \"Key\", \"is_correct\": true, \"explanation\": \"Step-by-step Civil Engineering formula solution & explanation\"}]}";
 
         $payload = [
             'model' => GROQ_DEFAULT_MODEL,
