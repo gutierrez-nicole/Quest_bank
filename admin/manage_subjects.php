@@ -18,7 +18,7 @@ try {
         $success_msg = "Subject successfully added to academic curriculum!";
     }
 
-    $subjects = $pdo->query("SELECT DISTINCT subject, title FROM lesson_materials ORDER BY id DESC")->fetchAll();
+    $subjects = $pdo->query("SELECT MAX(id) AS id, subject, title FROM lesson_materials GROUP BY subject, title ORDER BY id DESC")->fetchAll();
 } catch (PDOException $e) { die("Database error: " . $e->getMessage()); }
 ?>
 
