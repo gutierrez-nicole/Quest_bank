@@ -1,22 +1,13 @@
 <?php
-session_start();
+require_once __DIR__ . '/../app/database.php';
+require_once __DIR__ . '/../app/session.php';
+require_once __DIR__ . '/../includes/security.php';
 
-// Dahil nasa loob ng 'student/' folder ito, aakyat tayo ng isang antas (../) para sa index.php
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'student') {
-    header("Location: ../index.php");
-    exit();
-}
-
-$host = 'localhost';
-$dbname = 'bankquest_db';
-$db_user = 'root';
-$db_pass = '';
+requireRole('student');
+$pdo = getDBConnection();
 
 try {
-    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $db_user, $db_pass);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    
-    $student_id = $_SESSION['user_id'];
+    $student_id = getCurrentUserId();
 
     // ==================== 1. STUDENT PROFILE INFO ====================
     $stmt = $pdo->prepare("

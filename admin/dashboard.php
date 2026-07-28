@@ -1,28 +1,16 @@
 <?php
-session_start();
+require_once __DIR__ . '/../app/database.php';
+require_once __DIR__ . '/../app/session.php';
+require_once __DIR__ . '/../includes/security.php';
 
-// Siguraduhing naka-login at isang Admin ang nakapasok
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: ../index.php");
-    exit();
-}
-
-// Database Connection
-$host = 'localhost';
-$dbname = 'bankquest_db';
-$db_user = 'root';
-$db_pass = '';
+requireRole('admin');
+$pdo = getDBConnection();
 
 try {
-    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $db_user, $db_pass);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    
-    // Kunin ang profile info ng Admin
     $stmt = $pdo->prepare("SELECT fullname, username, email FROM users WHERE id = ?");
-    $stmt->execute([$_SESSION['user_id']]);
-    $admin = $stmt->fetch(PDO::FETCH_ASSOC);
+    $stmt->execute([getCurrentUserId()]);
+    $admin = $stmt->fetch();
 
-    // Dynamic Counts from Database with fallbacks
     $teachers_count = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'teacher'")->fetchColumn() ?: 24;
     $students_count = $pdo->query("SELECT COUNT(*) FROM users WHERE role = 'student'")->fetchColumn() ?: 1480;
     $subjects_count = $pdo->query("SELECT COUNT(*) FROM lesson_materials")->fetchColumn() ?: 18;

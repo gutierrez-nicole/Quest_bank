@@ -1,25 +1,13 @@
 <?php
-session_start();
+require_once __DIR__ . '/../app/database.php';
+require_once __DIR__ . '/../app/session.php';
+require_once __DIR__ . '/../includes/security.php';
 
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'teacher') {
-    header("Location: ../index.php");
-    exit();
-}
-
-$host = 'localhost';
-$dbname = 'bankquest_db';
-$db_user = 'root';
-$db_pass = '';
+requireRole('teacher');
+$pdo = getDBConnection();
 
 $success_msg = "";
 $error_msg = "";
-
-try {
-    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $db_user, $db_pass);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-} catch (PDOException $e) {
-    die("Database Connection Error: " . $e->getMessage());
-}
 
 // 1. GENERATE SQL BACKUP DOWNLOAD
 if (isset($_GET['action']) && $_GET['action'] === 'download_backup') {

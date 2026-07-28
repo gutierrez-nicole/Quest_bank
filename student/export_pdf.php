@@ -1,27 +1,19 @@
 <?php
-session_start();
+require_once __DIR__ . '/../app/database.php';
+require_once __DIR__ . '/../app/session.php';
+require_once __DIR__ . '/../includes/security.php';
 
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'student') {
-    header("Location: ../index.php");
-    exit();
-}
-
-$host = 'localhost';
-$dbname = 'bankquest_db';
-$db_user = 'root';
-$db_pass = '';
+requireRole('student');
+$pdo = getDBConnection();
 
 try {
-    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $db_user, $db_pass);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    
     $stmt = $pdo->prepare("
         SELECT u.fullname, u.email, s.student_number, s.course, s.section 
         FROM users u 
         LEFT JOIN student_details s ON u.id = s.user_id 
         WHERE u.id = ?
     ");
-    $stmt->execute([$_SESSION['user_id']]);
+    $stmt->execute([getCurrentUserId()]);
     $student = $stmt->fetch(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     die("Database Error: " . $e->getMessage());

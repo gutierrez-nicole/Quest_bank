@@ -1,27 +1,17 @@
 <?php
-session_start();
+require_once __DIR__ . '/../app/database.php';
+require_once __DIR__ . '/../app/session.php';
+require_once __DIR__ . '/../includes/security.php';
+require_once __DIR__ . '/../app/services/GroqService.php';
 
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'teacher') {
-    header("Location: ../index.php");
-    exit();
-}
-
-$host = 'localhost';
-$dbname = 'bankquest_db';
-$db_user = 'root';
-$db_pass = '';
+requireRole('teacher');
+$pdo = getDBConnection();
 
 try {
-    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $db_user, $db_pass);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    
-    $teacher_id = $_SESSION['user_id'];
-
-    // Profile Info ng Teacher
+    $teacher_id = getCurrentUserId();
     $stmt = $pdo->prepare("SELECT fullname, username, email FROM users WHERE id = ?");
     $stmt->execute([$teacher_id]);
-    $teacher = $stmt->fetch(PDO::FETCH_ASSOC);
-
+    $teacher = $stmt->fetch();
 } catch (PDOException $e) {
     die("Database error: " . $e->getMessage());
 }
@@ -32,59 +22,19 @@ $generated_questions = null;
 
 // Handle AI Question Generation Request
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_questions'])) {
-    $lesson_text = trim($_POST['lesson_text']);
-    $num_questions = intval($_POST['num_questions']);
-    $subject = trim($_POST['subject']);
-    $exam_title = trim($_POST['exam_title']);
+    validateCSRFToken();
+    $lesson_text = trim($_POST['lesson_text'] ?? '');
+    $num_questions = intval($_POST['num_questions'] ?? 5);
+    $subject = trim($_POST['subject'] ?? '');
+    $exam_title = trim($_POST['exam_title'] ?? '');
 
     if (!empty($lesson_text) && $num_questions > 0) {
-        $secretKey = '';
-        $endpoint = 'https://api.groq.com/openai/v1/chat/completions';
-
-        $prompt = 'You are an educational AI assistant. Generate exactly ' . $num_questions . ' high-quality exam questions based on the following lesson text: '
-                . '"' . $lesson_text . '". '
-                . 'Format the response as a JSON array of objects. Each object MUST have: '
-                . '"question" (string), "type" ("multiple_choice" or "identification"), '
-                . '"opt_a" (string or null), "opt_b" (string or null), "opt_c" (string or null), "opt_d" (string or null), '
-                . 'and "correct_answer" (string). '
-                . 'Return ONLY the JSON array string, without any markdown formatting like ```json or additional text.';
-
-        $postData = [
-            'model' => 'llama3-8b-8192',
-            'messages' => [
-                ['role' => 'user', 'content' => $prompt]
-            ],
-            'temperature' => 0.3
-        ];
-
-        $ch = curl_init($endpoint);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($postData));
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'Authorization: Bearer ' . $secretKey,
-            'Content-Type: application/json'
-        ]);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-
-        $response = curl_exec($ch);
-        $curl_error = curl_error($ch);
-        curl_close($ch);
-
-        if ($curl_error) {
-            $error_msg = "API Error: " . $curl_error;
+        $result = GroqService::generateQuestions($lesson_text, $num_questions, $subject, $exam_title);
+        if (isset($result['success'])) {
+            $generated_questions = $result['questions'];
+            $success_msg = "AI generated " . count($generated_questions) . " question items successfully!";
         } else {
-            $responseDecoded = json_decode($response, true);
-            $ai_raw_output = $responseDecoded['choices'][0]['message']['content'] ?? '';
-            $cleaned_questions = json_decode(trim($ai_raw_output), true);
-
-            if (json_last_error() === JSON_ERROR_NONE && is_array($cleaned_questions)) {
-                $generated_questions = $cleaned_questions;
-                $success_msg = "AI generated " . count($cleaned_questions) . " question items successfully!";
-            } else {
-                $error_msg = "Failed to parse AI output. Please try providing more detailed lesson text.";
-            }
+            $error_msg = $result['error'] ?? "Failed to generate AI questions.";
         }
     } else {
         $error_msg = "Please enter lesson material text and set valid question parameters.";

@@ -1,26 +1,16 @@
 <?php
-session_start();
+require_once __DIR__ . '/../app/database.php';
+require_once __DIR__ . '/../app/session.php';
+require_once __DIR__ . '/../includes/security.php';
 
-// Siguraduhing naka-login at isang Teacher ang nakapasok
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'teacher') {
-    header("Location: ../index.php");
-    exit();
-}
-
-// Database Connection
-$host = 'localhost';
-$dbname = 'bankquest_db';
-$db_user = 'root';
-$db_pass = '';
+requireRole('teacher');
+$pdo = getDBConnection();
 
 $success_msg = "";
 $error_msg = "";
 
 try {
-    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $db_user, $db_pass);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-
-    $teacher_id = $_SESSION['user_id'];
+    $teacher_id = getCurrentUserId();
 
     // 1. UPDATE PERSONAL INFORMATION
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {

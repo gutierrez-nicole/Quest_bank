@@ -1,32 +1,31 @@
 <?php
-// Magsimula ng session para sa login tracking
-session_start();
+// index.php - QuestBank Main Authentication Gateway & Registration Portal
 
-// Database Configuration gamit ang bankquest_db
-$host = 'localhost';
-$dbname = 'bankquest_db';
-$db_user = 'root'; 
-$db_pass = ''; 
+require_once __DIR__ . '/app/database.php';
+require_once __DIR__ . '/app/session.php';
+require_once __DIR__ . '/includes/security.php';
 
-try {
-    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $db_user, $db_pass);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
-    die("Database connection failed: " . $e->getMessage());
+// Redirect user if already logged in
+if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
+    if ($_SESSION['role'] === 'student') header("Location: student/dashboard.php");
+    elseif ($_SESSION['role'] === 'teacher') header("Location: teacher/dashboard.php");
+    elseif ($_SESSION['role'] === 'admin') header("Location: admin/dashboard.php");
+    exit();
 }
 
+$pdo = getDBConnection();
 $error_msg = "";
 $success_msg = "";
-$active_form = "login"; // Default active view
+$active_form = "login";
 
-// ================= FORM SUBMISSION HANDLING =================
+// Form Processing
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    validateCSRFToken();
     
     // 1. LOGIN LOGIC
     if (isset($_POST['action_login'])) {
-        $email = trim($_POST['email']);
-        $password = trim($_POST['password']);
+        $email = trim($_POST['email'] ?? '');
+        $password = trim($_POST['password'] ?? '');
 
         if (!empty($email) && !empty($password)) {
             $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ?");
@@ -38,19 +37,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['username'] = $user['username'];
                 $_SESSION['role'] = $user['role'];
                 
-                if ($user['role'] === 'student') {
-                    header("Location: student/dashboard.php");
-                } elseif ($user['role'] === 'teacher') {
-                    header("Location: teacher/dashboard.php");
-                } elseif ($user['role'] === 'admin') {
-                    header("Location: admin/dashboard.php");
-                }
+                if ($user['role'] === 'student') header("Location: student/dashboard.php");
+                elseif ($user['role'] === 'teacher') header("Location: teacher/dashboard.php");
+                elseif ($user['role'] === 'admin') header("Location: admin/dashboard.php");
                 exit();
             } else {
                 $error_msg = "Invalid email address or password.";
             }
         } else {
-            $error_msg = "Please fill in all fields.";
+            $error_msg = "Please fill in all required fields.";
         }
     }
 
@@ -58,12 +53,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['action_register'])) {
         $active_form = "register"; 
         
-        $fullname = trim($_POST['fullname']);
-        $username = trim($_POST['username']);
-        $email = trim($_POST['email']);
+        $fullname = trim($_POST['fullname'] ?? '');
+        $username = trim($_POST['username'] ?? '');
+        $email = trim($_POST['email'] ?? '');
         $role = $_POST['role'] ?? '';
-        $password = $_POST['password'];
-        $confirm_password = $_POST['confirm_password'];
+        $password = $_POST['password'] ?? '';
+        $confirm_password = $_POST['confirm_password'] ?? '';
 
         if ($password !== $confirm_password) {
             $error_msg = "Passwords do not match!";
@@ -86,10 +81,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $user_id = $pdo->lastInsertId();
 
                 if ($role === 'student') {
-                    $student_number = trim($_POST['student_number']);
-                    $course = trim($_POST['course']);
+                    $student_number = trim($_POST['student_number'] ?? '');
+                    $course = trim($_POST['course'] ?? '');
                     $year_level = intval($_POST['year_level'] ?? 0);
-                    $section = trim($_POST['section']);
+                    $section = trim($_POST['section'] ?? '');
 
                     if (empty($student_number) || empty($course) || empty($year_level) || empty($section)) {
                         throw new Exception("All student details are required.");
@@ -116,7 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QuestBank - Login Page</title>
+    <title>QuestBank - Login & Portal Access</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome Icons -->
@@ -149,20 +144,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .serif-title { font-family: 'Playfair Display', serif; }
         .bg-orange-gradient { background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); }
         .bg-orange-gradient:hover { background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%); }
-
-        /* Custom scrollbar for form panels when needed */
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #ea580c; border-radius: 10px; }
-
-        /* Animations */
         .form-fade { transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1); }
-        
         .skeleton-loader {
             background: linear-gradient(90deg, rgba(229, 231, 235, 0.2) 25%, rgba(243, 244, 246, 0.5) 50%, rgba(229, 231, 235, 0.2) 75%);
             background-size: 200% 100%;
             animation: skeleton-loading 1.5s infinite;
         }
-
         @keyframes skeleton-loading {
             0% { background-position: 200% 0; }
             100% { background-position: -200% 0; }
@@ -171,81 +160,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body class="bg-[#f3f4f6] dark:bg-[#09090b] text-stone-800 dark:text-stone-100 h-screen overflow-hidden flex flex-col md:flex-row transition-colors duration-300">
 
-    <!-- ================= LEFT SIDE: BRANDING & AI SHOWCASE ================= -->
+    <!-- LEFT SIDE: BRANDING -->
     <div class="bg-stone-950 text-white w-full md:w-5/12 lg:w-1/2 p-6 md:p-12 flex flex-col justify-between relative overflow-hidden h-1/3 md:h-full flex-shrink-0 border-b md:border-b-0 md:border-r border-stone-800">
-        
-        <!-- Glowing Grid Background Overlay -->
         <div class="absolute inset-0 opacity-20 pointer-events-none">
             <div class="absolute -top-10 -left-10 w-96 h-96 rounded-full border border-orange-500/30 blur-xl"></div>
             <div class="absolute top-1/2 -right-20 w-[450px] h-[450px] rounded-full border border-orange-600/20 blur-2xl"></div>
         </div>
 
-        <!-- Top Header / Campus Tag -->
         <div class="flex items-center justify-between z-10">
             <div class="flex items-center gap-3">
                 <div class="w-10 h-10 bg-orange-gradient rounded-2xl flex items-center justify-center font-black text-white shadow-lg shadow-orange-600/30">
                     <i class="fa-solid fa-brain text-lg"></i>
                 </div>
                 <div>
-                    <p class="text-[9px] tracking-widest uppercase text-stone-400 font-bold">Holy Cross College - Pampanga</p>
+                    <p class="text-[9px] tracking-widest uppercase text-stone-400 font-bold"><?php echo APP_INSTITUTION; ?></p>
                     <h1 class="text-lg font-black tracking-tight text-white">Quest<span class="text-orange-500">Bank</span></h1>
                 </div>
             </div>
 
-            <!-- Dark Mode Toggle Button -->
             <button onclick="toggleDarkMode()" class="w-9 h-9 rounded-xl border border-stone-800 bg-stone-900/80 flex items-center justify-center text-stone-400 hover:text-orange-500 transition-all">
                 <i class="fa-solid fa-moon text-xs dark:hidden"></i>
                 <i class="fa-solid fa-sun text-xs hidden dark:block text-amber-400"></i>
             </button>
         </div>
 
-        <!-- Center AI Hero Pitch (Hidden on small screens to fit viewport height) -->
-        <div class="my-auto z-10 max-w-xl hidden md:block space-y-4">
-            <span class="inline-flex items-center gap-1.5 bg-orange-950/80 border border-orange-500/30 text-orange-400 text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full">
-                <i class="fa-solid fa-wand-magic-sparkles"></i> AI Assessment Engine
+        <div class="z-10 my-auto hidden md:block space-y-4">
+            <span class="bg-orange-500/10 text-orange-500 border border-orange-500/20 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
+                AI Automated Examination System
             </span>
-            <h2 class="serif-title text-3xl lg:text-4xl font-bold leading-tight text-white">
-                Automated <span class="italic text-orange-500 font-semibold">Exam Creation</span> & Optical Evaluation
+            <h2 class="serif-title text-3xl lg:text-4xl font-extrabold tracking-tight text-white leading-tight">
+                Empowering Civil Engineering & Academic Assessments with Intelligent AI.
             </h2>
-            <p class="text-stone-400 text-xs lg:text-sm leading-relaxed">
+            <p class="text-xs text-stone-400 leading-relaxed max-w-lg">
+                Upload course materials, generate exam items, and grade handwritten student test papers using optical evaluation technology.
             </p>
-
-            <div class="pt-2 space-y-3">
-                <div class="flex items-center gap-3 text-xs text-stone-300">
-                    <div class="w-7 h-7 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-400 flex items-center justify-center font-bold flex-shrink-0">
-                        <i class="fa-solid fa-file-circle-plus"></i>
-                    </div>
-                    <span>Multi-format lesson parsing (PDF, DOCX, PPTX)</span>
-                </div>
-                <div class="flex items-center gap-3 text-xs text-stone-300">
-                    <div class="w-7 h-7 rounded-lg bg-orange-500/10 border border-orange-500/20 text-orange-400 flex items-center justify-center font-bold flex-shrink-0">
-                        <i class="fa-solid fa-eye"></i>
-                    </div>
-                    <span>Optical Character Recognition (OCR) answer sheet checker</span>
-                </div>
-            </div>
         </div>
 
-        <!-- Footer Notice -->
-        <div class="text-[10px] text-stone-500 z-10 hidden md:block">
-            
+        <div class="z-10 text-[10px] text-stone-600 dark:text-stone-500 hidden md:block">
+            &copy; <?php echo date('Y'); ?> <?php echo APP_NAME; ?>. All rights reserved.
         </div>
     </div>
 
-    <!-- ================= RIGHT SIDE: AUTH FORM CONTAINERS ================= -->
-    <div class="w-full md:w-7/12 lg:w-1/2 bg-[#f3f4f6] dark:bg-[#09090b] flex flex-col justify-center items-center p-6 md:p-12 h-2/3 md:h-full overflow-hidden relative">
+    <!-- RIGHT SIDE: AUTH FORMS -->
+    <div class="w-full md:w-7/12 lg:w-1/2 flex flex-col justify-center items-center p-6 md:p-12 relative overflow-y-auto custom-scrollbar h-2/3 md:h-full">
         
-        <!-- Loading Skeleton Overlay (Triggered during form submits) -->
-        <div id="skeleton-overlay" class="absolute inset-0 bg-[#f3f4f6]/90 dark:bg-[#09090b]/90 backdrop-blur-xs z-30 hidden flex-col justify-center items-center p-8 space-y-4">
+        <!-- SKELETON LOADER OVERLAY -->
+        <div id="skeleton-overlay" class="hidden absolute inset-0 bg-white/90 dark:bg-stone-950/90 z-50 flex-col items-center justify-center space-y-4 p-8">
             <div class="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
-            <p class="text-xs font-bold text-stone-600 dark:text-stone-300 tracking-wider uppercase animate-pulse">Authenticating with Groq AI Server...</p>
+            <p class="text-xs font-bold text-stone-600 dark:text-stone-300">Authenticating credentials...</p>
         </div>
 
-        <!-- Alert Notifications -->
-        <div class="w-full max-w-md mb-3 flex-shrink-0">
+        <!-- NOTIFICATIONS -->
+        <div class="w-full max-w-md mb-4 space-y-2">
             <?php if (!empty($error_msg)): ?>
                 <div class="bg-rose-500/10 border border-rose-500/30 p-3 rounded-xl text-xs text-rose-600 dark:text-rose-400 font-semibold flex items-center gap-2">
-                    <i class="fa-solid fa-circle-exclamation text-sm"></i> <?php echo htmlspecialchars($error_msg); ?>
+                    <i class="fa-solid fa-triangle-exclamation text-sm"></i> <?php echo htmlspecialchars($error_msg); ?>
                 </div>
             <?php endif; ?>
 
@@ -256,7 +225,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?php endif; ?>
         </div>
 
-        <!-- ================= 1. LOGIN FORM CONTAINER ================= -->
+        <!-- 1. LOGIN FORM -->
         <div id="login-box" class="w-full max-w-md space-y-5 form-fade <?php echo ($active_form === 'login') ? '' : 'hidden'; ?>">
             <div>
                 <span class="text-[10px] font-black tracking-widest text-orange-500 uppercase">Faculty & Student Gateway</span>
@@ -265,6 +234,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
 
             <form action="index.php" method="POST" onsubmit="showSkeleton()" class="space-y-4">
+                <?php echo csrfInputField(); ?>
                 <input type="hidden" name="action_login" value="1">
                 
                 <div class="space-y-1">
@@ -300,7 +270,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         </div>
 
-        <!-- ================= 2. REGISTRATION FORM CONTAINER ================= -->
+        <!-- 2. REGISTRATION FORM -->
         <div id="register-box" class="w-full max-w-md space-y-4 form-fade overflow-y-auto max-h-[calc(100vh-100px)] custom-scrollbar pr-1 <?php echo ($active_form === 'register') ? '' : 'hidden'; ?>">
             <div>
                 <span class="text-[10px] font-black tracking-widest text-orange-500 uppercase">Create Account</span>
@@ -308,6 +278,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
 
             <form action="index.php" method="POST" onsubmit="showSkeleton()" class="space-y-3">
+                <?php echo csrfInputField(); ?>
                 <input type="hidden" name="action_register" value="1">
                 
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -393,7 +364,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 Already registered? <button onclick="toggleForms('login')" class="text-orange-500 font-bold hover:underline">Sign in here</button>
             </div>
         </div>
-
     </div>
 
     <!-- JS LOGIC CONTROLS -->

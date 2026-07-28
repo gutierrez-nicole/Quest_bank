@@ -1,13 +1,13 @@
 <?php
-session_start();
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') { header("Location: ../index.php"); exit(); }
+require_once __DIR__ . '/../app/database.php';
+require_once __DIR__ . '/../app/session.php';
+require_once __DIR__ . '/../includes/security.php';
 
-$host = 'localhost'; $dbname = 'bankquest_db'; $db_user = 'root'; $db_pass = '';
+requireRole('admin');
+$pdo = getDBConnection();
+
 try {
-    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $db_user, $db_pass);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    
-    $logs = $pdo->query("SELECT * FROM exam_submissions ORDER BY id DESC")->fetchAll(PDO::FETCH_ASSOC);
+    $logs = $pdo->query("SELECT * FROM exam_submissions ORDER BY id DESC")->fetchAll();
 } catch (PDOException $e) { die("Database error: " . $e->getMessage()); }
 ?>
 

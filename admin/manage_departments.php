@@ -1,6 +1,6 @@
 <?php
-session_start();
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') { header("Location: ../index.php"); exit(); }
+require_once __DIR__ . '/../app/session.php';
+requireRole('admin');
 ?>
 <!DOCTYPE html>
 <html lang="en">

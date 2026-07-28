@@ -1,25 +1,24 @@
 <?php
-session_start();
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') { header("Location: ../index.php"); exit(); }
+require_once __DIR__ . '/../app/database.php';
+require_once __DIR__ . '/../app/session.php';
+require_once __DIR__ . '/../includes/security.php';
 
-$host = 'localhost'; $dbname = 'bankquest_db'; $db_user = 'root'; $db_pass = '';
+requireRole('admin');
+$pdo = getDBConnection();
 $success_msg = "";
 
 try {
-    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $db_user, $db_pass);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_subject'])) {
-        $subject_code = trim($_POST['subject_code']);
-        $subject_title = trim($_POST['subject_title']);
-        $department = trim($_POST['department']);
+        validateCSRFToken();
+        $subject_code = trim($_POST['subject_code'] ?? '');
+        $subject_title = trim($_POST['subject_title'] ?? '');
 
         $stmt = $pdo->prepare("INSERT INTO lesson_materials (teacher_id, subject, title, file_name, file_path, file_type, file_size) VALUES (?, ?, ?, 'System Master Subject', '#', 'CATALOG', 0)");
-        $stmt->execute([$_SESSION['user_id'], $subject_code, $subject_title]);
+        $stmt->execute([getCurrentUserId(), $subject_code, $subject_title]);
         $success_msg = "Subject successfully added to academic curriculum!";
     }
 
-    $subjects = $pdo->query("SELECT DISTINCT subject, title FROM lesson_materials ORDER BY id DESC")->fetchAll(PDO::FETCH_ASSOC);
+    $subjects = $pdo->query("SELECT DISTINCT subject, title FROM lesson_materials ORDER BY id DESC")->fetchAll();
 } catch (PDOException $e) { die("Database error: " . $e->getMessage()); }
 ?>
 

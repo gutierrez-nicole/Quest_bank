@@ -1,28 +1,10 @@
 <?php
-session_start();
+require_once __DIR__ . '/../app/database.php';
+require_once __DIR__ . '/../app/session.php';
+require_once __DIR__ . '/../includes/security.php';
 
-if (!isset($_SESSION['user_id'])) {
-    header("Location: ../index.php");
-    exit();
-}
-
-if ($_SESSION['role'] !== 'teacher') {
-    header("Location: ../index.php");
-    exit();
-}
-
-$host = 'localhost';
-$dbname = 'bankquest_db';
-$db_user = 'root';
-$db_pass = '';
-
-try {
-    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $db_user, $db_pass);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-} catch (PDOException $e) {
-    die("Database error: " . $e->getMessage());
-}
-
+requireRole('teacher');
+$pdo = getDBConnection();
 $success_msg = "";
 $error_msg = "";
 

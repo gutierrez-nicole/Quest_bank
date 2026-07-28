@@ -1,31 +1,22 @@
 <?php
-session_start();
+require_once __DIR__ . '/../app/database.php';
+require_once __DIR__ . '/../app/session.php';
+require_once __DIR__ . '/../includes/security.php';
 
-// Siguraduhing naka-login at isang Admin ang nakapasok
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: ../index.php");
-    exit();
-}
-
-// Database Connection
-$host = 'localhost';
-$dbname = 'bankquest_db';
-$db_user = 'root';
-$db_pass = '';
+requireRole('admin');
+$pdo = getDBConnection();
 
 $success_msg = "";
 $error_msg = "";
 
 try {
-    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $db_user, $db_pass);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-
     // 1. ADD NEW TEACHER ACCOUNT
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_teacher'])) {
-        $fullname = trim($_POST['fullname']);
-        $username = trim($_POST['username']);
-        $email = trim($_POST['email']);
-        $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
+        validateCSRFToken();
+        $fullname = trim($_POST['fullname'] ?? '');
+        $username = trim($_POST['username'] ?? '');
+        $email = trim($_POST['email'] ?? '');
+        $password = password_hash($_POST['password'] ?? '', PASSWORD_DEFAULT);
 
         if (!empty($fullname) && !empty($username) && !empty($_POST['password'])) {
             try {
@@ -54,7 +45,7 @@ try {
 
     // FETCH ALL TEACHERS
     $stmtTeachers = $pdo->query("SELECT id, fullname, username, email, created_at FROM users WHERE role = 'teacher' ORDER BY id DESC");
-    $teachers = $stmtTeachers->fetchAll(PDO::FETCH_ASSOC);
+    $teachers = $stmtTeachers->fetchAll();
 
 } catch (PDOException $e) {
     die("Database Connection Error: " . $e->getMessage());

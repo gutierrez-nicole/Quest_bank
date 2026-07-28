@@ -1,27 +1,17 @@
 <?php
-session_start();
+require_once __DIR__ . '/../app/database.php';
+require_once __DIR__ . '/../app/session.php';
+require_once __DIR__ . '/../includes/security.php';
+require_once __DIR__ . '/../app/services/GroqService.php';
 
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'teacher') {
-    header("Location: ../index.php");
-    exit();
-}
-
-$host = 'localhost';
-$dbname = 'bankquest_db';
-$db_user = 'root';
-$db_pass = '';
+requireRole('teacher');
+$pdo = getDBConnection();
 
 try {
-    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $db_user, $db_pass);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-
-    $teacher_id = $_SESSION['user_id'];
-
-    // Profile Info ng Teacher
+    $teacher_id = getCurrentUserId();
     $stmt = $pdo->prepare("SELECT fullname, username, email FROM users WHERE id = ?");
     $stmt->execute([$teacher_id]);
-    $teacher = $stmt->fetch(PDO::FETCH_ASSOC);
-
+    $teacher = $stmt->fetch();
 } catch (PDOException $e) {
     die("Database error: " . $e->getMessage());
 }
@@ -31,86 +21,26 @@ $error_msg = "";
 $ai_analyzed_data = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ai_ocr'])) {
-    $student_name = trim($_POST['student_name']);
-    $exam_title = trim($_POST['exam_title']);
-    $upload_type = $_POST['upload_type'];
-    $answer_key_input = trim($_POST['answer_key_input']);
+    validateCSRFToken();
+    $student_name = trim($_POST['student_name'] ?? '');
+    $exam_title = trim($_POST['exam_title'] ?? '');
+    $upload_type = $_POST['upload_type'] ?? 'IMAGE';
+    $answer_key_input = trim($_POST['answer_key_input'] ?? '');
     
     if (isset($_FILES['exam_file']) && $_FILES['exam_file']['error'] === UPLOAD_ERR_OK) {
         $file_name = $_FILES['exam_file']['name'];
+        $simulatedText = '1. Continuous Integration, 2. True, 3. Docker, 4. Jenkins, 5. Kubernetes.';
         
-        // Groq API Integration Setup
-        $secretKey = '';
-        $endpoint = 'https://api.groq.com/openai/v1/chat/completions';
-
-        $prompt = 'You are an advanced educational AI OCR and grading system. '
-                . 'Analyze the following uploaded student exam paper data and compare it against the provided Answer Key. '
-                . 'Student Name: ' . $student_name . ' '
-                . 'Exam Title: ' . $exam_title . ' '
-                . 'Document Type: ' . $upload_type . ' '
-                . 'Answer Key provided by Teacher: ' . $answer_key_input . ' '
-                . 'Raw Simulated Student Answers extracted from document: '
-                . '1. Continuous Integration, 2. True, 3. Docker, 4. Jenkins, 5. Kubernetes. '
-                . 'Calculate the following parameters meticulously: Total number of items (Total: 5), How many are Correct, How many are Wrong, Percentage Grade (Correct / Total * 100), Status: Pass if percentage is 75 or above, otherwise Fail. '
-                . 'Provide detailed itemized feedback highlighting the question, student answer, correct answer key, and true/false correctness toggle. '
-                . 'You MUST strictly return ONLY a valid JSON object string. Do not include markdown formatting like ```json or any conversational text. '
-                . 'JSON structural format matching criteria: '
-                . '{'
-                . '"correct": 4,'
-                . '"wrong": 1,'
-                . '"total_items": 5,'
-                . '"percentage": 80,'
-                . '"status": "Pass",'
-                . '"questions": ['
-                . '{"num": 1, "q": "What is CI/CD?", "student_ans": "Continuous Integration", "key_ans": "Continuous Integration", "is_correct": true},'
-                . '{"num": 2, "q": "DevOps replaces Agile.", "student_ans": "True", "key_ans": "False", "is_correct": false},'
-                . '{"num": 3, "q": "Main tool for containerization?", "student_ans": "Docker", "key_ans": "Docker", "is_correct": true},'
-                . '{"num": 4, "q": "Continuous Integration Server?", "student_ans": "Jenkins", "key_ans": "Jenkins", "is_correct": true},'
-                . '{"num": 5, "q": "Container Orchestrator?", "student_ans": "Docker Swarm", "key_ans": "Kubernetes", "is_correct": false}'
-                . ']'
-                . '}';
-
-        $postData = [
-            'model' => 'llama3-8b-8192',
-            'messages' => [
-                ['role' => 'user', 'content' => $prompt]
-            ],
-            'temperature' => 0.2
-        ];
-
-        $ch = curl_init($endpoint);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($postData));
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'Authorization: Bearer ' . $secretKey,
-            'Content-Type: application/json'
-        ]);
-        
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-
-        $response = curl_exec($ch);
-        $curl_error = curl_error($ch);
-        curl_close($ch);
-
-        if ($curl_error) {
-            $error_msg = "API Connection Error (cURL): " . $curl_error;
+        $res = GroqService::evaluateAnswerSheet($student_name, $exam_title, $upload_type, $answer_key_input, $simulatedText);
+        if (isset($res['success'])) {
+            $ai_analyzed_data = $res['evaluation'];
+            $ai_analyzed_data['student_name'] = $student_name;
+            $ai_analyzed_data['exam_title'] = $exam_title;
+            $ai_analyzed_data['upload_type'] = $upload_type;
+            $ai_analyzed_data['file_name'] = $file_name;
+            $success_msg = "Groq AI processed and checked the exam paper successfully!";
         } else {
-            $responseDecoded = json_decode($response, true);
-            $ai_raw_output = $responseDecoded['choices'][0]['message']['content'] ?? '';
-            $cleaned_json = json_decode(trim($ai_raw_output), true);
-
-            if (json_last_error() === JSON_ERROR_NONE && !empty($cleaned_json)) {
-                $ai_analyzed_data = $cleaned_json;
-                $ai_analyzed_data['student_name'] = $student_name;
-                $ai_analyzed_data['exam_title'] = $exam_title;
-                $ai_analyzed_data['upload_type'] = $upload_type;
-                $ai_analyzed_data['file_name'] = $file_name;
-                $success_msg = "Groq AI processed and checked the exam paper successfully!";
-            } else {
-                $error_msg = "Failed to parse AI response string into valid schema. Please try again.";
-            }
+            $error_msg = $res['error'] ?? "Failed to process exam paper.";
         }
     } else {
         $error_msg = "Please attach a valid document file/image to begin processing.";

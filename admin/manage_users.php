@@ -1,32 +1,23 @@
 <?php
-session_start();
+require_once __DIR__ . '/../app/database.php';
+require_once __DIR__ . '/../app/session.php';
+require_once __DIR__ . '/../includes/security.php';
 
-// Siguraduhing naka-login at isang Admin ang nakapasok
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
-    header("Location: ../index.php");
-    exit();
-}
-
-// Database Connection
-$host = 'localhost';
-$dbname = 'bankquest_db';
-$db_user = 'root';
-$db_pass = '';
+requireRole('admin');
+$pdo = getDBConnection();
 
 $success_msg = "";
 $error_msg = "";
 
 try {
-    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $db_user, $db_pass);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-
     // 1. ADD NEW USER
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_user'])) {
-        $fullname = trim($_POST['fullname']);
-        $username = trim($_POST['username']);
-        $email = trim($_POST['email']);
-        $role = $_POST['role'];
-        $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
+        validateCSRFToken();
+        $fullname = trim($_POST['fullname'] ?? '');
+        $username = trim($_POST['username'] ?? '');
+        $email = trim($_POST['email'] ?? '');
+        $role = $_POST['role'] ?? 'student';
+        $password = password_hash($_POST['password'] ?? '', PASSWORD_DEFAULT);
 
         if (!empty($fullname) && !empty($username) && !empty($email) && !empty($_POST['password'])) {
             try {
@@ -45,8 +36,7 @@ try {
     if (isset($_GET['delete_id'])) {
         $delete_id = intval($_GET['delete_id']);
         
-        // Huwag payagang i-delete ang sariling admin account habang naka-login
-        if ($delete_id == $_SESSION['user_id']) {
+        if ($delete_id == getCurrentUserId()) {
             $error_msg = "You cannot delete your own active administrator account!";
         } else {
             try {
@@ -61,7 +51,7 @@ try {
 
     // 3. FETCH ALL USERS
     $stmtUsers = $pdo->query("SELECT id, fullname, username, email, role, created_at FROM users ORDER BY id DESC");
-    $users = $stmtUsers->fetchAll(PDO::FETCH_ASSOC);
+    $users = $stmtUsers->fetchAll();
 
 } catch (PDOException $e) {
     die("Database Connection Error: " . $e->getMessage());

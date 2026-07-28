@@ -1,19 +1,19 @@
 <?php
-session_start();
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') { header("Location: ../index.php"); exit(); }
+require_once __DIR__ . '/../app/database.php';
+require_once __DIR__ . '/../app/session.php';
+require_once __DIR__ . '/../includes/security.php';
 
-$host = 'localhost'; $dbname = 'bankquest_db'; $db_user = 'root'; $db_pass = '';
+requireRole('admin');
+$pdo = getDBConnection();
+
 try {
-    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8mb4", $db_user, $db_pass);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    
     $students = $pdo->query("
         SELECT u.id, u.fullname, u.username, u.email, s.student_number, s.course, s.year_level, s.section 
         FROM users u 
         LEFT JOIN student_details s ON u.id = s.user_id 
         WHERE u.role = 'student' 
         ORDER BY u.id DESC
-    ")->fetchAll(PDO::FETCH_ASSOC);
+    ")->fetchAll();
 } catch (PDOException $e) { die("Database error: " . $e->getMessage()); }
 ?>
 
