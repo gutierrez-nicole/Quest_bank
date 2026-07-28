@@ -68,7 +68,8 @@ class GroqService {
         }
 
         $content = $res['data']['choices'][0]['message']['content'] ?? '';
-        $cleanJson = json_decode(trim($content), true);
+        $cleanContent = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', trim($content));
+        $cleanJson = json_decode(trim($cleanContent), true);
 
         if (json_last_error() === JSON_ERROR_NONE && is_array($cleanJson)) {
             return ['success' => true, 'questions' => $cleanJson];
@@ -103,12 +104,13 @@ class GroqService {
         }
 
         $content = $res['data']['choices'][0]['message']['content'] ?? '';
-        $cleanJson = json_decode(trim($content), true);
+        $cleanContent = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', trim($content));
+        $cleanJson = json_decode(trim($cleanContent), true);
 
         if (json_last_error() === JSON_ERROR_NONE && is_array($cleanJson)) {
             return ['success' => true, 'evaluation' => $cleanJson];
         }
 
-        return ['error' => 'Failed to parse AI grading output into JSON.'];
+        return ['error' => 'Failed to parse AI grading output into JSON. Raw output: ' . substr($content, 0, 200)];
     }
 }
