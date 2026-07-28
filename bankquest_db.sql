@@ -167,6 +167,28 @@ INSERT INTO `student_details` (`id`, `user_id`, `student_number`, `course`, `yea
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `student_requests`
+--
+
+CREATE TABLE `student_requests` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `student_id` int(11) NOT NULL,
+  `teacher_id` int(11) NOT NULL,
+  `section_id` int(11) DEFAULT NULL,
+  `student_number` varchar(50) NOT NULL,
+  `student_name` varchar(150) NOT NULL,
+  `subject_name` varchar(100) NOT NULL,
+  `status` enum('pending','accepted','rejected') NOT NULL DEFAULT 'pending',
+  `requested_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+INSERT INTO `student_requests` (`id`, `student_id`, `teacher_id`, `section_id`, `student_number`, `student_name`, `subject_name`, `status`) VALUES
+(1, 4, 2, 1, '23-2149184', 'Ashley Nicole Gutierrez', 'Structural Theory 1', 'pending');
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `users`
 --
 
