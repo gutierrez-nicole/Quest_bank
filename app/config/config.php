@@ -35,3 +35,16 @@ define('GROQ_FAST_MODEL', 'llama-3.1-8b-instant');
 // Application Settings
 define('APP_NAME', 'QuestBank');
 define('APP_INSTITUTION', 'Holy Cross College - Pampanga');
+
+/**
+ * Civil Engineering Program Specialization Branches
+ */
+function getCivilEngineeringSpecializations() {
+    return [
+        'Structural Engineering' => '🏗️ Structural Engineering (Beams, Columns, Steel & Reinforced Concrete Design)',
+        'Geotechnical Engineering' => '🧪 Geotechnical Engineering (Soil Mechanics, Foundations & Earth Structures)',
+        'Construction Engineering & Management' => '🚧 Construction Engineering & Management (Project Planning, Estimating & Site Control)',
+        'Environmental Engineering' => '🌿 Environmental Engineering (Water Resources, Wastewater & Hydrology)',
+        'Transportation Engineering' => '🛣️ Transportation Engineering (Pavements, Highway Design & Traffic Flow)'
+    ];
+}

@@ -45,6 +45,7 @@ CREATE TABLE `exams` (
   `teacher_id` int(11) NOT NULL,
   `title` varchar(150) NOT NULL,
   `subject` varchar(100) NOT NULL,
+  `specialization` varchar(100) DEFAULT 'Structural Engineering',
   `time_limit` int(11) DEFAULT 60,
   `total_items` int(11) DEFAULT 0,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()

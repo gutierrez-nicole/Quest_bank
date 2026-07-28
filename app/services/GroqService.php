@@ -42,13 +42,14 @@ class GroqService {
     }
 
     /**
-     * Generate Exam Questions from Lesson Material
+     * Generate Exam Questions from Lesson Material and Civil Engineering Specialization
      */
-    public static function generateQuestions($lessonText, $numQuestions, $subject, $examTitle, $apiKey = null) {
-        $prompt = "You are an educational AI assistant specializing in exam creation. "
-                . "Generate exactly {$numQuestions} high-quality exam questions for the subject '{$subject}' titled '{$examTitle}' "
+    public static function generateQuestions($lessonText, $numQuestions, $subject, $examTitle, $specialization = 'Structural Engineering', $apiKey = null) {
+        $prompt = "You are an expert Civil Engineering professor specializing in {$specialization} and academic assessment creation. "
+                . "Generate exactly {$numQuestions} high-quality Civil Engineering examination questions for the subject '{$subject}' (Specialization: {$specialization}) titled '{$examTitle}' "
                 . "based on the following lesson content: \"{$lessonText}\". "
-                . "Format response strictly as a JSON array of objects without markdown fences. "
+                . "Include a mix of theoretical concepts, formula applications, and engineering scenario items relevant to {$specialization}. "
+                . "Format response strictly as a JSON array of objects without markdown fences or code blocks. "
                 . "Each object MUST have: \"question\" (string), \"type\" (\"multiple_choice\" or \"identification\"), "
                 . "\"opt_a\" (string or null), \"opt_b\" (string or null), \"opt_c\" (string or null), \"opt_d\" (string or null), "
                 . "and \"correct_answer\" (string).";
@@ -80,7 +81,7 @@ class GroqService {
      * Evaluate Answer Sheet via OCR / Vision AI
      */
     public static function evaluateAnswerSheet($studentName, $examTitle, $uploadType, $answerKey, $simulatedOrExtractedText, $apiKey = null) {
-        $prompt = "You are an advanced educational AI OCR and grading system. "
+        $prompt = "You are an advanced educational AI OCR and grading system for Civil Engineering assessments. "
                 . "Analyze the student exam paper for student '{$studentName}', exam '{$examTitle}'. "
                 . "Answer Key provided by Teacher: {$answerKey}. "
                 . "Student Answers extracted: {$simulatedOrExtractedText}. "

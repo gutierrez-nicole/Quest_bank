@@ -27,12 +27,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_questions'])
     $num_questions = intval($_POST['num_questions'] ?? 5);
     $subject = trim($_POST['subject'] ?? '');
     $exam_title = trim($_POST['exam_title'] ?? '');
+    $specialization = trim($_POST['specialization'] ?? 'Structural Engineering');
 
     if (!empty($lesson_text) && $num_questions > 0) {
-        $result = GroqService::generateQuestions($lesson_text, $num_questions, $subject, $exam_title);
+        $result = GroqService::generateQuestions($lesson_text, $num_questions, $subject, $exam_title, $specialization);
         if (isset($result['success'])) {
             $generated_questions = $result['questions'];
-            $success_msg = "AI generated " . count($generated_questions) . " question items successfully!";
+            $success_msg = "AI generated " . count($generated_questions) . " question items for {$specialization} successfully!";
         } else {
             $error_msg = $result['error'] ?? "Failed to generate AI questions.";
         }
@@ -43,16 +44,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_questions'])
 
 // Save AI Generated Exam to Database
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
+    validateCSRFToken();
     $title = trim($_POST['save_title']);
     $subject = trim($_POST['save_subject']);
+    $specialization = trim($_POST['save_specialization'] ?? 'Structural Engineering');
     $questions = $_POST['questions'] ?? [];
 
     if (!empty($title) && !empty($subject) && !empty($questions)) {
         try {
             $pdo->beginTransaction();
 
-            $stmt = $pdo->prepare("INSERT INTO exams (teacher_id, title, subject, time_limit, total_items) VALUES (?, ?, ?, ?, ?)");
-            $stmt->execute([$_SESSION['user_id'], $title, $subject, 60, count($questions)]);
+            $stmt = $pdo->prepare("INSERT INTO exams (teacher_id, title, subject, specialization, time_limit, total_items) VALUES (?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$_SESSION['user_id'], $title, $subject, $specialization, 60, count($questions)]);
             $exam_id = $pdo->lastInsertId();
 
             $qStmt = $pdo->prepare("INSERT INTO exam_questions (exam_id, question_text, question_type, option_a, option_b, option_c, option_d, correct_answer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
@@ -71,12 +74,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
             }
 
             $pdo->commit();
-            $success_msg = "AI-generated exam saved to Question Bank successfully!";
+            $success_msg = "AI-generated exam saved to Question Bank under '{$specialization}' successfully!";
             $generated_questions = null;
-        } catch (Exception $e) {
+        } catch (PDOException $e) {
             $pdo->rollBack();
-            $error_msg = "Failed to save generated exam: " . $e->getMessage();
+            $error_msg = "Failed to save exam: " . $e->getMessage();
         }
+    } else {
+        $error_msg = "Exam parameters or question items are missing.";
     }
 }
 ?>
@@ -89,7 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
     <title>QuestBank - AI Question Generator</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- FontAwesome for Icons -->
+    <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -98,7 +103,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
 
     <style>
         body { font-family: 'Plus Jakarta Sans', sans-serif; }
-        .bg-orange-gradient { background: linear-gradient(135deg, #f57c00 0%, #d84315 100%); }
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #444; border-radius: 10px; }
         
@@ -107,12 +111,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
             to { opacity: 1; transform: scale(1); }
         }
         .animate-fadeIn { animation: fadeIn 0.2s ease-out; }
-
-        @keyframes pulseGlow {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.85; transform: scale(1.03); }
-        }
-        .animate-pulseGlow { animation: pulseGlow 1.8s infinite ease-in-out; }
     </style>
 </head>
 <body class="bg-[#fffbf7] min-h-screen flex">
@@ -126,16 +124,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
         <!-- TOP NAV HEADERBAR -->
         <header class="bg-white border-b border-stone-200 px-6 py-4 flex items-center justify-between flex-shrink-0">
             <div>
-                <h2 class="text-lg font-bold text-stone-800"><i class="fa-solid fa-wand-magic-sparkles text-orange-600 mr-2"></i>AI Exam Item Generator</h2>
-                <p class="text-xs text-stone-400">Paste lesson materials, notes, or syllabi to automatically produce exam questions .</p>
+                <h2 class="text-lg font-bold text-stone-800"><i class="fa-solid fa-wand-magic-sparkles text-orange-600 mr-2"></i>Civil Engineering AI Item Generator</h2>
+                <p class="text-xs text-stone-400">Generate specialized test items from course materials for Civil Engineering disciplines.</p>
             </div>
             
             <div class="flex items-center gap-4">
-                <button class="w-9 h-9 rounded-xl border border-stone-200 flex items-center justify-center text-stone-500 hover:text-orange-500 relative">
-                    <i class="fa-solid fa-bell text-base"></i>
-                    <span class="absolute top-1.5 right-2 w-2 h-2 bg-orange-600 rounded-full"></span>
-                </button>
-                
                 <div class="flex items-center gap-3 pl-2 border-l border-stone-200">
                     <div class="w-9 h-9 rounded-xl bg-orange-100 text-orange-700 font-bold flex items-center justify-center shadow-inner">
                         <?php echo strtoupper(substr($teacher['fullname'] ?? 'Prof', 0, 2)); ?>
@@ -173,17 +166,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                 <div class="lg:col-span-5 bg-white border border-stone-200 rounded-2xl p-6 shadow-sm space-y-5">
                     <div class="flex items-center justify-between border-b border-stone-100 pb-3">
                         <h3 class="text-xs font-extrabold uppercase tracking-wider text-stone-800 flex items-center gap-2">
-                            <i class="fa-solid fa-book-open text-orange-500"></i> 1. Lesson Input Setup
+                            <i class="fa-solid fa-book-open text-orange-500"></i> 1. Lesson & Branch Setup
                         </h3>
-                        <span class="text-[10px] bg-orange-100 text-orange-700 font-extrabold px-2 py-0.5 rounded-full">Groq Llama-3</span>
+                        <span class="text-[10px] bg-orange-100 text-orange-700 font-extrabold px-2 py-0.5 rounded-full">Groq Llama-3.3</span>
                     </div>
 
                     <form action="generate_ai.php" method="POST" id="ai_form" class="space-y-4">
+                        <?php echo csrfInputField(); ?>
+                        
                         <div class="space-y-1">
                             <label class="text-xs font-bold text-stone-700">Exam Title</label>
                             <div class="relative">
                                 <i class="fa-solid fa-file-signature absolute left-3.5 top-3 text-stone-400 text-xs"></i>
-                                <input type="text" name="exam_title" required placeholder="e.g. CI/CD & DevOps Quiz" class="w-full bg-stone-50 border border-stone-200 rounded-xl pl-9 pr-4 py-2.5 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500 focus:bg-white transition-all">
+                                <input type="text" name="exam_title" required value="<?php echo htmlspecialchars($_POST['exam_title'] ?? ''); ?>" placeholder="e.g. Reinforced Concrete Design Quiz 1" class="w-full bg-stone-50 border border-stone-200 rounded-xl pl-9 pr-4 py-2.5 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500 focus:bg-white transition-all">
                             </div>
                         </div>
 
@@ -191,7 +186,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                             <label class="text-xs font-bold text-stone-700">Subject Name</label>
                             <div class="relative">
                                 <i class="fa-solid fa-book absolute left-3.5 top-3 text-stone-400 text-xs"></i>
-                                <input type="text" name="subject" required placeholder="e.g. System Architecture" class="w-full bg-stone-50 border border-stone-200 rounded-xl pl-9 pr-4 py-2.5 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500 focus:bg-white transition-all">
+                                <input type="text" name="subject" required value="<?php echo htmlspecialchars($_POST['subject'] ?? ''); ?>" placeholder="e.g. Structural Theory" class="w-full bg-stone-50 border border-stone-200 rounded-xl pl-9 pr-4 py-2.5 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500 focus:bg-white transition-all">
+                            </div>
+                        </div>
+
+                        <!-- Civil Engineering Specialization Selector (Docx Figure 11) -->
+                        <div class="space-y-1">
+                            <label class="text-xs font-bold text-stone-700">Civil Engineering Specialization Branch</label>
+                            <div class="relative">
+                                <i class="fa-solid fa-compass-drafting absolute left-3.5 top-3 text-orange-500 text-xs"></i>
+                                <select name="specialization" required class="w-full bg-stone-50 border border-stone-200 rounded-xl pl-9 pr-4 py-2.5 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500 focus:bg-white transition-all">
+                                    <?php foreach (getCivilEngineeringSpecializations() as $key => $label): ?>
+                                        <option value="<?php echo htmlspecialchars($key); ?>" <?php echo (($_POST['specialization'] ?? '') === $key) ? 'selected' : ''; ?>>
+                                            <?php echo htmlspecialchars($label); ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
                             </div>
                         </div>
 
@@ -199,33 +209,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                             <label class="text-xs font-bold text-stone-700">Number of Questions</label>
                             <div class="relative">
                                 <i class="fa-solid fa-hashtag absolute left-3.5 top-3 text-stone-400 text-xs"></i>
-                                <input type="number" name="num_questions" value="5" min="1" max="20" required class="w-full bg-stone-50 border border-stone-200 rounded-xl pl-9 pr-4 py-2.5 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500 focus:bg-white transition-all">
+                                <input type="number" name="num_questions" value="<?php echo htmlspecialchars($_POST['num_questions'] ?? 5); ?>" min="1" max="20" required class="w-full bg-stone-50 border border-stone-200 rounded-xl pl-9 pr-4 py-2.5 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500 focus:bg-white transition-all">
                             </div>
                         </div>
 
                         <div class="space-y-1">
-                            <label class="text-xs font-bold text-stone-700">Paste Lesson Notes / Text Content</label>
-                            <textarea name="lesson_text" required rows="8" placeholder="Paste your lesson, article, or reviewer notes here...&#10;&#10;Example:&#10;Continuous Integration (CI) is a development practice where developers integrate code into a shared repository frequently. Each integration is verified by automated builds and tests..." class="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-xs font-medium text-stone-800 outline-none focus:border-orange-500 focus:bg-white resize-none transition-all"></textarea>
+                            <label class="text-xs font-bold text-stone-700">Paste Lesson Content / Syllabi Notes</label>
+                            <textarea name="lesson_text" required rows="7" placeholder="Paste Civil Engineering notes, formulas, or lecture content here...&#10;&#10;Example:&#10;Stress is defined as internal resistance per unit area (sigma = P / A). Reinforced concrete beams must satisfy flexural capacity requirements under ultimate load design..." class="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-xs font-medium text-stone-800 outline-none focus:border-orange-500 focus:bg-white resize-none transition-all"><?php echo htmlspecialchars($_POST['lesson_text'] ?? ''); ?></textarea>
                         </div>
 
                         <button type="submit" name="generate_questions" onclick="showLoadingState()" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-extrabold text-xs py-3.5 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2">
-                            <i class="fa-solid fa-robot"></i> Generate Questions with AI
+                            <i class="fa-solid fa-robot"></i> Generate AI Test Items
                         </button>
                     </form>
                 </div>
 
-                <!-- RIGHT REVIEW AND SAVE PANEL (7 COLUMNS) -->
-                <div class="lg:col-span-7 space-y-6">
-                    <?php if ($generated_questions): ?>
+                <!-- RIGHT OUTPUT REVIEW PANEL (7 COLUMNS) -->
+                <div class="lg:col-span-7 space-y-4">
+                    <?php if (!empty($generated_questions)): ?>
                         <form action="generate_ai.php" method="POST" class="bg-white border border-stone-200 rounded-2xl p-6 shadow-sm space-y-6 animate-fadeIn">
+                            <?php echo csrfInputField(); ?>
                             
                             <!-- RESULT HEADER BAR -->
                             <div class="flex items-center justify-between border-b border-stone-100 pb-4">
                                 <div>
                                     <h3 class="text-sm font-extrabold text-stone-800 uppercase tracking-tight flex items-center gap-2">
-                                        <i class="fa-solid fa-list-check text-orange-600"></i> 2. Review Generated Items
+                                        <i class="fa-solid fa-list-check text-orange-600"></i> 2. Review & Save Exam
                                     </h3>
-                                    <p class="text-[11px] text-stone-400 font-medium mt-0.5">Title: <strong class="text-stone-700"><?php echo htmlspecialchars($_POST['exam_title']); ?></strong> | Subject: <strong class="text-stone-700"><?php echo htmlspecialchars($_POST['subject']); ?></strong></p>
+                                    <p class="text-[11px] text-stone-400 font-medium mt-0.5">
+                                        Title: <strong class="text-stone-700"><?php echo htmlspecialchars($_POST['exam_title']); ?></strong> | 
+                                        Branch: <strong class="text-orange-600"><?php echo htmlspecialchars($_POST['specialization']); ?></strong>
+                                    </p>
                                 </div>
                                 <span class="px-3 py-1 rounded-xl text-xs font-black uppercase tracking-wider shadow-sm bg-orange-100 text-orange-800">
                                     <?php echo count($generated_questions); ?> Items
@@ -234,6 +248,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
 
                             <input type="hidden" name="save_title" value="<?php echo htmlspecialchars($_POST['exam_title']); ?>">
                             <input type="hidden" name="save_subject" value="<?php echo htmlspecialchars($_POST['subject']); ?>">
+                            <input type="hidden" name="save_specialization" value="<?php echo htmlspecialchars($_POST['specialization']); ?>">
 
                             <div class="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
                                 <?php foreach ($generated_questions as $idx => $item): ?>
@@ -278,27 +293,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                             </div>
 
                             <div class="pt-4 border-t border-stone-100 flex justify-between items-center">
-                                <a href="generate_ai.php" class="text-xs font-bold text-stone-500 hover:text-stone-800 transition-colors">
-                                    <i class="fa-solid fa-rotate-left mr-1"></i> Discard & Generate New
-                                </a>
-
-                                <button type="submit" name="save_ai_exam" class="bg-stone-900 hover:bg-orange-600 text-white font-extrabold text-xs px-6 py-3 rounded-xl shadow-md transition-all flex items-center gap-2">
-                                    <i class="fa-solid fa-floppy-disk"></i> Approve & Save to Question Bank
+                                <a href="generate_ai.php" class="text-xs font-bold text-stone-400 hover:text-stone-700">Discard Items</a>
+                                <button type="submit" name="save_ai_exam" class="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-6 py-3 rounded-xl shadow-md transition-all flex items-center gap-2">
+                                    <i class="fa-solid fa-floppy-disk"></i> Save Exam to Question Bank
                                 </button>
                             </div>
                         </form>
                     <?php else: ?>
-                        <!-- EMPTY STANDBY STATE -->
-                        <div class="bg-white border border-stone-200 rounded-2xl p-12 text-center text-stone-400 space-y-4 shadow-sm flex flex-col items-center justify-center min-h-[420px]">
-                            <div class="w-16 h-16 bg-orange-50 text-orange-600 rounded-2xl flex items-center justify-center text-3xl animate-pulseGlow shadow-inner">
-                                <i class="fa-solid fa-robot"></i>
+                        <div class="bg-white border border-stone-200 rounded-2xl p-12 text-center space-y-3 shadow-sm">
+                            <div class="w-16 h-16 bg-orange-50 text-orange-500 rounded-3xl flex items-center justify-center mx-auto text-2xl font-black shadow-inner">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i>
                             </div>
-                            <div class="max-w-md space-y-1">
-                                <h3 class="text-base font-extrabold text-stone-800">AI Generator Standby</h3>
-                                <p class="text-xs text-stone-400 leading-relaxed">
-                                    I-paste ang lesson material sa kaliwa, i-set ang parameters, at i-click ang <strong>"Generate Questions"</strong> button para bumuo ng awtomatikong mga tanong gamit ang Groq AI.
-                                </p>
-                            </div>
+                            <h3 class="text-sm font-extrabold text-stone-800">Ready to Generate Civil Engineering Exams</h3>
+                            <p class="text-xs text-stone-400 max-w-sm mx-auto">Fill out the form on the left with your lesson content and select your Civil Engineering specialization branch.</p>
                         </div>
                     <?php endif; ?>
                 </div>
@@ -308,60 +315,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
         </div>
     </main>
 
-    <!-- LOADING OVERLAY MODAL FOR GROQ API -->
-    <div id="loading_overlay" class="fixed inset-0 bg-stone-950/80 backdrop-blur-sm hidden flex-col items-center justify-center z-50 p-4 space-y-4">
-        <div class="w-16 h-16 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
-        <div class="text-center space-y-1">
-            <h4 class="text-white font-extrabold text-base">Groq AI Generating Questions...</h4>
-            <p class="text-stone-400 text-xs">Analyzing lesson content and creating exam items.</p>
-        </div>
-    </div>
-
-    <!-- LOGOUT CONFIRMATION MODAL -->
-    <div id="logout_modal" class="fixed inset-0 bg-stone-950/70 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
-        <div class="bg-white border border-stone-200 p-6 rounded-2xl max-w-sm w-full space-y-4 shadow-2xl animate-fadeIn">
-            <div class="flex items-center gap-3">
-                <div class="w-12 h-12 bg-red-100 text-red-600 rounded-xl flex items-center justify-center">
-                    <i class="fa-solid fa-right-from-bracket text-xl"></i>
-                </div>
-                <div>
-                    <h4 class="font-extrabold text-base text-stone-800">Confirm Logout</h4>
-                    <p class="text-xs text-stone-500">Are you sure you want to sign out?</p>
-                </div>
-            </div>
-            <div class="flex gap-2 justify-end pt-2">
-                <button onclick="closeLogoutModal()" class="px-4 py-2.5 bg-stone-200 text-stone-700 font-bold text-xs rounded-xl hover:bg-stone-300 transition-all">
-                    Cancel
-                </button>
-                <button onclick="confirmLogout()" class="px-4 py-2.5 bg-red-600 text-white font-bold text-xs rounded-xl shadow-md hover:bg-red-700 transition-all">
-                    <i class="fa-solid fa-right-from-bracket mr-1"></i> Logout
-                </button>
+    <!-- LOADING OVERLAY -->
+    <div id="loading_overlay" class="fixed inset-0 bg-stone-950/70 backdrop-blur-sm hidden flex-col items-center justify-center z-50 p-4">
+        <div class="bg-white p-6 rounded-2xl max-w-sm w-full text-center space-y-4 shadow-2xl animate-fadeIn">
+            <div class="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+            <div>
+                <h4 class="font-extrabold text-sm text-stone-800">Generating Exam Questions</h4>
+                <p class="text-xs text-stone-500 mt-1">Groq Llama-3.3 AI is parsing lesson content and formatting answer keys...</p>
             </div>
         </div>
     </div>
 
-    <!-- JAVASCRIPT HANDLERS -->
     <script>
         function showLoadingState() {
-            const form = document.getElementById('ai_form');
-            if (form.checkValidity()) {
-                document.getElementById('loading_overlay').classList.remove('hidden');
-                document.getElementById('loading_overlay').classList.add('flex');
-            }
-        }
-
-        function openLogoutModal() {
-            document.getElementById('logout_modal').classList.remove('hidden');
-            document.getElementById('logout_modal').classList.add('flex');
-        }
-        
-        function closeLogoutModal() {
-            document.getElementById('logout_modal').classList.add('hidden');
-            document.getElementById('logout_modal').classList.remove('flex');
-        }
-        
-        function confirmLogout() {
-            window.location.href = '../logout.php';
+            document.getElementById('loading_overlay').classList.remove('hidden');
+            document.getElementById('loading_overlay').classList.add('flex');
         }
     </script>
 </body>
