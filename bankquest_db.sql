@@ -46,6 +46,7 @@ CREATE TABLE `exams` (
   `title` varchar(150) NOT NULL,
   `subject` varchar(100) NOT NULL,
   `specialization` varchar(100) DEFAULT 'Structural Engineering',
+  `term` enum('Prelim','Midterm','Finals') NOT NULL DEFAULT 'Prelim',
   `time_limit` int(11) DEFAULT 60,
   `total_items` int(11) DEFAULT 0,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
@@ -82,6 +83,7 @@ CREATE TABLE `exam_submissions` (
   `exam_id` int(11) DEFAULT NULL,
   `student_name` varchar(100) NOT NULL,
   `exam_title` varchar(100) NOT NULL,
+  `term` enum('Prelim','Midterm','Finals') NOT NULL DEFAULT 'Prelim',
   `upload_type` enum('image','pdf','scanned','handwritten','printed') NOT NULL,
   `correct_count` int(11) DEFAULT 0,
   `wrong_count` int(11) DEFAULT 0,

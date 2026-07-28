@@ -320,24 +320,47 @@ try {
         $skills_data = [85, 92, 70, 88, 80];
     }
 
-    // ==================== 13. EXAM RESULTS TABLE ====================
+    // ==================== 13. EXAM RESULTS TABLE (Docx Figure 15) ====================
+    $selected_term = trim($_GET['term'] ?? 'All');
     $exam_results = [];
     try {
-        $stmt = $pdo->prepare("
-            SELECT 
-                e.title,
-                es.score,
-                es.total_items,
-                es.percentage,
-                es.status,
-                es.created_at
-            FROM exam_submissions es
-            JOIN exams e ON es.exam_id = e.id
-            WHERE es.student_id = ?
-            ORDER BY es.created_at DESC
-            LIMIT 10
-        ");
-        $stmt->execute([$student_id]);
+        if (in_array($selected_term, ['Prelim', 'Midterm', 'Finals'])) {
+            $stmt = $pdo->prepare("
+                SELECT 
+                    es.id,
+                    COALESCE(e.title, es.exam_title) AS title,
+                    COALESCE(e.subject, 'Civil Engineering') AS subject,
+                    es.term,
+                    es.correct_count AS score,
+                    es.total_items,
+                    es.percentage,
+                    es.status,
+                    es.created_at
+                FROM exam_submissions es
+                LEFT JOIN exams e ON es.exam_id = e.id
+                WHERE (es.student_id = ? OR es.student_name LIKE ?) AND es.term = ?
+                ORDER BY es.created_at DESC
+            ");
+            $stmt->execute([$student_id, "%{$student['fullname']}%", $selected_term]);
+        } else {
+            $stmt = $pdo->prepare("
+                SELECT 
+                    es.id,
+                    COALESCE(e.title, es.exam_title) AS title,
+                    COALESCE(e.subject, 'Civil Engineering') AS subject,
+                    es.term,
+                    es.correct_count AS score,
+                    es.total_items,
+                    es.percentage,
+                    es.status,
+                    es.created_at
+                FROM exam_submissions es
+                LEFT JOIN exams e ON es.exam_id = e.id
+                WHERE (es.student_id = ? OR es.student_name LIKE ?)
+                ORDER BY es.created_at DESC
+            ");
+            $stmt->execute([$student_id, "%{$student['fullname']}%"]);
+        }
         $exam_results = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (PDOException $e) {
         $exam_results = [];
@@ -632,6 +655,93 @@ try {
                         <?php endif; ?>
                     </div>
                 </div>
+
+                <!-- SEMESTER EXAM RESULTS & EVALUATIONS (Docx Figure 15) -->
+                <div id="exam-results-section" class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl shadow-sm overflow-hidden p-6 space-y-4">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-stone-100 dark:border-stone-800 pb-4">
+                        <div>
+                            <h3 class="text-sm font-extrabold text-stone-800 dark:text-stone-100 uppercase tracking-wider flex items-center gap-2">
+                                <i class="fa-solid fa-square-poll-vertical text-orange-500"></i> Semester Examination Results & Evaluations
+                            </h3>
+                            <p class="text-xs text-stone-400 mt-0.5">Filter examination outcomes by academic semester term (Docx Figure 15).</p>
+                        </div>
+                        <a href="export_pdf.php" target="_blank" class="bg-stone-900 hover:bg-orange-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-sm flex items-center gap-1.5">
+                            <i class="fa-solid fa-file-pdf text-rose-400"></i> Export Official Transcript PDF
+                        </a>
+                    </div>
+
+                    <!-- SEMESTER TERM FILTER BUTTONS (Prelim, Midterm, Finals - Docx Figure 15) -->
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <span class="text-xs font-bold text-stone-400 uppercase mr-2"><i class="fa-solid fa-filter text-orange-500 mr-1"></i> Filter Term:</span>
+                        <a href="dashboard.php?term=All#exam-results-section" class="px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all <?php echo ($selected_term === 'All') ? 'bg-orange-600 text-white shadow-sm' : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 hover:bg-stone-200'; ?>">
+                            All Terms
+                        </a>
+                        <a href="dashboard.php?term=Prelim#exam-results-section" class="px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all <?php echo ($selected_term === 'Prelim') ? 'bg-orange-600 text-white shadow-sm' : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 hover:bg-stone-200'; ?>">
+                            Prelim
+                        </a>
+                        <a href="dashboard.php?term=Midterm#exam-results-section" class="px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all <?php echo ($selected_term === 'Midterm') ? 'bg-orange-600 text-white shadow-sm' : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 hover:bg-stone-200'; ?>">
+                            Midterm
+                        </a>
+                        <a href="dashboard.php?term=Finals#exam-results-section" class="px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all <?php echo ($selected_term === 'Finals') ? 'bg-orange-600 text-white shadow-sm' : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 hover:bg-stone-200'; ?>">
+                            Finals
+                        </a>
+                    </div>
+
+                    <div class="overflow-x-auto border border-stone-100 dark:border-stone-800 rounded-xl">
+                        <table class="w-full text-left border-collapse text-xs text-stone-600 dark:text-stone-300">
+                            <thead class="bg-stone-50 dark:bg-stone-800/50 text-stone-400 font-extrabold uppercase text-[10px] tracking-wider border-b border-stone-100 dark:border-stone-800">
+                                <tr>
+                                    <th class="p-4 pl-6">Assessment & Subject</th>
+                                    <th class="p-4 text-center">Semester Term</th>
+                                    <th class="p-4">Date Submitted</th>
+                                    <th class="p-4 text-center">Raw Score</th>
+                                    <th class="p-4 text-center">Grade %</th>
+                                    <th class="p-4 text-center">Outcome Status</th>
+                                    <th class="p-4 pr-6 text-center">Transcript</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-stone-100 dark:divide-stone-800 font-bold">
+                                <?php if (!empty($exam_results)): ?>
+                                    <?php foreach ($exam_results as $result): ?>
+                                        <tr class="hover:bg-stone-50/50 dark:hover:bg-stone-800/30 transition-all">
+                                            <td class="p-4 pl-6">
+                                                <p class="text-stone-800 dark:text-stone-100 font-bold text-xs"><?php echo htmlspecialchars($result['title']); ?></p>
+                                                <span class="text-[10px] text-stone-400 font-medium"><?php echo htmlspecialchars($result['subject']); ?></span>
+                                            </td>
+                                            <td class="p-4 text-center">
+                                                <span class="bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-400 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase">
+                                                    <?php echo htmlspecialchars($result['term'] ?? 'Prelim'); ?>
+                                                </span>
+                                            </td>
+                                            <td class="p-4 text-stone-400 font-medium"><?php echo date("M d, Y", strtotime($result['created_at'])); ?></td>
+                                            <td class="p-4 text-center font-mono font-black"><?php echo $result['score']; ?> / <?php echo $result['total_items']; ?></td>
+                                            <td class="p-4 text-center font-black text-orange-500"><?php echo number_format($result['percentage'], 1); ?>%</td>
+                                            <td class="p-4 text-center">
+                                                <?php if ($result['status'] === 'Pass' || $result['percentage'] >= 75): ?>
+                                                    <span class="bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 px-2.5 py-1 rounded-md text-[10px] font-extrabold uppercase">Passed</span>
+                                                <?php else: ?>
+                                                    <span class="bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-400 px-2.5 py-1 rounded-md text-[10px] font-extrabold uppercase">Failed</span>
+                                                <?php endif; ?>
+                                            </td>
+                                            <td class="p-4 pr-6 text-center">
+                                                <a href="export_pdf.php" target="_blank" class="inline-flex items-center gap-1 bg-stone-100 dark:bg-stone-800 hover:bg-orange-100 text-stone-700 dark:text-stone-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-all">
+                                                    <i class="fa-solid fa-file-pdf text-rose-500"></i> PDF
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                <?php else: ?>
+                                    <tr>
+                                        <td colspan="7" class="p-8 text-center text-stone-400">
+                                            <i class="fa-solid fa-inbox text-3xl mb-2"></i>
+                                            <p class="text-xs">No exam results recorded for the selected term filter (<?php echo htmlspecialchars($selected_term); ?>).</p>
+                                        </td>
+                                    </tr>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
 
             <!-- ================= 2. TAB: ONLINE EXAM INTERFACE ================= -->
@@ -737,57 +847,86 @@ try {
                 </div>
             </div>
 
-            <!-- ================= 3. TAB: EXAM RESULTS ================= -->
+            <!-- ================= 3. TAB: EXAM RESULTS (Docx Figure 15) ================= -->
             <div id="tab-exam-results" class="tab-content space-y-6">
-                <div class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl shadow-sm overflow-hidden">
-                    <div class="p-6 border-b border-stone-100 dark:border-stone-800 flex justify-between items-center">
-                        <h3 class="text-sm font-extrabold text-stone-800 dark:text-stone-100 uppercase tracking-wider">
-                            <i class="fa-solid fa-square-poll-vertical text-orange-500 mr-1.5"></i> Evaluated Exam Results List
-                        </h3>
-                        <button class="bg-stone-900 hover:bg-orange-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-sm">
-                            <i class="fa-solid fa-file-arrow-down mr-1"></i> Download All Transcripts
-                        </button>
+                <div class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl shadow-sm overflow-hidden p-6 space-y-4">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-stone-100 dark:border-stone-800 pb-4">
+                        <div>
+                            <h3 class="text-sm font-extrabold text-stone-800 dark:text-stone-100 uppercase tracking-wider flex items-center gap-2">
+                                <i class="fa-solid fa-square-poll-vertical text-orange-500"></i> Semester Examination Results & Evaluations
+                            </h3>
+                            <p class="text-xs text-stone-400 mt-0.5">Filter examination outcomes by academic semester term (Docx Figure 15).</p>
+                        </div>
+                        <a href="export_pdf.php" target="_blank" class="bg-stone-900 hover:bg-orange-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-sm flex items-center gap-1.5">
+                            <i class="fa-solid fa-file-pdf text-rose-400"></i> Export Official Transcript PDF
+                        </a>
                     </div>
 
-                    <div class="overflow-x-auto">
+                    <!-- SEMESTER TERM FILTER BUTTONS (Prelim, Midterm, Finals - Docx Figure 15) -->
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <span class="text-xs font-bold text-stone-400 uppercase mr-2"><i class="fa-solid fa-filter text-orange-500 mr-1"></i> Filter Term:</span>
+                        <a href="dashboard.php?term=All" class="px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all <?php echo ($selected_term === 'All') ? 'bg-orange-600 text-white shadow-sm' : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 hover:bg-stone-200'; ?>">
+                            All Terms
+                        </a>
+                        <a href="dashboard.php?term=Prelim" class="px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all <?php echo ($selected_term === 'Prelim') ? 'bg-orange-600 text-white shadow-sm' : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 hover:bg-stone-200'; ?>">
+                            Prelim
+                        </a>
+                        <a href="dashboard.php?term=Midterm" class="px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all <?php echo ($selected_term === 'Midterm') ? 'bg-orange-600 text-white shadow-sm' : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 hover:bg-stone-200'; ?>">
+                            Midterm
+                        </a>
+                        <a href="dashboard.php?term=Finals" class="px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all <?php echo ($selected_term === 'Finals') ? 'bg-orange-600 text-white shadow-sm' : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 hover:bg-stone-200'; ?>">
+                            Finals
+                        </a>
+                    </div>
+
+                    <div class="overflow-x-auto border border-stone-100 dark:border-stone-800 rounded-xl">
                         <table class="w-full text-left border-collapse text-xs text-stone-600 dark:text-stone-300">
                             <thead class="bg-stone-50 dark:bg-stone-800/50 text-stone-400 font-extrabold uppercase text-[10px] tracking-wider border-b border-stone-100 dark:border-stone-800">
                                 <tr>
-                                    <th class="p-4 pl-6">Assessment Title</th>
+                                    <th class="p-4 pl-6">Assessment & Subject</th>
+                                    <th class="p-4 text-center">Semester Term</th>
                                     <th class="p-4">Date Submitted</th>
-                                    <th class="p-4 text-center">Score</th>
-                                    <th class="p-4 text-center">Percentage</th>
-                                    <th class="p-4 text-center">Status</th>
-                                    <th class="p-4 pr-6 text-center">Action</th>
+                                    <th class="p-4 text-center">Raw Score</th>
+                                    <th class="p-4 text-center">Grade %</th>
+                                    <th class="p-4 text-center">Outcome Status</th>
+                                    <th class="p-4 pr-6 text-center">Transcript</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-stone-100 dark:divide-stone-800 font-bold">
                                 <?php if (!empty($exam_results)): ?>
                                     <?php foreach ($exam_results as $result): ?>
                                         <tr class="hover:bg-stone-50/50 dark:hover:bg-stone-800/30 transition-all">
-                                            <td class="p-4 pl-6 text-stone-800 dark:text-stone-100"><?php echo htmlspecialchars($result['title']); ?></td>
-                                            <td class="p-4 text-stone-400"><?php echo date("M d, Y", strtotime($result['created_at'])); ?></td>
+                                            <td class="p-4 pl-6">
+                                                <p class="text-stone-800 dark:text-stone-100 font-bold text-xs"><?php echo htmlspecialchars($result['title']); ?></p>
+                                                <span class="text-[10px] text-stone-400 font-medium"><?php echo htmlspecialchars($result['subject']); ?></span>
+                                            </td>
+                                            <td class="p-4 text-center">
+                                                <span class="bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-400 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase">
+                                                    <?php echo htmlspecialchars($result['term'] ?? 'Prelim'); ?>
+                                                </span>
+                                            </td>
+                                            <td class="p-4 text-stone-400 font-medium"><?php echo date("M d, Y", strtotime($result['created_at'])); ?></td>
                                             <td class="p-4 text-center font-mono font-black"><?php echo $result['score']; ?> / <?php echo $result['total_items']; ?></td>
                                             <td class="p-4 text-center font-black text-orange-500"><?php echo number_format($result['percentage'], 1); ?>%</td>
                                             <td class="p-4 text-center">
-                                                <?php if ($result['percentage'] >= 75): ?>
-                                                    <span class="bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 px-2.5 py-1 rounded-md text-[10px]">Passed</span>
+                                                <?php if ($result['status'] === 'Pass' || $result['percentage'] >= 75): ?>
+                                                    <span class="bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 px-2.5 py-1 rounded-md text-[10px] font-extrabold uppercase">Passed</span>
                                                 <?php else: ?>
-                                                    <span class="bg-red-100 dark:bg-red-950 text-red-700 dark:text-red-400 px-2.5 py-1 rounded-md text-[10px]">Failed</span>
+                                                    <span class="bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-400 px-2.5 py-1 rounded-md text-[10px] font-extrabold uppercase">Failed</span>
                                                 <?php endif; ?>
                                             </td>
                                             <td class="p-4 pr-6 text-center">
-                                                <button class="bg-stone-100 dark:bg-stone-800 hover:bg-orange-100 text-stone-700 dark:text-stone-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-all">
-                                                    <i class="fa-solid fa-download"></i> PDF Result
-                                                </button>
+                                                <a href="export_pdf.php" target="_blank" class="inline-flex items-center gap-1 bg-stone-100 dark:bg-stone-800 hover:bg-orange-100 text-stone-700 dark:text-stone-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-all">
+                                                    <i class="fa-solid fa-file-pdf text-rose-500"></i> PDF
+                                                </a>
                                             </td>
                                         </tr>
                                     <?php endforeach; ?>
                                 <?php else: ?>
                                     <tr>
-                                        <td colspan="6" class="p-8 text-center text-stone-400">
+                                        <td colspan="7" class="p-8 text-center text-stone-400">
                                             <i class="fa-solid fa-inbox text-3xl mb-2"></i>
-                                            <p>No exam results available yet.</p>
+                                            <p class="text-xs">No exam results recorded for the selected term filter (<?php echo htmlspecialchars($selected_term); ?>).</p>
                                         </td>
                                     </tr>
                                 <?php endif; ?>
