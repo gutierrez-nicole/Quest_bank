@@ -48,6 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ai_ocr'])) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_submission'])) {
+    validateCSRFToken();
     try {
         $stmt = $pdo->prepare("INSERT INTO exam_submissions (teacher_id, student_name, exam_title, upload_type, correct_count, wrong_count, total_score, total_items, percentage, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
         $stmt->execute([
@@ -168,6 +169,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_submission'])) {
                     </div>
 
                     <form action="upload_check.php" method="POST" enctype="multipart/form-data" id="ocr_form" class="space-y-4">
+                        <?php echo csrfInputField(); ?>
                         <div class="space-y-1">
                             <label class="text-xs font-bold text-stone-700">Student Full Name</label>
                             <div class="relative">
@@ -295,6 +297,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_submission'])) {
 
                             <!-- SAVE SUBMISSION FORM -->
                             <form action="upload_check.php" method="POST" class="pt-4 border-t border-stone-100 flex justify-between items-center">
+                                <?php echo csrfInputField(); ?>
                                 <a href="upload_check.php" class="text-xs font-bold text-stone-500 hover:text-stone-800 transition-colors">
                                     <i class="fa-solid fa-rotate-left mr-1"></i> Discard & Re-scan
                                 </a>
