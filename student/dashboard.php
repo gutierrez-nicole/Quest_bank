@@ -162,25 +162,23 @@ try {
     }
 
     // ==================== 8. PENDING EXAMS ====================
-    $pending_exams = [];
     try {
         $stmt = $pdo->prepare("
             SELECT 
                 e.id,
                 e.title,
-                e.description,
+                e.subject,
+                COALESCE(e.specialization, 'Civil Engineering') AS specialization,
+                COALESCE(e.term, 'Prelim') AS term,
                 e.time_limit,
-                e.total_items,
-                e.exam_type
+                e.total_items
             FROM exams e
             WHERE e.id NOT IN (
-                SELECT exam_id FROM exam_submissions WHERE student_id = ?
+                SELECT exam_id FROM exam_submissions WHERE (student_id = ? OR student_name LIKE ?) AND exam_id IS NOT NULL
             )
-            AND e.status = 'active'
             ORDER BY e.created_at DESC
-            LIMIT 3
         ");
-        $stmt->execute([$student_id]);
+        $stmt->execute([$student_id, "%{$student['fullname']}%"]);
         $pending_exams = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (PDOException $e) {
         $pending_exams = [];
@@ -638,12 +636,15 @@ try {
                             <?php foreach ($pending_exams as $exam): ?>
                                 <div class="border border-stone-200 dark:border-stone-800 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-stone-50/50 dark:bg-stone-800/30 hover:border-orange-300 transition-all">
                                     <div>
-                                        <span class="bg-orange-100 dark:bg-orange-950 text-orange-600 text-[10px] font-black px-2.5 py-0.5 rounded-md uppercase"><?php echo htmlspecialchars($exam['exam_type']); ?></span>
-                                        <h4 class="font-bold text-stone-800 dark:text-stone-100 mt-1 text-sm"><?php echo htmlspecialchars($exam['title']); ?></h4>
-                                        <p class="text-xs text-stone-400 mt-0.5">Time Limit: <?php echo $exam['time_limit']; ?> mins | Items: <?php echo $exam['total_items']; ?> Questions</p>
+                                        <div class="flex items-center gap-2 flex-wrap">
+                                            <span class="bg-orange-100 dark:bg-orange-950 text-orange-600 text-[10px] font-black px-2.5 py-0.5 rounded-md uppercase"><?php echo htmlspecialchars($exam['specialization'] ?? 'Civil Engineering'); ?></span>
+                                            <span class="bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 text-[10px] font-bold px-2.5 py-0.5 rounded-md uppercase"><?php echo htmlspecialchars($exam['term'] ?? 'Prelim'); ?></span>
+                                        </div>
+                                        <h4 class="font-bold text-stone-800 dark:text-stone-100 mt-1.5 text-sm"><?php echo htmlspecialchars($exam['title']); ?></h4>
+                                        <p class="text-xs text-stone-400 mt-0.5">Subject: <strong class="text-stone-600 dark:text-stone-300"><?php echo htmlspecialchars($exam['subject'] ?? 'CE Subject'); ?></strong> | Time Limit: <?php echo $exam['time_limit']; ?> mins | Items: <?php echo $exam['total_items']; ?> Questions</p>
                                     </div>
-                                    <button onclick="startExamSession()" class="w-full sm:w-auto bg-orange-gradient text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all">
-                                        Launch Exam Environment <i class="fa-solid fa-arrow-right ml-1"></i>
+                                    <button onclick="startExamSession(<?php echo $exam['id']; ?>)" class="w-full sm:w-auto bg-gradient-to-r from-orange-500 to-orange-600 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1.5">
+                                        Launch Exam Environment <i class="fa-solid fa-arrow-right"></i>
                                     </button>
                                 </div>
                             <?php endforeach; ?>
