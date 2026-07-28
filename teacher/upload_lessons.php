@@ -11,6 +11,7 @@ $error_msg = "";
 
 // Upload File Logic
 if ($_SERVER['REQUEST_METHOD'] === 'POST' and isset($_POST['upload_material'])) {
+    validateCSRFToken();
     $title = trim($_POST['title']);
     $subject = trim($_POST['subject']);
 
@@ -119,6 +120,7 @@ $materials = $stmtMat->fetchAll(PDO::FETCH_ASSOC);
                 <h3 class="text-sm font-bold uppercase tracking-wider text-stone-700 border-b pb-2"><i class="fa-solid fa-cloud-arrow-up text-orange-500 mr-1"></i> Upload New Material</h3>
                 
                 <form action="upload_lessons.php" method="POST" enctype="multipart/form-data" class="space-y-4">
+                    <?php echo csrfInputField(); ?>
                     <div class="space-y-1">
                         <label class="text-xs font-bold text-stone-600">Document Title</label>
                         <input type="text" name="title" required placeholder="e.g. CI/CD Pipeline Fundamentals" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs outline-none focus:border-orange-500">

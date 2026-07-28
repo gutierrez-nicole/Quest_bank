@@ -50,6 +50,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'download_backup') {
 
 // 2. RESTORE SQL BACKUP FILE
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['restore_backup'])) {
+    validateCSRFToken();
     if (isset($_FILES['backup_file']) && $_FILES['backup_file']['error'] === UPLOAD_ERR_OK) {
         $file_tmp = $_FILES['backup_file']['tmp_name'];
         $sqlContent = file_get_contents($file_tmp);
@@ -121,6 +122,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['restore_backup'])) {
                     </div>
                     
                     <form action="backup.php" method="POST" enctype="multipart/form-data" class="space-y-3">
+                        <?php echo csrfInputField(); ?>
                         <input type="file" name="backup_file" accept=".sql" required class="block w-full text-xs text-stone-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-stone-900 file:text-white hover:file:bg-orange-600 cursor-pointer">
                         <button type="submit" name="restore_backup" onclick="return confirm('WARNING: Restoring will override existing database tables. Proceed?');" class="w-full bg-stone-900 hover:bg-orange-600 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-sm">
                             <i class="fa-solid fa-trash-arrow-up mr-1"></i> Execute Database Restore
