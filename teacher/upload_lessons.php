@@ -93,9 +93,10 @@ $materials = $stmtMat->fetchAll(PDO::FETCH_ASSOC);
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght=400;600;700;800&display=swap" rel="stylesheet">
     <style> body { font-family: 'Plus Jakarta Sans', sans-serif; } </style>
 </head>
-<body class="bg-[#fffbf7] min-h-screen p-6 md:p-12">
-
-    <div class="max-w-6xl mx-auto space-y-6">
+<body class="bg-[#fffbf7] min-h-screen flex">
+    <?php require_once __DIR__ . '/../includes/teacher_sidebar.php'; ?>
+    <main class="flex-1 lg:ml-64 p-6 md:p-12 overflow-y-auto min-h-screen">
+        <div class="max-w-6xl mx-auto space-y-6">
         <div class="flex items-center justify-between">
             <div>
                 <a href="dashboard.php" class="text-xs font-bold text-orange-600 hover:underline"><i class="fa-solid fa-arrow-left mr-1"></i> Back to Dashboard</a>
@@ -206,5 +207,6 @@ $materials = $stmtMat->fetchAll(PDO::FETCH_ASSOC);
             }
         }
     </script>
+    </main>
 </body>
 </html>

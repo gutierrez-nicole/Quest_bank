@@ -77,58 +77,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['restore_backup'])) {
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght=400;600;700;800&display=swap" rel="stylesheet">
     <style> body { font-family: 'Plus Jakarta Sans', sans-serif; } </style>
 </head>
-<body class="bg-[#fffbf7] min-h-screen p-6 md:p-12">
-
-    <div class="max-w-4xl mx-auto space-y-6">
-        <div>
-            <a href="dashboard.php" class="text-xs font-bold text-orange-600 hover:underline"><i class="fa-solid fa-arrow-left mr-1"></i> Back to Dashboard</a>
-            <h1 class="text-2xl font-extrabold text-stone-800 mt-2"><i class="fa-solid fa-floppy-disk text-orange-600 mr-1"></i> System Backup & Restore</h1>
-            <p class="text-xs text-stone-400">Download system database snapshots and recover data backups safely.</p>
-        </div>
-
-        <?php if (!empty($success_msg)): ?>
-            <div class="bg-emerald-50 border-l-4 border-emerald-500 p-4 rounded-xl text-xs font-semibold text-emerald-700"><?php echo $success_msg; ?></div>
-        <?php endif; ?>
-        <?php if (!empty($error_msg)): ?>
-            <div class="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl text-xs font-semibold text-red-700"><?php echo $error_msg; ?></div>
-        <?php endif; ?>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
-            <!-- DOWNLOAD BACKUP -->
-            <div class="bg-white border border-stone-200 rounded-2xl p-6 shadow-sm space-y-4 flex flex-col justify-between">
-                <div>
-                    <div class="w-12 h-12 bg-orange-100 text-orange-600 rounded-2xl flex items-center justify-center font-bold text-xl mb-3">
-                        <i class="fa-solid fa-cloud-arrow-down"></i>
-                    </div>
-                    <h3 class="text-base font-extrabold text-stone-800">Generate SQL Backup</h3>
-                    <p class="text-xs text-stone-400 mt-1">Export all tables including users, exam keys, questions, student logs, and grades into a single downloadable .sql file.</p>
-                </div>
-                <a href="backup.php?action=download_backup" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-md text-center block">
-                    <i class="fa-solid fa-download mr-1"></i> Download .SQL Database Backup
-                </a>
+<body class="bg-[#fffbf7] min-h-screen flex">
+    <?php require_once __DIR__ . '/../includes/teacher_sidebar.php'; ?>
+    <main class="flex-1 lg:ml-64 p-6 md:p-12 overflow-y-auto min-h-screen">
+        <div class="max-w-4xl mx-auto space-y-6">
+            <div>
+                <a href="dashboard.php" class="text-xs font-bold text-orange-600 hover:underline"><i class="fa-solid fa-arrow-left mr-1"></i> Back to Dashboard</a>
+                <h1 class="text-2xl font-extrabold text-stone-800 mt-2"><i class="fa-solid fa-floppy-disk text-orange-600 mr-1"></i> System Backup & Restore</h1>
+                <p class="text-xs text-stone-400">Download system database snapshots and recover data backups safely.</p>
             </div>
 
-            <!-- RESTORE BACKUP -->
-            <div class="bg-white border border-stone-200 rounded-2xl p-6 shadow-sm space-y-4">
-                <div>
-                    <div class="w-12 h-12 bg-stone-100 text-stone-700 rounded-2xl flex items-center justify-center font-bold text-xl mb-3">
-                        <i class="fa-solid fa-file-import"></i>
-                    </div>
-                    <h3 class="text-base font-extrabold text-stone-800">Restore Database Snapshot</h3>
-                    <p class="text-xs text-stone-400 mt-1">Upload a previously exported QuestBank `.sql` backup file to recover your system state.</p>
-                </div>
+            <?php if (!empty($success_msg)): ?>
+                <div class="bg-emerald-50 border-l-4 border-emerald-500 p-4 rounded-xl text-xs font-semibold text-emerald-700"><?php echo $success_msg; ?></div>
+            <?php endif; ?>
+            <?php if (!empty($error_msg)): ?>
+                <div class="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl text-xs font-semibold text-red-700"><?php echo $error_msg; ?></div>
+            <?php endif; ?>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 
-                <form action="backup.php" method="POST" enctype="multipart/form-data" class="space-y-3">
-                    <input type="file" name="backup_file" accept=".sql" required class="block w-full text-xs text-stone-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-stone-900 file:text-white hover:file:bg-orange-600 cursor-pointer">
-                    <button type="submit" name="restore_backup" onclick="return confirm('WARNING: Restoring will override existing database tables. Proceed?');" class="w-full bg-stone-900 hover:bg-orange-600 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-sm">
-                        <i class="fa-solid fa-trash-arrow-up mr-1"></i> Execute Database Restore
-                    </button>
-                </form>
-            </div>
+                <!-- DOWNLOAD BACKUP -->
+                <div class="bg-white border border-stone-200 rounded-2xl p-6 shadow-sm space-y-4 flex flex-col justify-between">
+                    <div>
+                        <div class="w-12 h-12 bg-orange-100 text-orange-600 rounded-2xl flex items-center justify-center font-bold text-xl mb-3">
+                            <i class="fa-solid fa-cloud-arrow-down"></i>
+                        </div>
+                        <h3 class="text-base font-extrabold text-stone-800">Generate SQL Backup</h3>
+                        <p class="text-xs text-stone-400 mt-1">Export all tables including users, exam keys, questions, student logs, and grades into a single downloadable .sql file.</p>
+                    </div>
+                    <a href="backup.php?action=download_backup" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-md text-center block">
+                        <i class="fa-solid fa-download mr-1"></i> Download .SQL Database Backup
+                    </a>
+                </div>
 
+                <!-- RESTORE BACKUP -->
+                <div class="bg-white border border-stone-200 rounded-2xl p-6 shadow-sm space-y-4">
+                    <div>
+                        <div class="w-12 h-12 bg-stone-100 text-stone-700 rounded-2xl flex items-center justify-center font-bold text-xl mb-3">
+                            <i class="fa-solid fa-file-import"></i>
+                        </div>
+                        <h3 class="text-base font-extrabold text-stone-800">Restore Database Snapshot</h3>
+                        <p class="text-xs text-stone-400 mt-1">Upload a previously exported QuestBank `.sql` backup file to recover your system state.</p>
+                    </div>
+                    
+                    <form action="backup.php" method="POST" enctype="multipart/form-data" class="space-y-3">
+                        <input type="file" name="backup_file" accept=".sql" required class="block w-full text-xs text-stone-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-stone-900 file:text-white hover:file:bg-orange-600 cursor-pointer">
+                        <button type="submit" name="restore_backup" onclick="return confirm('WARNING: Restoring will override existing database tables. Proceed?');" class="w-full bg-stone-900 hover:bg-orange-600 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-sm">
+                            <i class="fa-solid fa-trash-arrow-up mr-1"></i> Execute Database Restore
+                        </button>
+                    </form>
+                </div>
+
+            </div>
         </div>
-    </div>
+    </main>
 
 </body>
 </html>

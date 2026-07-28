@@ -449,57 +449,10 @@ try {
 <body class="bg-[#f3f4f6] dark:bg-[#09090b] text-stone-800 dark:text-stone-100 min-h-screen flex transition-colors duration-300">
 
     <!-- ================= SIDEBAR NAVIGATION ================= -->
-    <aside class="w-64 bg-stone-950 text-stone-300 flex flex-col justify-between hidden md:flex z-30 shadow-2xl fixed h-full">
-        <div>
-            <!-- Sidebar Logo -->
-            <div class="p-5 border-b border-stone-800 flex items-center justify-between bg-stone-900/60">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 bg-orange-gradient rounded-2xl flex items-center justify-center font-extrabold text-white shadow-lg shadow-orange-600/30">
-                        <i class="fa-solid fa-brain text-lg"></i>
-                    </div>
-                    <div>
-                        <h1 class="text-lg font-black tracking-tight text-white">Quest<span class="text-orange-500">Bank</span></h1>
-                        <p class="text-[9px] uppercase text-stone-400 font-bold tracking-widest">Student Portal</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Navigation Links -->
-            <nav class="p-4 space-y-1.5 custom-scrollbar overflow-y-auto max-h-[calc(100vh-160px)]">
-                <a href="javascript:void(0)" onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-item flex items-center gap-3 px-4 py-3 text-xs font-bold rounded-xl bg-orange-gradient text-white shadow-md shadow-orange-500/20 transition-all">
-                    <i class="fa-solid fa-chart-pie w-5 text-center text-sm"></i> Dashboard
-                </a>
-                <a href="javascript:void(0)" onclick="switchTab('take-exam')" id="nav-take-exam" class="nav-item flex items-center gap-3 px-4 py-3 text-xs font-semibold rounded-xl text-stone-400 hover:bg-stone-900 hover:text-orange-500 transition-all">
-                    <i class="fa-solid fa-pen-to-square w-5 text-center text-sm"></i> Take Online Exam
-                </a>
-                <a href="javascript:void(0)" onclick="switchTab('exam-results')" id="nav-exam-results" class="nav-item flex items-center gap-3 px-4 py-3 text-xs font-semibold rounded-xl text-stone-400 hover:bg-stone-900 hover:text-orange-500 transition-all">
-                    <i class="fa-solid fa-square-poll-vertical w-5 text-center text-sm"></i> Exam Results
-                </a>
-                <a href="javascript:void(0)" onclick="switchTab('analytics')" id="nav-analytics" class="nav-item flex items-center gap-3 px-4 py-3 text-xs font-semibold rounded-xl text-stone-400 hover:bg-stone-900 hover:text-orange-500 transition-all">
-                    <i class="fa-solid fa-chart-line w-5 text-center text-sm"></i> AI Performance & Analytics
-                </a>
-                <a href="javascript:void(0)" onclick="switchTab('history')" id="nav-history" class="nav-item flex items-center gap-3 px-4 py-3 text-xs font-semibold rounded-xl text-stone-400 hover:bg-stone-900 hover:text-orange-500 transition-all">
-                    <i class="fa-solid fa-clock-rotate-left w-5 text-center text-sm"></i> Exam History
-                </a>
-                <a href="javascript:void(0)" onclick="switchTab('notifications')" id="nav-notifications" class="nav-item flex items-center gap-3 px-4 py-3 text-xs font-semibold rounded-xl text-stone-400 hover:bg-stone-900 hover:text-orange-500 transition-all">
-                    <i class="fa-solid fa-bell w-5 text-center text-sm"></i> Notifications
-                    <?php if (!empty($notifications)): ?>
-                        <span class="ml-auto bg-orange-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full"><?php echo count($notifications); ?></span>
-                    <?php endif; ?>
-                </a>
-            </nav>
-        </div>
-
-        <!-- Sidebar Footer & Logout -->
-        <div class="p-4 border-t border-stone-800 bg-stone-900/40">
-            <button onclick="openLogoutModal()" class="w-full flex items-center gap-3 px-4 py-3 text-xs font-bold rounded-xl text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-all">
-                <i class="fa-solid fa-right-from-bracket w-5 text-center"></i> Logout Account
-            </button>
-        </div>
-    </aside>
+    <?php require_once __DIR__ . '/../includes/student_sidebar.php'; ?>
 
     <!-- ================= MAIN CONTENT CONTAINER ================= -->
-    <main class="flex-grow flex flex-col min-w-0 md:ml-64 min-h-screen">
+    <main class="flex-grow flex flex-col min-w-0 lg:ml-64 min-h-screen">
         
         <!-- TOP NAV HEADERBAR -->
         <header class="bg-white dark:bg-stone-900 border-b border-stone-200 dark:border-stone-800 px-6 py-4 flex items-center justify-between sticky top-0 z-20 shadow-xs">

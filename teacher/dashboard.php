@@ -324,72 +324,10 @@ try {
 <body class="bg-[#fffbf7] min-h-screen flex">
 
     <!-- ================= SIDEBAR NAVIGATION ================= -->
-    <aside class="w-64 bg-stone-950 text-stone-300 flex flex-col justify-between hidden lg:flex z-20 shadow-xl max-h-screen">
-        <div class="flex flex-col overflow-hidden">
-            <!-- Sidebar Header / Logo -->
-            <div class="p-5 border-b border-stone-800 flex items-center gap-3 bg-stone-900 flex-shrink-0">
-                <div class="w-9 h-9 bg-orange-600 rounded-xl flex items-center justify-center font-bold text-white shadow-md">
-                    <i class="fa-solid fa-chalkboard-user text-base"></i>
-                </div>
-                <div>
-                    <h1 class="text-base font-extrabold tracking-tight text-white">Quest<span class="text-orange-500">Bank</span></h1>
-                    <p class="text-[9px] uppercase text-stone-400 font-semibold tracking-wider">Teacher Module</p>
-                </div>
-            </div>
-
-            <!-- Scrollable Navigation Links -->
-            <div class="flex-grow overflow-y-auto p-4 space-y-4 custom-scrollbar">
-                
-                <!-- Section: Teacher Module Workspace -->
-                <div>
-                    <p class="text-[10px] font-bold uppercase tracking-widest text-stone-500 px-3 mb-1.5">Teacher Module</p>
-                    <nav class="space-y-0.5">
-                        <a href="dashboard.php" class="flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg bg-orange-600 text-white shadow-sm">
-                            <i class="fa-solid fa-chart-pie w-4 text-center"></i> Teacher Dashboard
-                        </a>
-                        <a href="upload_check.php" class="flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg text-stone-400 hover:bg-stone-900 hover:text-orange-500 transition-all">
-                            <i class="fa-solid fa-expand w-4 text-center"></i> OCR Answer Checker
-                        </a>
-                        <a href="create_exam.php" class="flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg text-stone-400 hover:bg-stone-900 hover:text-orange-500 transition-all">
-                            <i class="fa-solid fa-file-signature w-4 text-center"></i> Create Exam
-                        </a>
-                        <a href="generate_ai.php" class="flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg text-stone-400 hover:bg-stone-900 hover:text-orange-500 transition-all">
-                            <i class="fa-solid fa-wand-magic-sparkles w-4 text-center"></i> Generate AI Questions
-                        </a>
-                        <a href="manage_students.php" class="flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg text-stone-400 hover:bg-stone-900 hover:text-orange-500 transition-all">
-                            <i class="fa-solid fa-users w-4 text-center"></i> Students & Sections
-                        </a>
-                        <a href="upload_lessons.php" class="flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg text-stone-400 hover:bg-stone-900 hover:text-orange-500 transition-all">
-                            <i class="fa-solid fa-file-arrow-up w-4 text-center"></i> Upload Lesson Files
-                        </a>
-                        <a href="reports.php" class="flex items-center gap-3 px-3 py-2 text-xs font-medium rounded-lg text-stone-400 hover:bg-stone-900 hover:text-orange-500 transition-all">
-                            <i class="fa-solid fa-chart-column w-4 text-center"></i> Reports & Analytics
-                        </a>
-                        
-                    </nav>
-                </div>
-
-                <!-- Section: System & Settings -->
-                <div>
-                    <p class="text-[10px] font-bold uppercase tracking-widest text-stone-500 px-3 mb-1.5">Settings</p>
-                    <nav class="space-y-0.5">
-                      <a href="profile_settings.php" class="flex items-center gap-3 px-3 py-2 text-xs text-stone-400 hover:bg-stone-900 hover:text-orange-500 rounded-lg transition-all"><i class="fa-solid fa-user w-4 text-center"></i> Profile Settings</a>
-                        <a href="#logs" class="flex items-center gap-3 px-3 py-2 text-xs text-stone-400 hover:bg-stone-900 hover:text-orange-500 rounded-lg transition-all"><i class="fa-solid fa-clipboard-list w-4 text-center"></i> Activity Logs</a>
-                    </nav>
-                </div>
-            </div>
-        </div>
-
-        <!-- Sidebar Footer -->
-        <div class="p-4 border-t border-stone-800 bg-stone-900 flex-shrink-0">
-            <button onclick="openLogoutModal()" class="w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-lg text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-all">
-                <i class="fa-solid fa-right-from-bracket w-4 text-center"></i> Logout
-            </button>
-        </div>
-    </aside>
+    <?php require_once __DIR__ . '/../includes/teacher_sidebar.php'; ?>
 
     <!-- ================= MAIN CONTENT AREA ================= -->
-    <main class="flex-grow flex flex-col min-w-0 h-screen overflow-hidden">
+    <main class="flex-grow flex flex-col min-w-0 lg:ml-64 min-h-screen">
         
         <!-- TOP NAV HEADERBAR -->
         <header class="bg-white border-b border-stone-200 px-6 py-4 flex items-center justify-between flex-shrink-0">
