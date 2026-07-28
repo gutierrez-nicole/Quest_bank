@@ -7,7 +7,7 @@ $currentPage = basename($_SERVER['PHP_SELF']);
         <!-- Sidebar Header -->
         <div class="p-5 border-b border-stone-800 flex items-center justify-between bg-stone-900/80 flex-shrink-0">
             <div class="flex items-center gap-3">
-                <div class="w-10 h-10 bg-orange-gradient rounded-2xl flex items-center justify-center font-black text-white shadow-lg shadow-orange-600/30">
+                <div class="w-10 h-10 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center font-black text-white shadow-lg shadow-orange-600/30">
                     <i class="fa-solid fa-user-shield text-lg"></i>
                 </div>
                 <div>
