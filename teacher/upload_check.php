@@ -206,13 +206,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_submission'])) {
                         </div>
 
                         <div class="space-y-1">
-                            <label class="text-xs font-bold text-stone-700">Attach Exam Document / Image</label>
+                            <div class="flex items-center justify-between">
+                                <label class="text-xs font-bold text-stone-700">Attach Exam Document / Image</label>
+                                <button type="button" onclick="openWebcamModal()" class="text-[10px] bg-stone-900 hover:bg-orange-600 text-white font-extrabold px-3 py-1 rounded-lg transition-all flex items-center gap-1 shadow-sm">
+                                    <i class="fa-solid fa-camera text-orange-400"></i> Snap Photo with Camera
+                                </button>
+                            </div>
                             <div onclick="triggerFileSelect()" id="drop_zone" class="border-2 border-dashed border-stone-300 hover:border-orange-500 hover:bg-orange-50/30 rounded-2xl p-5 bg-stone-50/50 text-center cursor-pointer transition-all space-y-2 group">
                                 <div class="w-12 h-12 bg-white rounded-full flex items-center justify-center mx-auto shadow-sm group-hover:scale-110 transition-transform">
                                     <i class="fa-solid fa-cloud-arrow-up text-xl text-stone-400 group-hover:text-orange-500 transition-colors" id="upload_icon"></i>
                                 </div>
                                 <div>
-                                    <p class="text-xs font-extrabold text-stone-700" id="upload_text">Click to browse or drag exam file here</p>
+                                    <p class="text-xs font-extrabold text-stone-700" id="upload_text">Click to browse, drag file, or snap with camera</p>
                                     <p class="text-[10px] text-stone-400 font-medium">Supports JPG, PNG, PDF, WEBP up to 10MB</p>
                                 </div>
                                 <input type="file" name="exam_file" id="exam_file" required accept="image/*,.pdf" class="hidden" onchange="displaySelectedFile(this)">
@@ -369,8 +374,92 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_submission'])) {
         </div>
     </div>
 
+    <!-- WEBCAM CAMERA CAPTURE MODAL -->
+    <div id="webcam_modal" class="fixed inset-0 bg-stone-900/80 backdrop-blur-sm hidden items-center justify-center z-50 p-4 animate-fadeIn">
+        <div class="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 border border-stone-200">
+            <div class="flex items-center justify-between border-b border-stone-100 pb-3">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-sm">
+                        <i class="fa-solid fa-camera"></i>
+                    </div>
+                    <div>
+                        <h4 class="font-extrabold text-sm text-stone-800">Live Device Camera Scanner</h4>
+                        <p class="text-[10px] text-stone-400 font-medium">Position answer sheet within viewfinder frame.</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeWebcamModal()" class="text-stone-400 hover:text-stone-700 text-sm p-1">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- LIVE CAMERA VIEWFINDER -->
+            <div class="relative bg-stone-950 rounded-2xl overflow-hidden shadow-inner border border-stone-800 h-64 flex items-center justify-center">
+                <video id="webcam_video" autoplay playsinline class="w-full h-full object-cover"></video>
+                <div class="absolute inset-4 border-2 border-dashed border-orange-500/60 rounded-xl pointer-events-none flex items-center justify-center">
+                    <span class="bg-stone-950/70 text-orange-400 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider backdrop-blur-sm">Align Test Paper</span>
+                </div>
+            </div>
+
+            <div class="flex gap-2 justify-end pt-2">
+                <button type="button" onclick="closeWebcamModal()" class="px-4 py-2.5 bg-stone-100 text-stone-700 font-bold text-xs rounded-xl hover:bg-stone-200 transition-all">
+                    Cancel
+                </button>
+                <button type="button" onclick="captureWebcamPhoto()" class="px-5 py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center gap-2">
+                    <i class="fa-solid fa-camera"></i> Capture Answer Sheet
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- JAVASCRIPT HANDLERS -->
     <script>
+        let webcamStream = null;
+
+        function openWebcamModal() {
+            document.getElementById('webcam_modal').classList.remove('hidden');
+            document.getElementById('webcam_modal').classList.add('flex');
+            
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+                .then(function(stream) {
+                    webcamStream = stream;
+                    const video = document.getElementById('webcam_video');
+                    video.srcObject = stream;
+                })
+                .catch(function(err) {
+                    alert("Camera access error: " + err.message + "\nPlease check browser camera permissions.");
+                    closeWebcamModal();
+                });
+        }
+
+        function closeWebcamModal() {
+            if (webcamStream) {
+                webcamStream.getTracks().forEach(track => track.stop());
+                webcamStream = null;
+            }
+            document.getElementById('webcam_modal').classList.add('hidden');
+            document.getElementById('webcam_modal').classList.remove('flex');
+        }
+
+        function captureWebcamPhoto() {
+            const video = document.getElementById('webcam_video');
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth || 800;
+            canvas.height = video.videoHeight || 600;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            canvas.toBlob(function(blob) {
+                const file = new File([blob], "camera_scan_" + Date.now() + ".png", { type: "image/png" });
+                const container = new DataTransfer();
+                container.items.add(file);
+                
+                const fileInput = document.getElementById('exam_file');
+                fileInput.files = container.files;
+                displaySelectedFile(fileInput);
+                closeWebcamModal();
+            }, 'image/png');
+        }
+
         function triggerFileSelect() { 
             document.getElementById('exam_file').click(); 
         }
