@@ -1,9 +1,7 @@
 <?php
-require_once __DIR__ . '/../app/database.php';
-require_once __DIR__ . '/../app/session.php';
-require_once __DIR__ . '/../includes/security.php';
+require_once __DIR__ . '/../app/bootstrap.php';
 
-requireRole('teacher');
+AuthService::enforceRole('teacher');
 $pdo = getDBConnection();
 
 $success_msg = "";
@@ -12,15 +10,13 @@ $error_msg = "";
 try {
     $teacher_id = getCurrentUserId();
 
-    
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_profile'])) {
         validateCSRFToken();
-        $fullname = trim($_POST['fullname']);
-        $username = trim($_POST['username']);
-        $email = trim($_POST['email']);
+        $fullname = trim(sanitizeInput($_POST['fullname']));
+        $username = trim(sanitizeInput($_POST['username']));
+        $email = trim(sanitizeInput($_POST['email']));
 
         if (!empty($fullname) && !empty($username) && !empty($email)) {
-            
             $stmtCheck = $pdo->prepare("SELECT id FROM users WHERE (username = ? OR email = ?) AND id != ?");
             $stmtCheck->execute([$username, $email, $teacher_id]);
             
@@ -29,6 +25,7 @@ try {
             } else {
                 $stmtUpdate = $pdo->prepare("UPDATE users SET fullname = ?, username = ?, email = ? WHERE id = ?");
                 $stmtUpdate->execute([$fullname, $username, $email, $teacher_id]);
+                logActivity("Updated profile details for teacher account '{$fullname}'.");
                 $success_msg = "Profile details updated successfully!";
             }
         } else {
@@ -36,14 +33,12 @@ try {
         }
     }
 
-    
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
         validateCSRFToken();
         $current_pass = $_POST['current_password'];
         $new_pass = $_POST['new_password'];
         $confirm_pass = $_POST['confirm_password'];
 
-        
         $stmtPass = $pdo->prepare("SELECT password FROM users WHERE id = ?");
         $stmtPass->execute([$teacher_id]);
         $userRow = $stmtPass->fetch(PDO::FETCH_ASSOC);
@@ -54,6 +49,7 @@ try {
                     $new_hash = password_hash($new_pass, PASSWORD_BCRYPT);
                     $stmtUpdatePass = $pdo->prepare("UPDATE users SET password = ? WHERE id = ?");
                     $stmtUpdatePass->execute([$new_hash, $teacher_id]);
+                    logActivity("Updated account security password.");
                     $success_msg = "Password updated successfully!";
                 } else {
                     $error_msg = "New password must be at least 6 characters long.";

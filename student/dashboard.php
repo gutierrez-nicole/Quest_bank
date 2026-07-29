@@ -1,15 +1,12 @@
 <?php
-require_once __DIR__ . '/../app/database.php';
-require_once __DIR__ . '/../app/session.php';
-require_once __DIR__ . '/../includes/security.php';
+require_once __DIR__ . '/../app/bootstrap.php';
 
-requireRole('student');
+AuthService::enforceRole('student');
 $pdo = getDBConnection();
 
 try {
     $student_id = getCurrentUserId();
 
-    
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'submit_online_exam') {
         header('Content-Type: application/json');
         $exam_id = intval($_POST['exam_id'] ?? 0);
@@ -32,7 +29,7 @@ try {
             $uStmt = $pdo->prepare("SELECT fullname FROM users WHERE id = ?");
             $uStmt->execute([$student_id]);
             $sUser = $uStmt->fetch(PDO::FETCH_ASSOC);
-            $sName = $sUser['fullname'] ?? 'Ashley Nicole Gutierrez';
+            $sName = $sUser['fullname'] ?? 'Student User';
 
             $insert = $pdo->prepare("
                 INSERT INTO exam_submissions 
@@ -53,6 +50,8 @@ try {
                 $status,
                 $term
             ]);
+
+            logActivity("Submitted online examination '{$exam_title}' (Score: {$percentage}%, Status: {$status}).", $student_id);
 
             echo json_encode(['success' => true]);
             exit;

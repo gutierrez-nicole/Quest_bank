@@ -1,27 +1,25 @@
 <?php
-require_once __DIR__ . '/../app/database.php';
-require_once __DIR__ . '/../app/session.php';
-require_once __DIR__ . '/../includes/security.php';
+require_once __DIR__ . '/../app/bootstrap.php';
 
-requireRole('admin');
+AuthService::enforceRole('admin');
 $pdo = getDBConnection();
 
 $success_msg = "";
 $error_msg = "";
 
 try {
-    
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_teacher'])) {
         validateCSRFToken();
-        $fullname = trim($_POST['fullname'] ?? '');
-        $username = trim($_POST['username'] ?? '');
-        $email = trim($_POST['email'] ?? '');
+        $fullname = trim(sanitizeInput($_POST['fullname'] ?? ''));
+        $username = trim(sanitizeInput($_POST['username'] ?? ''));
+        $email = trim(sanitizeInput($_POST['email'] ?? ''));
         $password = password_hash($_POST['password'] ?? '', PASSWORD_DEFAULT);
 
         if (!empty($fullname) && !empty($username) && !empty($_POST['password'])) {
             try {
                 $stmt = $pdo->prepare("INSERT INTO users (fullname, username, email, password, role) VALUES (?, ?, ?, ?, 'teacher')");
                 $stmt->execute([$fullname, $username, $email, $password]);
+                logActivity("Created new teacher account '{$fullname}' (@{$username}).");
                 $success_msg = "New teacher account successfully created!";
             } catch (PDOException $e) {
                 $error_msg = "Error adding teacher (Username or Email may already exist): " . $e->getMessage();
@@ -31,25 +29,31 @@ try {
         }
     }
 
-    
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_teacher'])) {
         validateCSRFToken();
         $delete_id = intval($_POST['delete_id'] ?? 0);
         try {
+            $stmtTeacher = $pdo->prepare("SELECT fullname, username FROM users WHERE id = ? AND role = 'teacher'");
+            $stmtTeacher->execute([$delete_id]);
+            $t = $stmtTeacher->fetch();
+
             $stmt = $pdo->prepare("DELETE FROM users WHERE id = ? AND role = 'teacher'");
             $stmt->execute([$delete_id]);
+            if ($t) {
+                logActivity("Deleted teacher account '{$t['fullname']}' (@{$t['username']}).");
+            }
             $success_msg = "Teacher account successfully removed!";
         } catch (PDOException $e) {
             $error_msg = "Failed to delete teacher account: " . $e->getMessage();
         }
     }
 
-    
     $stmtTeachers = $pdo->query("SELECT id, fullname, username, email, created_at FROM users WHERE role = 'teacher' ORDER BY id DESC");
     $teachers = $stmtTeachers->fetchAll();
 
 } catch (PDOException $e) {
-    die("Database Connection Error: " . $e->getMessage());
+    error_log("Manage teachers error: " . $e->getMessage());
+    die("Database Connection Error.");
 }
 ?>
 

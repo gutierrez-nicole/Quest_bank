@@ -54,6 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_material'])) {
                         strtoupper($file_ext),
                         $file_size
                     ]);
+                    logActivity("Uploaded new lesson material '{$title}' ({$file_name}) for subject '{$subject}'.");
                     $success_msg = "Lesson material uploaded successfully!";
                 } catch (PDOException $e) {
                     $error_msg = "Database record failed: " . $e->getMessage();
@@ -72,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_material'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_material'])) {
     validateCSRFToken();
     $delete_id = intval($_POST['delete_id'] ?? 0);
-    $stmtFindMaterial = $pdo->prepare("SELECT file_path FROM lesson_materials WHERE id = ? AND teacher_id = ?");
+    $stmtFindMaterial = $pdo->prepare("SELECT file_path, title FROM lesson_materials WHERE id = ? AND teacher_id = ?");
     $stmtFindMaterial->execute([$delete_id, getCurrentUserId()]);
     $material = $stmtFindMaterial->fetch(PDO::FETCH_ASSOC);
 
@@ -83,6 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_material'])) {
         }
         $stmtDeleteMaterial = $pdo->prepare("DELETE FROM lesson_materials WHERE id = ?");
         $stmtDeleteMaterial->execute([$delete_id]);
+        logActivity("Deleted lesson material '{$material['title']}'.");
         $success_msg = "Lesson material removed successfully!";
     }
 }

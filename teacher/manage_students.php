@@ -43,7 +43,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['handle_request'])) {
                     $insRoster = $pdo->prepare("INSERT INTO students (teacher_id, section_id, student_number, fullname) VALUES (?, ?, ?, ?)");
                     $insRoster->execute([$teacher_id, $secId, $req['student_number'], $req['student_name']]);
                 }
+                logActivity("Accepted student request for '{$req['student_name']}' ({$req['student_number']}) into section roster.");
             }
+        } else {
+            logActivity("Rejected student request ID {$request_id}.");
         }
         $success_msg = "Student join request successfully " . ($action_type === 'accept' ? 'accepted and added to section roster' : 'rejected') . "!";
     }
@@ -59,6 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_section'])) {
         try {
             $stmt = $pdo->prepare("INSERT INTO sections (teacher_id, section_name, course_name, academic_year) VALUES (?, ?, ?, ?)");
             $stmt->execute([$teacher_id, $section_name, $course_name, $academic_year]);
+            logActivity("Created new class section '{$section_name}' for course '{$course_name}'.");
             $success_msg = "New section successfully created!";
         } catch (PDOException $e) {
             $error_msg = "Failed to add section: " . $e->getMessage();
@@ -79,6 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_student'])) {
         try {
             $stmt = $pdo->prepare("INSERT INTO students (teacher_id, section_id, student_number, fullname, email) VALUES (?, ?, ?, ?, ?)");
             $stmt->execute([$teacher_id, $section_id, $student_number, $fullname, $email]);
+            logActivity("Enrolled student '{$fullname}' ({$student_number}) into section roster.");
             $success_msg = "Student enrolled successfully!";
         } catch (PDOException $e) {
             $error_msg = "Error adding student (Student Number might already exist): " . $e->getMessage();

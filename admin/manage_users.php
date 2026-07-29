@@ -1,21 +1,18 @@
 <?php
-require_once __DIR__ . '/../app/database.php';
-require_once __DIR__ . '/../app/session.php';
-require_once __DIR__ . '/../includes/security.php';
+require_once __DIR__ . '/../app/bootstrap.php';
 
-requireRole('admin');
+AuthService::enforceRole('admin');
 $pdo = getDBConnection();
 
 $success_msg = "";
 $error_msg = "";
 
 try {
-    
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_user'])) {
         validateCSRFToken();
-        $fullname = trim($_POST['fullname'] ?? '');
-        $username = trim($_POST['username'] ?? '');
-        $email = trim($_POST['email'] ?? '');
+        $fullname = trim(sanitizeInput($_POST['fullname'] ?? ''));
+        $username = trim(sanitizeInput($_POST['username'] ?? ''));
+        $email = trim(sanitizeInput($_POST['email'] ?? ''));
         $role = $_POST['role'] ?? 'student';
         $password = password_hash($_POST['password'] ?? '', PASSWORD_DEFAULT);
 
@@ -23,6 +20,7 @@ try {
             try {
                 $stmt = $pdo->prepare("INSERT INTO users (fullname, username, email, password, role) VALUES (?, ?, ?, ?, ?)");
                 $stmt->execute([$fullname, $username, $email, $password, $role]);
+                logActivity("Registered new user account '{$fullname}' (@{$username}) with role '{$role}'.");
                 $success_msg = "New user account ($role) successfully registered!";
             } catch (PDOException $e) {
                 $error_msg = "Error registering user (Username or Email may already exist): " . $e->getMessage();
@@ -32,17 +30,23 @@ try {
         }
     }
 
-    
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_user'])) {
         validateCSRFToken();
         $delete_id = intval($_POST['delete_id'] ?? 0);
-        
+
         if ($delete_id == getCurrentUserId()) {
             $error_msg = "You cannot delete your own active administrator account!";
         } else {
             try {
+                $stmtUser = $pdo->prepare("SELECT fullname, username, role FROM users WHERE id = ?");
+                $stmtUser->execute([$delete_id]);
+                $u = $stmtUser->fetch();
+
                 $stmt = $pdo->prepare("DELETE FROM users WHERE id = ?");
                 $stmt->execute([$delete_id]);
+                if ($u) {
+                    logActivity("Deleted user account '{$u['fullname']}' (@{$u['username']}) [{$u['role']}].");
+                }
                 $success_msg = "User account successfully removed!";
             } catch (PDOException $e) {
                 $error_msg = "Failed to delete user account: " . $e->getMessage();
@@ -50,12 +54,12 @@ try {
         }
     }
 
-    
     $stmtUsers = $pdo->query("SELECT id, fullname, username, email, role, created_at FROM users ORDER BY id DESC");
     $users = $stmtUsers->fetchAll();
 
 } catch (PDOException $e) {
-    die("Database Connection Error: " . $e->getMessage());
+    error_log("Manage users error: " . $e->getMessage());
+    die("Database Connection Error.");
 }
 ?>
 
