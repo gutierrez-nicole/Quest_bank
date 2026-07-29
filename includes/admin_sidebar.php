@@ -40,6 +40,9 @@ $currentPage = basename($_SERVER['PHP_SELF']);
             <a href="activity_logs.php" title="Activity Audit Logs" class="flex items-center justify-center lg:justify-start gap-3 px-3 py-2.5 rounded-xl font-bold transition-all <?php echo $currentPage === 'activity_logs.php' ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/30' : 'text-stone-400 hover:text-white hover:bg-stone-900'; ?>">
                 <i class="fa-solid fa-clipboard-list text-sm text-center"></i> <span class="hidden lg:inline-block">Activity Audit Logs</span>
             </a>
+            <a href="iso_evaluation.php" title="ISO 25010 Quality Model" class="flex items-center justify-center lg:justify-start gap-3 px-3 py-2.5 rounded-xl font-bold transition-all <?php echo $currentPage === 'iso_evaluation.php' ? 'bg-orange-600 text-white shadow-lg shadow-orange-600/30' : 'text-stone-400 hover:text-white hover:bg-stone-900'; ?>">
+                <i class="fa-solid fa-award text-sm text-center"></i> <span class="hidden lg:inline-block">ISO 25010 Quality Model</span>
+            </a>
         </nav>
 
         

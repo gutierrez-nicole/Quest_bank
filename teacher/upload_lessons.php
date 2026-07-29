@@ -137,7 +137,7 @@ $materials = $stmtMat->fetchAll(PDO::FETCH_ASSOC);
                             <i class="fa-solid fa-file-pdf text-2xl text-stone-400 mb-1" id="upload_icon"></i>
                             <p class="text-[11px] text-stone-700 font-bold" id="upload_text">Choose file or drag here</p>
                             <p class="text-[9px] text-stone-400 mt-0.5" id="file_details">PDF, DOCX, PPTX, or TXT (Max 10MB)</p>
-                            <input type="file" name="lesson_file" id="lesson_file" required class="hidden" onchange="displaySelectedFile()">
+                            <input type="file" name="lesson_file" id="lesson_file" accept=".pdf,.docx,.pptx,.txt" required class="hidden" onchange="displaySelectedFile()">
                         </div>
                     </div>
 
