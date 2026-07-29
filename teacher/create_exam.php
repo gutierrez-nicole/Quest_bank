@@ -59,6 +59,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_exam'])) {
 $stmtExams = $pdo->prepare("SELECT * FROM exams WHERE teacher_id = ? ORDER BY id DESC");
 $stmtExams->execute([$_SESSION['user_id']]);
 $existing_exams = $stmtExams->fetchAll(PDO::FETCH_ASSOC);
+
+$qStmt = $pdo->prepare("SELECT * FROM exam_questions WHERE exam_id = ? ORDER BY id ASC");
+foreach ($existing_exams as &$ex) {
+    $qStmt->execute([$ex['id']]);
+    $ex['questions'] = $qStmt->fetchAll(PDO::FETCH_ASSOC);
+}
+unset($ex);
 ?>
 
 <!DOCTYPE html>
@@ -165,15 +172,25 @@ $existing_exams = $stmtExams->fetchAll(PDO::FETCH_ASSOC);
                     <?php if (!empty($existing_exams)): ?>
                         <div class="space-y-3">
                             <?php foreach ($existing_exams as $ex): ?>
-                                <div class="p-3 border border-stone-100 rounded-xl bg-stone-50/50 hover:border-orange-300 transition-all space-y-1">
+                                <div onclick="openExamPreviewModal(<?php echo htmlspecialchars(json_encode($ex), ENT_QUOTES, 'UTF-8'); ?>)" class="p-3.5 border border-stone-200 rounded-xl bg-stone-50/50 hover:border-orange-500 hover:bg-orange-50/30 hover:shadow-md cursor-pointer transition-all space-y-1.5 group">
                                     <div class="flex items-center justify-between">
-                                        <h4 class="font-bold text-xs text-stone-800"><?php echo htmlspecialchars($ex['title']); ?></h4>
-                                        <span class="text-[9px] bg-orange-100 text-orange-700 font-extrabold px-2 py-0.5 rounded-full"><?php echo $ex['total_items']; ?> Items</span>
+                                        <h4 class="font-extrabold text-xs text-stone-800 group-hover:text-orange-600 transition-colors flex items-center gap-1.5">
+                                            <i class="fa-solid fa-folder-open text-orange-500"></i>
+                                            <?php echo htmlspecialchars($ex['title']); ?>
+                                        </h4>
+                                        <span class="text-[9px] bg-orange-100 text-orange-700 font-extrabold px-2.5 py-0.5 rounded-full shadow-2xs">
+                                            <?php echo $ex['total_items']; ?> Items
+                                        </span>
                                     </div>
                                     <p class="text-[10px] text-stone-400 font-semibold"><?php echo htmlspecialchars($ex['subject']); ?></p>
-                                    <span class="inline-block text-[9px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded mt-1 border border-orange-200">
-                                        <i class="fa-solid fa-compass-drafting mr-1"></i><?php echo htmlspecialchars($ex['specialization'] ?? 'Structural Engineering'); ?>
-                                    </span>
+                                    <div class="flex items-center justify-between pt-1 border-t border-stone-100/80 mt-2">
+                                        <span class="inline-block text-[9px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
+                                            <i class="fa-solid fa-compass-drafting mr-1"></i><?php echo htmlspecialchars($ex['specialization'] ?? 'Structural Engineering'); ?>
+                                        </span>
+                                        <span class="text-[10px] text-orange-600 font-bold group-hover:translate-x-0.5 transition-transform flex items-center gap-1">
+                                            View Items <i class="fa-solid fa-arrow-right text-[9px]"></i>
+                                        </span>
+                                    </div>
                                 </div>
                             <?php endforeach; ?>
                         </div>
@@ -181,6 +198,39 @@ $existing_exams = $stmtExams->fetchAll(PDO::FETCH_ASSOC);
                         <p class="text-xs text-stone-400 text-center py-6">No exams created yet.</p>
                     <?php endif; ?>
                 </div>
+
+            </div>
+        </div>
+    </main>
+
+    <!-- QUESTION BANK PREVIEW MODAL -->
+    <div id="qb_preview_modal" class="fixed inset-0 bg-stone-950/70 backdrop-blur-xs hidden items-center justify-center z-50 p-4">
+        <div class="bg-white border border-stone-200 rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
+            
+            <div class="flex items-start justify-between border-b pb-4">
+                <div>
+                    <span id="modal_exam_badge" class="bg-orange-100 text-orange-700 text-[10px] font-black px-2.5 py-0.5 rounded-md uppercase">Structural Engineering</span>
+                    <h3 id="modal_exam_title" class="text-lg font-black text-stone-800 mt-1">Exam Title</h3>
+                    <p id="modal_exam_subtitle" class="text-xs text-stone-400 font-medium">Subject | 5 Questions | 60 mins</p>
+                </div>
+                <button onclick="closeExamPreviewModal()" class="w-8 h-8 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-500 font-bold flex items-center justify-center text-xs transition-all">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                </button>
+            </div>
+
+            <div id="modal_questions_list" class="space-y-4">
+                <!-- Dynamic Question Items -->
+            </div>
+
+            <div class="flex justify-between items-center pt-4 border-t border-stone-100">
+                <span class="text-xs text-stone-400 font-semibold"><i class="fa-solid fa-shield-halved text-emerald-500 mr-1"></i> QuestBank AI Verified Answer Keys</span>
+                <button onclick="closeExamPreviewModal()" class="px-5 py-2.5 bg-stone-900 hover:bg-orange-600 text-white font-bold text-xs rounded-xl shadow-sm transition-all">
+                    Close Preview
+                </button>
+            </div>
+
+        </div>
+    </div>
 
             </div>
         </div>
@@ -239,6 +289,76 @@ $existing_exams = $stmtExams->fetchAll(PDO::FETCH_ASSOC);
 
         // Add first question item by default
         addQuestion();
+
+        function openExamPreviewModal(exam) {
+            document.getElementById('modal_exam_badge').innerText = exam.specialization || 'Civil Engineering';
+            document.getElementById('modal_exam_title').innerText = exam.title;
+            document.getElementById('modal_exam_subtitle').innerText = `${exam.subject} | ${exam.total_items || 5} Questions | ${exam.time_limit || 60} mins`;
+
+            const listContainer = document.getElementById('modal_questions_list');
+            listContainer.innerHTML = '';
+
+            if (exam.questions && exam.questions.length > 0) {
+                exam.questions.forEach((q, idx) => {
+                    const qItem = document.createElement('div');
+                    qItem.className = 'p-4 border border-stone-200 rounded-xl bg-stone-50/60 space-y-3';
+                    
+                    let optionsHtml = '';
+                    const correctKey = (q.correct_answer || '').trim().toLowerCase();
+
+                    if (q.option_a) {
+                        const isA = correctKey === 'a' || correctKey === (q.option_a || '').trim().toLowerCase();
+                        const isB = correctKey === 'b' || correctKey === (q.option_b || '').trim().toLowerCase();
+                        const isC = correctKey === 'c' || correctKey === (q.option_c || '').trim().toLowerCase();
+                        const isD = correctKey === 'd' || correctKey === (q.option_d || '').trim().toLowerCase();
+
+                        optionsHtml = `
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-semibold pt-1">
+                                <div class="p-2.5 rounded-lg border ${isA ? 'bg-emerald-100 border-emerald-300 text-emerald-900 font-bold' : 'bg-white border-stone-200 text-stone-600'}">
+                                    A. ${q.option_a} ${isA ? '<i class="fa-solid fa-circle-check text-emerald-600 ml-1"></i> (Correct Key)' : ''}
+                                </div>
+                                <div class="p-2.5 rounded-lg border ${isB ? 'bg-emerald-100 border-emerald-300 text-emerald-900 font-bold' : 'bg-white border-stone-200 text-stone-600'}">
+                                    B. ${q.option_b} ${isB ? '<i class="fa-solid fa-circle-check text-emerald-600 ml-1"></i> (Correct Key)' : ''}
+                                </div>
+                                <div class="p-2.5 rounded-lg border ${isC ? 'bg-emerald-100 border-emerald-300 text-emerald-900 font-bold' : 'bg-white border-stone-200 text-stone-600'}">
+                                    C. ${q.option_c} ${isC ? '<i class="fa-solid fa-circle-check text-emerald-600 ml-1"></i> (Correct Key)' : ''}
+                                </div>
+                                <div class="p-2.5 rounded-lg border ${isD ? 'bg-emerald-100 border-emerald-300 text-emerald-900 font-bold' : 'bg-white border-stone-200 text-stone-600'}">
+                                    D. ${q.option_d} ${isD ? '<i class="fa-solid fa-circle-check text-emerald-600 ml-1"></i> (Correct Key)' : ''}
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        optionsHtml = `
+                            <div class="p-2.5 rounded-lg border bg-emerald-50 border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-1.5">
+                                <i class="fa-solid fa-circle-check text-emerald-600"></i> Correct Answer Key: ${q.correct_answer}
+                            </div>
+                        `;
+                    }
+
+                    qItem.innerHTML = `
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-black uppercase text-orange-600">Question Item #${idx + 1}</span>
+                            <span class="text-[10px] bg-stone-200 text-stone-700 font-bold px-2 py-0.5 rounded uppercase">${(q.question_type || 'multiple_choice').replace('_', ' ')}</span>
+                        </div>
+                        <h5 class="text-xs font-bold text-stone-800 leading-relaxed">${q.question_text}</h5>
+                        ${optionsHtml}
+                    `;
+
+                    listContainer.appendChild(qItem);
+                });
+            } else {
+                listContainer.innerHTML = '<p class="text-xs text-stone-400 text-center py-6">No question items recorded for this exam paper.</p>';
+            }
+
+            document.getElementById('qb_preview_modal').classList.remove('hidden');
+            document.getElementById('qb_preview_modal').classList.add('flex');
+        }
+
+        function closeExamPreviewModal() {
+            document.getElementById('qb_preview_modal').classList.add('hidden');
+            document.getElementById('qb_preview_modal').classList.remove('flex');
+        }
     </script>
 </body>
 </html>
