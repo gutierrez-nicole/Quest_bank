@@ -17,6 +17,22 @@ if (file_exists($envFile)) {
     }
 }
 
+define('APP_ENV', getenv('APP_ENV') ?: 'production');
+define('APP_DEBUG', getenv('APP_DEBUG') === 'true' || getenv('APP_DEBUG') === '1');
+
+if (APP_ENV === 'production' && !APP_DEBUG) {
+    ini_set('display_errors', 0);
+    ini_set('display_startup_errors', 0);
+    error_reporting(E_ALL & ~E_DEPRECATED & ~E_STRICT);
+} else {
+    ini_set('display_errors', 1);
+    ini_set('display_startup_errors', 1);
+    error_reporting(E_ALL);
+}
+
+ini_set('log_errors', 1);
+ini_set('error_log', BASE_PATH . '/app.log');
+
 define('DB_HOST', getenv('DB_HOST') ?: '127.0.0.1');
 define('DB_NAME', getenv('DB_NAME') ?: 'bankquest_db');
 define('DB_USER', getenv('DB_USER') ?: 'root');
