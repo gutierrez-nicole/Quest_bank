@@ -1,5 +1,5 @@
 <?php
-// teacher/export_report_pdf.php - FPDF Faculty Class Performance Analytics Exporter
+
 require_once __DIR__ . '/../app/database.php';
 require_once __DIR__ . '/../app/session.php';
 require_once __DIR__ . '/../includes/security.php';
@@ -9,7 +9,7 @@ requireRole('teacher');
 $pdo = getDBConnection();
 $teacher_id = $_SESSION['user_id'];
 
-// 1. Fetch Teacher Info
+
 try {
     $stmtT = $pdo->prepare("SELECT fullname, email FROM users WHERE id = ?");
     $stmtT->execute([$teacher_id]);
@@ -20,7 +20,7 @@ try {
 $teacher_name = $teacher['fullname'] ?? 'Prof. Jolas';
 $date_issued = date('F d, Y');
 
-// 2. Fetch Selected Exam Filter & Analytics
+
 $selected_exam = trim($_GET['exam_title'] ?? 'all');
 
 if ($selected_exam !== 'all') {
@@ -69,7 +69,7 @@ $avg = floatval($stats['avg_percentage'] ?? 0);
 $max = floatval($stats['max_percentage'] ?? 0);
 $pass_rate = $total > 0 ? round(($pass / $total) * 100, 1) : 0.0;
 
-// Fallback sample data if empty
+
 if (empty($submissions)) {
     $submissions = [
         [
@@ -111,19 +111,19 @@ if (empty($submissions)) {
     $max = 95.0;
 }
 
-// 3. Custom FPDF Class Setup
+
 if (!class_exists('FacultyReportPDF')) {
     class FacultyReportPDF extends FPDF {
         function Header() {
-            // Outer Decorative Double Border
+            
             $this->Rect(5, 5, 200, 287);
             $this->SetLineWidth(0.5);
             $this->Rect(7, 7, 196, 283);
 
-            // Header Title
+            
             $this->SetY(11);
             $this->SetFont('Arial', 'B', 18);
-            $this->SetTextColor(234, 88, 12); // Orange-600
+            $this->SetTextColor(234, 88, 12); 
             $this->Cell(0, 7, 'QUESTBANK ACADEMY', 0, 1, 'C');
             
             $this->SetFont('Arial', 'B', 8.5);
@@ -134,7 +134,7 @@ if (!class_exists('FacultyReportPDF')) {
             $this->SetTextColor(28, 25, 23);
             $this->Cell(0, 5, 'CLASS PERFORMANCE & STATISTICAL ANALYTICS REPORT', 0, 1, 'C');
             
-            // Orange Separator Line
+            
             $this->SetDrawColor(249, 115, 22);
             $this->SetLineWidth(0.8);
             $this->Line(15, 30, 195, 30);
@@ -150,13 +150,13 @@ if (!class_exists('FacultyReportPDF')) {
     }
 }
 
-// 4. Generate PDF Output
+
 $pdf = new FacultyReportPDF('P', 'mm', 'A4');
 $pdf->SetMargins(15, 15, 15);
 $pdf->AddPage();
 
-// Faculty Information Block (Boxed Grid)
-$pdf->SetFillColor(255, 247, 237); // Light Orange Tint
+
+$pdf->SetFillColor(255, 247, 237); 
 $pdf->SetDrawColor(254, 215, 170);
 $pdf->SetLineWidth(0.3);
 $pdf->Rect(15, 34, 180, 27, 'DF');
@@ -186,7 +186,7 @@ $pdf->SetX(20);
 $pdf->Cell(85, 5, 'BS Civil Engineering', 0, 0, 'L');
 $pdf->Cell(85, 5, $date_issued, 0, 1, 'L');
 
-// Statistical Key Performance Indicators (6 KPI Cards Grid)
+
 $pdf->SetY(67);
 $pdf->SetFont('Arial', 'B', 9.5);
 $pdf->SetTextColor(28, 25, 23);
@@ -214,13 +214,13 @@ foreach ($boxes as $idx => $b) {
     $xPos = $startX + ($idx * ($boxW + $gap));
     $pdf->Rect($xPos, $kpiY, $boxW, 15, 'DF');
     
-    // Title Line
+    
     $pdf->SetXY($xPos, $kpiY + 2);
     $pdf->SetFont('Arial', 'B', 6);
     $pdf->SetTextColor(120, 113, 108);
     $pdf->Cell($boxW, 3, $b['title'], 0, 0, 'C');
     
-    // Value Line
+    
     $pdf->SetXY($xPos, $kpiY + 6.5);
     $pdf->SetFont('Arial', 'B', 10);
     $pdf->SetTextColor($b['color'][0], $b['color'][1], $b['color'][2]);
@@ -229,14 +229,14 @@ foreach ($boxes as $idx => $b) {
 
 $pdf->SetY($kpiY + 20);
 
-// Master Submissions Table Header
+
 $pdf->SetFont('Arial', 'B', 9.5);
 $pdf->SetTextColor(28, 25, 23);
 $pdf->Cell(0, 5, 'STUDENT GRADE SUBMISSIONS MASTER LIST', 0, 1, 'L');
 $pdf->Ln(2);
 
-// Table Headers
-$pdf->SetFillColor(41, 37, 36); // Stone 900
+
+$pdf->SetFillColor(41, 37, 36); 
 $pdf->SetTextColor(255, 255, 255);
 $pdf->SetFont('Arial', 'B', 7.5);
 $pdf->Cell(50, 7, ' STUDENT NAME', 1, 0, 'L', true);
@@ -246,7 +246,7 @@ $pdf->Cell(15, 7, 'SCORE', 1, 0, 'C', true);
 $pdf->Cell(15, 7, 'GRADE %', 1, 0, 'C', true);
 $pdf->Cell(15, 7, 'STATUS', 1, 1, 'C', true);
 
-// Table Rows
+
 $pdf->SetFont('Arial', '', 7.5);
 $pdf->SetTextColor(28, 25, 23);
 $fill = false;
@@ -262,10 +262,10 @@ foreach ($submissions as $row) {
     $pdf->Cell(15, 7, number_format((float)($row['percentage'] ?? 0), 1) . '%', 1, 0, 'C', $fill);
     
     if (($row['status'] ?? '') === 'Pass' || ($row['percentage'] ?? 0) >= 75) {
-        $pdf->SetTextColor(21, 128, 61); // Green
+        $pdf->SetTextColor(21, 128, 61); 
         $pdf->Cell(15, 7, 'PASSED', 1, 1, 'C', $fill);
     } else {
-        $pdf->SetTextColor(190, 18, 60); // Red
+        $pdf->SetTextColor(190, 18, 60); 
         $pdf->Cell(15, 7, 'FAILED', 1, 1, 'C', $fill);
     }
     
@@ -274,7 +274,7 @@ foreach ($submissions as $row) {
     $fill = !$fill;
 }
 
-// Signatures Section at Y = 232
+
 $pdf->SetY(232);
 $pdf->SetFont('Arial', 'B', 8);
 $pdf->SetTextColor(120, 113, 108);
@@ -289,5 +289,5 @@ $pdf->Cell(85, 4, 'FACULTY INSTRUCTOR / PROFESSOR', 0, 0, 'C');
 $pdf->Cell(10, 4, '', 0, 0);
 $pdf->Cell(85, 4, 'CIVIL ENGINEERING DEPARTMENT CHAIR', 0, 1, 'C');
 
-// Output PDF Stream
+
 $pdf->Output('I', 'QuestBank_Faculty_Analytics_Report.pdf');

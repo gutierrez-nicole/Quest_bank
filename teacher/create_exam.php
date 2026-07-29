@@ -203,7 +203,7 @@ unset($ex);
         </div>
     </main>
 
-    <!-- QUESTION BANK PREVIEW MODAL -->
+    
     <div id="qb_preview_modal" class="fixed inset-0 bg-stone-950/70 backdrop-blur-xs hidden items-center justify-center z-50 p-4">
         <div class="bg-white border border-stone-200 rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar">
             
@@ -219,7 +219,7 @@ unset($ex);
             </div>
 
             <div id="modal_questions_list" class="space-y-4">
-                <!-- Dynamic Question Items -->
+                
             </div>
 
             <div class="flex justify-between items-center pt-4 border-t border-stone-100">
