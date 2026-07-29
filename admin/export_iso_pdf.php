@@ -105,10 +105,10 @@ $pdf->Cell(0, 6, '1. ISO/IEC 25010 Characteristics Weighted Mean Summary', 0, 1,
 $pdf->SetFont('Helvetica', 'B', 8);
 $pdf->SetFillColor(243, 244, 246);
 $pdf->SetTextColor(107, 114, 128);
-$pdf->Cell(75, 7, ' ISO/IEC 25010 CHARACTERISTIC', 1, 0, 'L', true);
-$pdf->Cell(35, 7, 'LIKERT RANGE', 1, 0, 'C', true);
-$pdf->Cell(35, 7, 'WEIGHTED MEAN', 1, 0, 'C', true);
-$pdf->Cell(35, 7, 'VERBAL INTERPRETATION', 1, 1, 'C', true);
+$pdf->Cell(65, 7, ' ISO/IEC 25010 CHARACTERISTIC', 1, 0, 'L', true);
+$pdf->Cell(25, 7, 'LIKERT RANGE', 1, 0, 'C', true);
+$pdf->Cell(30, 7, 'WEIGHTED MEAN', 1, 0, 'C', true);
+$pdf->Cell(60, 7, 'VERBAL INTERPRETATION', 1, 1, 'C', true);
 
 $pdf->SetFont('Helvetica', '', 8);
 $pdf->SetTextColor(55, 65, 81);
@@ -116,16 +116,16 @@ $fill = false;
 
 foreach ($criteria_means as $charName => $score) {
     $pdf->SetFillColor(249, 250, 251);
-    $pdf->Cell(75, 6, ' ' . $charName, 1, 0, 'L', $fill);
-    $pdf->Cell(35, 6, '1.00 - 4.00', 1, 0, 'C', $fill);
+    $pdf->Cell(65, 6, ' ' . $charName, 1, 0, 'L', $fill);
+    $pdf->Cell(25, 6, '1.00 - 4.00', 1, 0, 'C', $fill);
     
     $pdf->SetFont('Helvetica', 'B', 8);
     $pdf->SetTextColor(234, 88, 12);
-    $pdf->Cell(35, 6, number_format($score, 2), 1, 0, 'C', $fill);
+    $pdf->Cell(30, 6, number_format($score, 2), 1, 0, 'C', $fill);
     
     $pdf->SetFont('Helvetica', 'B', 7);
     $pdf->SetTextColor(16, 185, 129);
-    $pdf->Cell(35, 6, getPdfInterpretation($score), 1, 1, 'C', $fill);
+    $pdf->Cell(60, 6, getPdfInterpretation($score), 1, 1, 'C', $fill);
     
     $pdf->SetFont('Helvetica', '', 8);
     $pdf->SetTextColor(55, 65, 81);
@@ -142,10 +142,10 @@ $pdf->Cell(0, 6, '2. Individual Respondent Evaluation Logs', 0, 1, 'L');
 $pdf->SetFont('Helvetica', 'B', 8);
 $pdf->SetFillColor(243, 244, 246);
 $pdf->SetTextColor(107, 114, 128);
-$pdf->Cell(50, 7, ' EVALUATOR NAME', 1, 0, 'L', true);
-$pdf->Cell(30, 7, 'ROLE GROUP', 1, 0, 'C', true);
+$pdf->Cell(45, 7, ' EVALUATOR NAME', 1, 0, 'L', true);
+$pdf->Cell(25, 7, 'ROLE GROUP', 1, 0, 'C', true);
 $pdf->Cell(25, 7, 'AVG SCORE', 1, 0, 'C', true);
-$pdf->Cell(75, 7, 'QUALITATIVE FEEDBACK', 1, 1, 'L', true);
+$pdf->Cell(85, 7, 'QUALITATIVE FEEDBACK', 1, 1, 'L', true);
 
 $pdf->SetFont('Helvetica', '', 8);
 $pdf->SetTextColor(55, 65, 81);
@@ -156,8 +156,8 @@ if (!empty($evaluations)) {
         
         $roleStr = strtoupper(str_replace('_', ' ', $ev['evaluator_role']));
         
-        $pdf->Cell(50, 6, ' ' . substr($ev['evaluator_name'], 0, 25), 1, 0, 'L');
-        $pdf->Cell(30, 6, $roleStr, 1, 0, 'C');
+        $pdf->Cell(45, 6, ' ' . substr($ev['evaluator_name'], 0, 22), 1, 0, 'L');
+        $pdf->Cell(25, 6, $roleStr, 1, 0, 'C');
         
         $pdf->SetFont('Helvetica', 'B', 8);
         $pdf->SetTextColor(16, 185, 129);
@@ -165,7 +165,7 @@ if (!empty($evaluations)) {
         
         $pdf->SetFont('Helvetica', 'I', 7);
         $pdf->SetTextColor(107, 114, 128);
-        $pdf->Cell(75, 6, ' "' . substr($ev['feedback_text'] ?: 'No comments', 0, 45) . '"', 1, 1, 'L');
+        $pdf->Cell(85, 6, ' "' . substr($ev['feedback_text'] ?: 'No comments', 0, 52) . '"', 1, 1, 'L');
         
         $pdf->SetFont('Helvetica', '', 8);
         $pdf->SetTextColor(55, 65, 81);
