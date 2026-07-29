@@ -28,37 +28,62 @@ $student_no = !empty($student['student_number']) ? $student['student_number'] : 
 $course_section = ($student['course'] ?? 'BSCE') . ' - ' . ($student['section'] ?? '4A');
 $date_issued = date('F d, Y');
 
-// 2. Fetch All Exam Submissions for Transcript Table
+// 2. Fetch Exam Submissions with Dynamic Term & ID Filtering
+$selected_term = trim($_GET['term'] ?? 'All');
+$single_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
+
 try {
-    $stmt = $pdo->prepare("
+    $where = [];
+    $params = [];
+
+    if ($single_id > 0) {
+        $where[] = "es.id = ?";
+        $params[] = $single_id;
+    } else {
+        $where[] = "(es.student_id = ? OR es.student_name LIKE ?)";
+        $params[] = $student_id;
+        $params[] = "%{$fullname}%";
+
+        if (!empty($selected_term) && $selected_term !== 'All') {
+            $where[] = "(es.term = ? OR e.term = ?)";
+            $params[] = $selected_term;
+            $params[] = $selected_term;
+        }
+    }
+
+    $whereSql = implode(' AND ', $where);
+
+    $sql = "
         SELECT 
             es.id,
             COALESCE(e.title, es.exam_title, 'Civil Engineering Quiz') as title,
             COALESCE(e.subject, 'Civil Engineering') as subject,
             COALESCE(es.term, 'Prelim') as term,
-            es.score,
+            COALESCE(es.correct_count, es.total_score, 0) as score,
             es.total_items,
             es.percentage,
             es.status,
             es.created_at
         FROM exam_submissions es
         LEFT JOIN exams e ON es.exam_id = e.id
-        WHERE es.student_id = ? OR es.student_name LIKE ?
+        WHERE {$whereSql}
         ORDER BY es.created_at DESC
-    ");
-    $stmt->execute([$student_id, "%{$fullname}%"]);
+    ";
+
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
     $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     $results = [];
 }
 
-// Fallback sample results if empty
+// Fallback sample results if empty (Includes Prelim, Midterm, & Finals)
 if (empty($results)) {
-    $results = [
+    $allFallbacks = [
         [
-            'title' => 'Structural Theory & Analysis Midterm',
+            'title' => 'Structural Theory 1 - Prelim Quiz',
             'subject' => 'CE 401 - Structural Engineering',
-            'term' => 'Midterm',
+            'term' => 'Prelim',
             'score' => 9,
             'total_items' => 10,
             'percentage' => 90.0,
@@ -66,16 +91,36 @@ if (empty($results)) {
             'created_at' => date('Y-m-d H:i:s')
         ],
         [
-            'title' => 'Geotechnical Engineering & Soil Mechanics',
+            'title' => 'Geotechnical Mechanics - Midterm Exam',
             'subject' => 'CE 402 - Geotechnical',
-            'term' => 'Prelim',
-            'score' => 4,
-            'total_items' => 5,
+            'term' => 'Midterm',
+            'score' => 8,
+            'total_items' => 10,
             'percentage' => 80.0,
+            'status' => 'Pass',
+            'created_at' => date('Y-m-d H:i:s', strtotime('-2 days'))
+        ],
+        [
+            'title' => 'Reinforced Concrete Design - Finals Exam',
+            'subject' => 'CE 403 - Structural Engineering',
+            'term' => 'Finals',
+            'score' => 9,
+            'total_items' => 10,
+            'percentage' => 95.0,
             'status' => 'Pass',
             'created_at' => date('Y-m-d H:i:s', strtotime('-5 days'))
         ]
     ];
+
+    if ($single_id > 0) {
+        $results = [$allFallbacks[0]];
+    } else if (!empty($selected_term) && $selected_term !== 'All') {
+        $results = array_values(array_filter($allFallbacks, function($item) use ($selected_term) {
+            return strtolower($item['term']) === strtolower($selected_term);
+        }));
+    } else {
+        $results = $allFallbacks;
+    }
 }
 
 // Compute Summary Metrics
@@ -88,39 +133,41 @@ $avg_gpa = $total_exams > 0 ? round($total_pct / $total_exams, 1) : 0.0;
 $overall_status = $avg_gpa >= 75.0 ? 'PASSED (SATISFACTORY)' : 'NEEDS IMPROVEMENT';
 
 // 3. Custom FPDF Class Setup
-class TranscriptPDF extends FPDF {
-    function Header() {
-        // Outer Decorative Double Border
-        $this->Rect(5, 5, 200, 287);
-        $this->SetLineWidth(0.5);
-        $this->Rect(7, 7, 196, 283);
+if (!class_exists('TranscriptPDF')) {
+    class TranscriptPDF extends FPDF {
+        function Header() {
+            // Outer Decorative Double Border
+            $this->Rect(5, 5, 200, 287);
+            $this->SetLineWidth(0.5);
+            $this->Rect(7, 7, 196, 283);
 
-        // Header Title
-        $this->SetY(11);
-        $this->SetFont('Arial', 'B', 18);
-        $this->SetTextColor(234, 88, 12); // Orange-600
-        $this->Cell(0, 7, 'QUESTBANK ACADEMY', 0, 1, 'C');
-        
-        $this->SetFont('Arial', 'B', 8.5);
-        $this->SetTextColor(120, 113, 108);
-        $this->Cell(0, 4.5, 'DEPARTMENT OF CIVIL ENGINEERING & ASSESSMENT', 0, 1, 'C');
-        
-        $this->SetFont('Arial', 'B', 9.5);
-        $this->SetTextColor(28, 25, 23);
-        $this->Cell(0, 5, 'OFFICIAL STUDENT EVALUATION TRANSCRIPT', 0, 1, 'C');
-        
-        // Orange Separator Line
-        $this->SetDrawColor(249, 115, 22);
-        $this->SetLineWidth(0.8);
-        $this->Line(15, 30, 195, 30);
-    }
+            // Header Title
+            $this->SetY(11);
+            $this->SetFont('Arial', 'B', 18);
+            $this->SetTextColor(234, 88, 12); // Orange-600
+            $this->Cell(0, 7, 'QUESTBANK ACADEMY', 0, 1, 'C');
+            
+            $this->SetFont('Arial', 'B', 8.5);
+            $this->SetTextColor(120, 113, 108);
+            $this->Cell(0, 4.5, 'DEPARTMENT OF CIVIL ENGINEERING & ASSESSMENT', 0, 1, 'C');
+            
+            $this->SetFont('Arial', 'B', 9.5);
+            $this->SetTextColor(28, 25, 23);
+            $this->Cell(0, 5, 'OFFICIAL STUDENT EVALUATION TRANSCRIPT', 0, 1, 'C');
+            
+            // Orange Separator Line
+            $this->SetDrawColor(249, 115, 22);
+            $this->SetLineWidth(0.8);
+            $this->Line(15, 30, 195, 30);
+        }
 
-    function Footer() {
-        $this->SetY(-18);
-        $this->SetFont('Arial', 'I', 8);
-        $this->SetTextColor(168, 162, 158);
-        $this->Cell(0, 4, 'This transcript is automatically generated and verified by the QuestBank AI Assessment Engine.', 0, 1, 'C');
-        $this->Cell(0, 4, 'Official Document Hash: QB-CERT-2026-' . strtoupper(md5('PAGE_' . $this->PageNo())), 0, 0, 'C');
+        function Footer() {
+            $this->SetY(-18);
+            $this->SetFont('Arial', 'I', 8);
+            $this->SetTextColor(168, 162, 158);
+            $this->Cell(0, 4, 'This transcript is automatically generated and verified by the QuestBank AI Assessment Engine.', 0, 1, 'C');
+            $this->Cell(0, 4, 'Official Document Hash: QB-CERT-2026-' . strtoupper(md5('PAGE_' . $this->PageNo())), 0, 0, 'C');
+        }
     }
 }
 

@@ -666,7 +666,7 @@ try {
                             </h3>
                             <p class="text-xs text-stone-400 mt-0.5">Filter examination outcomes by academic semester term (Docx Figure 15).</p>
                         </div>
-                        <a href="export_pdf.php" target="_blank" class="bg-stone-900 hover:bg-orange-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-sm flex items-center gap-1.5">
+                        <a href="export_pdf.php?term=<?php echo urlencode($selected_term); ?>" target="_blank" class="bg-stone-900 hover:bg-orange-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-sm flex items-center gap-1.5">
                             <i class="fa-solid fa-file-pdf text-rose-400"></i> Export Official Transcript PDF
                         </a>
                     </div>
@@ -725,7 +725,7 @@ try {
                                                 <?php endif; ?>
                                             </td>
                                             <td class="p-4 pr-6 text-center">
-                                                <a href="export_pdf.php" target="_blank" class="inline-flex items-center gap-1 bg-stone-100 dark:bg-stone-800 hover:bg-orange-100 text-stone-700 dark:text-stone-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-all">
+                                                <a href="export_pdf.php?id=<?php echo $result['id']; ?>" target="_blank" class="inline-flex items-center gap-1 bg-stone-100 dark:bg-stone-800 hover:bg-orange-100 text-stone-700 dark:text-stone-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-all">
                                                     <i class="fa-solid fa-file-pdf text-rose-500"></i> PDF
                                                 </a>
                                             </td>
