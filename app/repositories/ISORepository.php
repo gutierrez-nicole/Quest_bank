@@ -11,17 +11,30 @@ class ISORepository {
 
     public static function getCharacteristicAverages() {
         $pdo = getDBConnection();
-        return [
-            'functional_suitability' => floatval($pdo->query("SELECT AVG(functional_suitability) FROM iso_evaluations")->fetchColumn() ?: 3.94),
-            'performance_efficiency' => floatval($pdo->query("SELECT AVG(performance_efficiency) FROM iso_evaluations")->fetchColumn() ?: 3.88),
-            'compatibility'          => floatval($pdo->query("SELECT AVG(compatibility) FROM iso_evaluations")->fetchColumn() ?: 3.92),
-            'interaction_capability' => floatval($pdo->query("SELECT AVG(interaction_capability) FROM iso_evaluations")->fetchColumn() ?: 3.96),
-            'reliability'            => floatval($pdo->query("SELECT AVG(reliability) FROM iso_evaluations")->fetchColumn() ?: 3.91),
-            'security'               => floatval($pdo->query("SELECT AVG(security) FROM iso_evaluations")->fetchColumn() ?: 3.95),
-            'maintainability'        => floatval($pdo->query("SELECT AVG(maintainability) FROM iso_evaluations")->fetchColumn() ?: 3.90),
-            'flexibility'            => floatval($pdo->query("SELECT AVG(flexibility) FROM iso_evaluations")->fetchColumn() ?: 3.85),
-            'safety'                 => floatval($pdo->query("SELECT AVG(safety) FROM iso_evaluations")->fetchColumn() ?: 3.96),
+        $defaults = [
+            'functional_suitability' => 3.94, 'performance_efficiency' => 3.88,
+            'compatibility' => 3.92, 'interaction_capability' => 3.96,
+            'reliability' => 3.91, 'security' => 3.95,
+            'maintainability' => 3.90, 'flexibility' => 3.85, 'safety' => 3.96,
         ];
+        $row = $pdo->query("
+            SELECT
+                AVG(functional_suitability) AS functional_suitability,
+                AVG(performance_efficiency) AS performance_efficiency,
+                AVG(compatibility) AS compatibility,
+                AVG(interaction_capability) AS interaction_capability,
+                AVG(reliability) AS reliability,
+                AVG(security) AS security,
+                AVG(maintainability) AS maintainability,
+                AVG(flexibility) AS flexibility,
+                AVG(safety) AS safety
+            FROM iso_evaluations
+        ")->fetch(PDO::FETCH_ASSOC);
+        $result = [];
+        foreach ($defaults as $key => $fallback) {
+            $result[$key] = $row && $row[$key] !== null ? floatval($row[$key]) : $fallback;
+        }
+        return $result;
     }
 
     public static function saveEvaluation($data) {

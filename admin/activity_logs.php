@@ -6,15 +6,29 @@ require_once __DIR__ . '/../includes/security.php';
 requireRole('admin');
 $pdo = getDBConnection();
 
+$page = max(1, intval($_GET['page'] ?? 1));
+$per_page = 50;
+$offset = ($page - 1) * $per_page;
+
 try {
-    $logs = $pdo->query("
+    $total_logs = intval($pdo->query("SELECT COUNT(*) FROM activity_logs")->fetchColumn());
+    $total_pages = max(1, ceil($total_logs / $per_page));
+
+    $stmt = $pdo->prepare("
         SELECT al.id, al.action_description, al.created_at, u.fullname, u.role, u.email 
         FROM activity_logs al 
         JOIN users u ON al.user_id = u.id 
         ORDER BY al.id DESC
-    ")->fetchAll(PDO::FETCH_ASSOC);
+        LIMIT ? OFFSET ?
+    ");
+    $stmt->bindValue(1, $per_page, PDO::PARAM_INT);
+    $stmt->bindValue(2, $offset, PDO::PARAM_INT);
+    $stmt->execute();
+    $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) { 
     $logs = []; 
+    $total_pages = 1;
+    $total_logs = 0;
 }
 ?>
 
@@ -85,6 +99,19 @@ try {
                         </tbody>
                     </table>
                 </div>
+                <?php if ($total_pages > 1): ?>
+                <div class="flex items-center justify-between mt-6 pt-4 border-t border-stone-200">
+                    <p class="text-xs text-stone-400 font-semibold">Showing page <?php echo $page; ?> of <?php echo $total_pages; ?> (<?php echo $total_logs; ?> total logs)</p>
+                    <div class="flex gap-2">
+                        <?php if ($page > 1): ?>
+                        <a href="?page=<?php echo $page - 1; ?>" class="px-3 py-1.5 bg-stone-100 hover:bg-orange-100 text-stone-600 hover:text-orange-700 rounded-lg text-xs font-bold transition-all"><i class="fa-solid fa-chevron-left mr-1"></i>Previous</a>
+                        <?php endif; ?>
+                        <?php if ($page < $total_pages): ?>
+                        <a href="?page=<?php echo $page + 1; ?>" class="px-3 py-1.5 bg-stone-900 hover:bg-orange-600 text-white rounded-lg text-xs font-bold transition-all">Next<i class="fa-solid fa-chevron-right ml-1"></i></a>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                <?php endif; ?>
             </div>
         </div>
     </main>

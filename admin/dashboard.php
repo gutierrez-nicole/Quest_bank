@@ -11,24 +11,33 @@ try {
     $stmt->execute([getCurrentUserId()]);
     $admin = $stmt->fetch();
 
-    $teachers_count = intval($pdo->query("SELECT COUNT(*) FROM users WHERE role = 'teacher'")->fetchColumn() ?: 1);
-    $students_count = intval($pdo->query("SELECT COUNT(*) FROM users WHERE role = 'student'")->fetchColumn() ?: 1);
-    $subjects_count = intval($pdo->query("SELECT COUNT(DISTINCT subject) FROM exams")->fetchColumn() ?: 5);
-    $exams_count = intval($pdo->query("SELECT COUNT(*) FROM exams")->fetchColumn() ?: 2);
-    
-    $completed_exams = intval($pdo->query("SELECT COUNT(*) FROM exam_submissions WHERE status = 'Pass' OR percentage >= 75")->fetchColumn() ?: 4);
-    $pending_exams = intval($pdo->query("SELECT COUNT(*) FROM exam_submissions WHERE status = 'Fail' OR status = 'Pending' OR percentage < 75")->fetchColumn() ?: 0);
-    $total_submissions = intval($pdo->query("SELECT COUNT(*) FROM exam_submissions")->fetchColumn() ?: 4);
-    
-    $avg_score_raw = $pdo->query("SELECT AVG(percentage) FROM exam_submissions")->fetchColumn();
-    $avg_score = $avg_score_raw !== false && $avg_score_raw !== null ? floatval($avg_score_raw) : 86.3;
+    $stats = $pdo->query("
+        SELECT
+            (SELECT COUNT(*) FROM users WHERE role = 'teacher') AS teachers_count,
+            (SELECT COUNT(*) FROM users WHERE role = 'student') AS students_count,
+            (SELECT COUNT(DISTINCT subject) FROM exams) AS subjects_count,
+            (SELECT COUNT(*) FROM exams) AS exams_count,
+            (SELECT COUNT(*) FROM exam_submissions WHERE status = 'Pass' OR percentage >= 75) AS completed_exams,
+            (SELECT COUNT(*) FROM exam_submissions WHERE status = 'Fail' OR status = 'Pending' OR percentage < 75) AS pending_exams,
+            (SELECT COUNT(*) FROM exam_submissions) AS total_submissions,
+            (SELECT AVG(percentage) FROM exam_submissions) AS avg_score,
+            (SELECT COUNT(*) FROM exam_submissions WHERE status = 'Pending') AS pie_pending
+    ")->fetch(PDO::FETCH_ASSOC);
+
+    $teachers_count = intval($stats['teachers_count'] ?: 1);
+    $students_count = intval($stats['students_count'] ?: 1);
+    $subjects_count = intval($stats['subjects_count'] ?: 5);
+    $exams_count = intval($stats['exams_count'] ?: 2);
+    $completed_exams = intval($stats['completed_exams'] ?: 4);
+    $pending_exams = intval($stats['pending_exams'] ?: 0);
+    $total_submissions = intval($stats['total_submissions'] ?: 4);
+    $avg_score = $stats['avg_score'] !== null ? floatval($stats['avg_score']) : 86.3;
+    $pie_pending = intval($stats['pie_pending'] ?: 0);
 
     $pass_rate = $total_submissions > 0 ? ($completed_exams / $total_submissions) * 100 : 94.8;
     $ai_prediction = number_format(min(98.5, max(85.0, $pass_rate)), 1) . '% Pass Rate';
-
     $pie_passed = $completed_exams;
     $pie_failed = $pending_exams;
-    $pie_pending = intval($pdo->query("SELECT COUNT(*) FROM exam_submissions WHERE status = 'Pending'")->fetchColumn() ?: 0);
 
     $ce_scores = [92, 86, 88, 85, 90];
 

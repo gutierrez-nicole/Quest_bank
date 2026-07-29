@@ -10,39 +10,28 @@ $teacher_id = $_SESSION['user_id'];
 
 $selected_exam = $_GET['exam_title'] ?? 'all';
 
+$where = "WHERE teacher_id = ?";
+$params = [$teacher_id];
+
 if ($selected_exam !== 'all') {
-    $stmtStats = $pdo->prepare("
-        SELECT 
-            COUNT(*) as total_students,
-            SUM(CASE WHEN status = 'Pass' THEN 1 ELSE 0 END) as total_pass,
-            SUM(CASE WHEN status = 'Fail' THEN 1 ELSE 0 END) as total_fail,
-            AVG(percentage) as avg_percentage,
-            MAX(percentage) as max_percentage,
-            MIN(percentage) as min_percentage
-        FROM exam_submissions 
-        WHERE teacher_id = ? AND exam_title = ?
-    ");
-    $stmtStats->execute([$teacher_id, $selected_exam]);
-
-    $stmtList = $pdo->prepare("SELECT * FROM exam_submissions WHERE teacher_id = ? AND exam_title = ? ORDER BY id DESC");
-    $stmtList->execute([$teacher_id, $selected_exam]);
-} else {
-    $stmtStats = $pdo->prepare("
-        SELECT 
-            COUNT(*) as total_students,
-            SUM(CASE WHEN status = 'Pass' THEN 1 ELSE 0 END) as total_pass,
-            SUM(CASE WHEN status = 'Fail' THEN 1 ELSE 0 END) as total_fail,
-            AVG(percentage) as avg_percentage,
-            MAX(percentage) as max_percentage,
-            MIN(percentage) as min_percentage
-        FROM exam_submissions 
-        WHERE teacher_id = ?
-    ");
-    $stmtStats->execute([$teacher_id]);
-
-    $stmtList = $pdo->prepare("SELECT * FROM exam_submissions WHERE teacher_id = ? ORDER BY id DESC");
-    $stmtList->execute([$teacher_id]);
+    $where .= " AND exam_title = ?";
+    $params[] = $selected_exam;
 }
+
+$stmtStats = $pdo->prepare("
+    SELECT 
+        COUNT(*) as total_students,
+        SUM(CASE WHEN status = 'Pass' THEN 1 ELSE 0 END) as total_pass,
+        SUM(CASE WHEN status = 'Fail' THEN 1 ELSE 0 END) as total_fail,
+        AVG(percentage) as avg_percentage,
+        MAX(percentage) as max_percentage,
+        MIN(percentage) as min_percentage
+    FROM exam_submissions $where
+");
+$stmtStats->execute($params);
+
+$stmtList = $pdo->prepare("SELECT * FROM exam_submissions $where ORDER BY id DESC LIMIT 200");
+$stmtList->execute($params);
 
 $stats = $stmtStats->fetch(PDO::FETCH_ASSOC);
 $submissions = $stmtList->fetchAll(PDO::FETCH_ASSOC);
