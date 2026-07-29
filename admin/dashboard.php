@@ -132,11 +132,46 @@ try {
                 </button>
 
                 
-                <button class="w-10 h-10 rounded-xl border border-stone-200 dark:border-stone-800 flex items-center justify-center text-stone-500 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition-all relative">
-                    <i class="fa-solid fa-bell text-sm"></i>
-                    <span class="absolute top-2.5 right-2.5 w-2 h-2 bg-orange-500 rounded-full animate-ping"></span>
-                    <span class="absolute top-2.5 right-2.5 w-2 h-2 bg-orange-500 rounded-full"></span>
-                </button>
+                <div class="relative">
+                    <button id="admin_notif_btn" onclick="toggleAdminNotifDropdown(event)" class="w-10 h-10 rounded-xl border border-stone-200 dark:border-stone-800 flex items-center justify-center text-stone-500 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition-all relative">
+                        <i class="fa-solid fa-bell text-sm"></i>
+                        <span class="absolute top-2.5 right-2.5 w-2 h-2 bg-orange-500 rounded-full animate-ping"></span>
+                        <span class="absolute top-2.5 right-2.5 w-2 h-2 bg-orange-500 rounded-full"></span>
+                    </button>
+
+                    <div id="admin_notif_dropdown" class="absolute right-0 mt-3 w-80 sm:w-96 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl shadow-2xl p-4 hidden z-50 space-y-3 animate-fadeIn">
+                        <div class="flex items-center justify-between border-b border-stone-100 dark:border-stone-800 pb-2.5">
+                            <h4 class="text-xs font-black uppercase text-stone-800 dark:text-stone-100 flex items-center gap-1.5">
+                                <i class="fa-solid fa-bell text-orange-500"></i> Admin System Telemetry Alerts
+                            </h4>
+                            <span class="text-[9px] bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-400 font-extrabold px-2 py-0.5 rounded-full">Live Alerts</span>
+                        </div>
+
+                        <div class="space-y-2.5 text-xs max-h-72 overflow-y-auto custom-scrollbar">
+                            <?php if (!empty($latest_activities)): ?>
+                                <?php foreach (array_slice($latest_activities, 0, 4) as $notif): ?>
+                                    <div class="p-3 rounded-xl border border-stone-100 dark:border-stone-800 bg-stone-50/60 dark:bg-stone-800/40 space-y-1 hover:border-orange-300 transition-all">
+                                        <div class="flex items-center justify-between">
+                                            <span class="font-extrabold text-stone-800 dark:text-stone-100 text-[11px]"><?php echo htmlspecialchars($notif['fullname']); ?></span>
+                                            <span class="text-[9px] text-stone-400 font-medium"><?php echo date('h:i A', strtotime($notif['created_at'])); ?></span>
+                                        </div>
+                                        <p class="text-[11px] text-stone-500 dark:text-stone-400 leading-snug"><?php echo htmlspecialchars($notif['action_description']); ?></p>
+                                    </div>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <div class="text-center py-6 text-stone-400 text-xs">
+                                    <i class="fa-solid fa-inbox text-2xl mb-1 block"></i>
+                                    No new system notifications.
+                                </div>
+                            <?php endif; ?>
+                        </div>
+
+                        <div class="pt-2 border-t border-stone-100 dark:border-stone-800 flex justify-between items-center text-xs">
+                            <span class="text-[10px] text-stone-400 font-semibold"><i class="fa-solid fa-shield-halved text-emerald-500 mr-1"></i> Multi-Role Telemetry Active</span>
+                            <a href="activity_logs.php" class="text-orange-600 dark:text-orange-400 font-bold hover:underline text-[11px]">View All Logs →</a>
+                        </div>
+                    </div>
+                </div>
                 
                 
                 <div class="flex items-center gap-3 pl-3 border-l border-stone-200 dark:border-stone-800">
@@ -468,6 +503,22 @@ try {
                 },
                 options: { responsive: true, maintainAspectRatio: false, animation: { duration: 1500 } }
             });
+        });
+
+        function toggleAdminNotifDropdown(event) {
+            if (event) event.stopPropagation();
+            const dropdown = document.getElementById('admin_notif_dropdown');
+            if (dropdown) {
+                dropdown.classList.toggle('hidden');
+            }
+        }
+
+        document.addEventListener('click', function(e) {
+            const dropdown = document.getElementById('admin_notif_dropdown');
+            const btn = document.getElementById('admin_notif_btn');
+            if (dropdown && btn && !dropdown.contains(e.target) && !btn.contains(e.target)) {
+                dropdown.classList.add('hidden');
+            }
         });
     </script>
 </body>
