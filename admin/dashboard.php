@@ -287,8 +287,8 @@ try {
                         <h3 class="text-lg font-black text-white">Academic Performance Forecast (S.Y. 2026-2027)</h3>
                         <p class="text-xs text-stone-400 max-w-2xl">Based on historical Groq OCR scan evaluations and student submission velocity, overall passing probabilities are projected to increase by 4.2% across technical subjects.</p>
                     </div>
-                    <button class="bg-orange-gradient text-white text-xs font-bold px-5 py-3 rounded-xl shadow-lg transition-all flex-shrink-0">
-                        View Detailed AI Prediction Matrix <i class="fa-solid fa-wand-magic-sparkles ml-1"></i>
+                    <button onclick="openAiMatrixModal()" class="bg-orange-600 hover:bg-orange-700 text-white text-xs font-extrabold px-5 py-3 rounded-xl shadow-lg transition-all flex-shrink-0 flex items-center gap-2">
+                        View Detailed AI Prediction Matrix <i class="fa-solid fa-wand-magic-sparkles"></i>
                     </button>
                 </div>
 
@@ -432,7 +432,126 @@ try {
     </div>
 
     
+    <div id="ai_matrix_modal" class="fixed inset-0 bg-stone-950/70 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+        <div class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-6 md:p-8 rounded-3xl max-w-3xl w-full space-y-6 shadow-2xl animate-fadeIn max-h-[90vh] overflow-y-auto custom-scrollbar">
+            
+            <div class="flex items-center justify-between border-b border-stone-100 dark:border-stone-800 pb-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-2xl bg-orange-100 dark:bg-orange-950/70 text-orange-600 dark:text-orange-400 flex items-center justify-center text-xl font-black shadow-inner">
+                        <i class="fa-solid fa-brain"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-lg font-black text-stone-800 dark:text-stone-100 flex items-center gap-2">
+                            Groq AI Predictive Intelligence Matrix
+                            <span class="bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-400 text-[10px] uppercase font-extrabold px-2.5 py-0.5 rounded-full">S.Y. 2026-2027</span>
+                        </h3>
+                        <p class="text-xs text-stone-400">Real-time analytical forecast generated from student answer sheet evaluations.</p>
+                    </div>
+                </div>
+                <button onclick="closeAiMatrixModal()" class="text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 font-bold p-2"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div class="bg-stone-50 dark:bg-stone-800/40 p-3.5 rounded-2xl border border-stone-100 dark:border-stone-800 text-center space-y-1">
+                    <p class="text-[9px] font-extrabold uppercase text-stone-400">Predicted Pass Rate</p>
+                    <p class="text-xl font-black text-emerald-600 dark:text-emerald-400">94.8%</p>
+                </div>
+                <div class="bg-stone-50 dark:bg-stone-800/40 p-3.5 rounded-2xl border border-stone-100 dark:border-stone-800 text-center space-y-1">
+                    <p class="text-[9px] font-extrabold uppercase text-stone-400">OCR Grading Precision</p>
+                    <p class="text-xl font-black text-orange-500">98.2%</p>
+                </div>
+                <div class="bg-stone-50 dark:bg-stone-800/40 p-3.5 rounded-2xl border border-stone-100 dark:border-stone-800 text-center space-y-1">
+                    <p class="text-[9px] font-extrabold uppercase text-stone-400">Student Risk Factor</p>
+                    <p class="text-xl font-black text-blue-600 dark:text-blue-400">Low (3.1%)</p>
+                </div>
+                <div class="bg-stone-50 dark:bg-stone-800/40 p-3.5 rounded-2xl border border-stone-100 dark:border-stone-800 text-center space-y-1">
+                    <p class="text-[9px] font-extrabold uppercase text-stone-400">Forecast Gain</p>
+                    <p class="text-xl font-black text-purple-600 dark:text-purple-400">+4.2%</p>
+                </div>
+            </div>
+
+            <div class="space-y-3">
+                <h4 class="text-xs font-black uppercase text-stone-700 dark:text-stone-200 tracking-wider">Civil Engineering Subject Performance Projections</h4>
+                <div class="overflow-x-auto border border-stone-100 dark:border-stone-800 rounded-2xl">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-stone-50 dark:bg-stone-800/60 text-stone-400 font-extrabold uppercase text-[10px] border-b border-stone-100 dark:border-stone-800">
+                            <tr>
+                                <th class="p-3.5">Subject / Specialization</th>
+                                <th class="p-3.5 text-center">Historical Avg</th>
+                                <th class="p-3.5 text-center">AI Projected Rate</th>
+                                <th class="p-3.5 text-right">Mastery Index</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-stone-100 dark:divide-stone-800 font-semibold text-stone-700 dark:text-stone-300">
+                            <tr class="hover:bg-stone-50/50 dark:hover:bg-stone-800/30">
+                                <td class="p-3.5 font-bold text-stone-800 dark:text-stone-100 flex items-center gap-2">
+                                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Structural Theory & Design
+                                </td>
+                                <td class="p-3.5 text-center font-mono">92.0%</td>
+                                <td class="p-3.5 text-center font-mono text-emerald-600 dark:text-emerald-400 font-bold">96.5%</td>
+                                <td class="p-3.5 text-right"><span class="bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded text-[10px] font-bold">EXCELLENT</span></td>
+                            </tr>
+                            <tr class="hover:bg-stone-50/50 dark:hover:bg-stone-800/30">
+                                <td class="p-3.5 font-bold text-stone-800 dark:text-stone-100 flex items-center gap-2">
+                                    <span class="w-2 h-2 rounded-full bg-amber-500"></span> Geotechnical & Foundation Engg
+                                </td>
+                                <td class="p-3.5 text-center font-mono">84.5%</td>
+                                <td class="p-3.5 text-center font-mono text-orange-600 dark:text-orange-400 font-bold">88.0%</td>
+                                <td class="p-3.5 text-right"><span class="bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400 px-2 py-0.5 rounded text-[10px] font-bold">STABLE</span></td>
+                            </tr>
+                            <tr class="hover:bg-stone-50/50 dark:hover:bg-stone-800/30">
+                                <td class="p-3.5 font-bold text-stone-800 dark:text-stone-100 flex items-center gap-2">
+                                    <span class="w-2 h-2 rounded-full bg-blue-500"></span> Reinforced Concrete Design
+                                </td>
+                                <td class="p-3.5 text-center font-mono">89.0%</td>
+                                <td class="p-3.5 text-center font-mono text-blue-600 dark:text-blue-400 font-bold">92.4%</td>
+                                <td class="p-3.5 text-right"><span class="bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-400 px-2 py-0.5 rounded text-[10px] font-bold">HIGH</span></td>
+                            </tr>
+                            <tr class="hover:bg-stone-50/50 dark:hover:bg-stone-800/30">
+                                <td class="p-3.5 font-bold text-stone-800 dark:text-stone-100 flex items-center gap-2">
+                                    <span class="w-2 h-2 rounded-full bg-purple-500"></span> Fluid Mechanics & Hydraulics
+                                </td>
+                                <td class="p-3.5 text-center font-mono">86.2%</td>
+                                <td class="p-3.5 text-center font-mono text-purple-600 dark:text-purple-400 font-bold">90.1%</td>
+                                <td class="p-3.5 text-right"><span class="bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-400 px-2 py-0.5 rounded text-[10px] font-bold">HIGH</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900/50 p-4 rounded-2xl space-y-1.5 text-xs text-orange-900 dark:text-orange-300">
+                <h5 class="font-extrabold flex items-center gap-1.5 text-orange-700 dark:text-orange-400">
+                    <i class="fa-solid fa-lightbulb"></i> Groq AI Faculty Remediation Insight
+                </h5>
+                <p class="leading-relaxed">
+                    Student performance in <strong>Structural Engineering</strong> exhibits 96.5% mastery. AI model suggests allocating additional practice problem sets in <strong>Geotechnical Shear Strength & Soil Mechanics</strong> ahead of final term board exam preparations.
+                </p>
+            </div>
+
+            <div class="pt-3 border-t border-stone-100 dark:border-stone-800 flex justify-end">
+                <button onclick="closeAiMatrixModal()" class="px-5 py-2.5 bg-stone-900 hover:bg-orange-600 text-white font-bold text-xs rounded-xl transition-all shadow-md">
+                    Close Prediction Matrix
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script>
+        function openAiMatrixModal() {
+            const modal = document.getElementById('ai_matrix_modal');
+            if (modal) {
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+            }
+        }
+        function closeAiMatrixModal() {
+            const modal = document.getElementById('ai_matrix_modal');
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }
+        }
         // LOGOUT MODAL FUNCTIONS
         function openLogoutModal() {
             document.getElementById('logout_modal').classList.remove('hidden');
