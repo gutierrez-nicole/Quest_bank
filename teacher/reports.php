@@ -136,9 +136,9 @@ $pass_rate = $total > 0 ? ($pass / $total) * 100 : 0;
                 <h3 class="text-sm font-bold uppercase tracking-wider text-stone-700">
                     <i class="fa-solid fa-list text-orange-500 mr-1"></i> Student Grade Submissions Master List
                 </h3>
-                <button onclick="window.print()" class="bg-stone-900 hover:bg-orange-600 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all shadow-sm">
-                    <i class="fa-solid fa-print mr-1"></i> Print / Export Report
-                </button>
+                <a href="export_report_pdf.php?exam_title=<?php echo urlencode($selected_exam); ?>" target="_blank" class="bg-stone-900 hover:bg-orange-600 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all shadow-sm flex items-center gap-1.5">
+                    <i class="fa-solid fa-file-pdf text-rose-400"></i> Export Analytics PDF Report
+                </a>
             </div>
 
             <?php if (!empty($submissions)): ?>
