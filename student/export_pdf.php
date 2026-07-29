@@ -90,36 +90,37 @@ $overall_status = $avg_gpa >= 75.0 ? 'PASSED (SATISFACTORY)' : 'NEEDS IMPROVEMEN
 // 3. Custom FPDF Class Setup
 class TranscriptPDF extends FPDF {
     function Header() {
-        // Outer Decorative Border
+        // Outer Decorative Double Border
         $this->Rect(5, 5, 200, 287);
         $this->SetLineWidth(0.5);
         $this->Rect(7, 7, 196, 283);
 
         // Header Title
+        $this->SetY(11);
         $this->SetFont('Arial', 'B', 18);
         $this->SetTextColor(234, 88, 12); // Orange-600
-        $this->Cell(0, 8, 'QUESTBANK ACADEMY', 0, 1, 'C');
+        $this->Cell(0, 7, 'QUESTBANK ACADEMY', 0, 1, 'C');
         
-        $this->SetFont('Arial', 'B', 9);
+        $this->SetFont('Arial', 'B', 8.5);
         $this->SetTextColor(120, 113, 108);
-        $this->Cell(0, 5, 'DEPARTMENT OF CIVIL ENGINEERING & ASSESSMENT', 0, 1, 'C');
+        $this->Cell(0, 4.5, 'DEPARTMENT OF CIVIL ENGINEERING & ASSESSMENT', 0, 1, 'C');
         
-        $this->SetFont('Arial', 'B', 11);
+        $this->SetFont('Arial', 'B', 9.5);
         $this->SetTextColor(28, 25, 23);
-        $this->Cell(0, 6, 'OFFICIAL STUDENT EVALUATION TRANSCRIPT', 0, 1, 'C');
+        $this->Cell(0, 5, 'OFFICIAL STUDENT EVALUATION TRANSCRIPT', 0, 1, 'C');
         
+        // Orange Separator Line
         $this->SetDrawColor(249, 115, 22);
         $this->SetLineWidth(0.8);
         $this->Line(15, 30, 195, 30);
-        $this->Ln(4);
     }
 
     function Footer() {
-        $this->SetY(-20);
+        $this->SetY(-18);
         $this->SetFont('Arial', 'I', 8);
         $this->SetTextColor(168, 162, 158);
         $this->Cell(0, 4, 'This transcript is automatically generated and verified by the QuestBank AI Assessment Engine.', 0, 1, 'C');
-        $this->Cell(0, 4, 'Official Document Hash: QB-CERT-2026-' . strtoupper(md5($this->PageNo())), 0, 0, 'C');
+        $this->Cell(0, 4, 'Official Document Hash: QB-CERT-2026-' . strtoupper(md5('PAGE_' . $this->PageNo())), 0, 0, 'C');
     }
 }
 
@@ -128,43 +129,40 @@ $pdf = new TranscriptPDF('P', 'mm', 'A4');
 $pdf->SetMargins(15, 15, 15);
 $pdf->AddPage();
 
-// Student Information Block (Boxed Grid)
+// Student Information Block (Boxed Grid at Y = 35)
 $pdf->SetFillColor(255, 247, 237); // Light Orange Tint
 $pdf->SetDrawColor(254, 215, 170);
 $pdf->SetLineWidth(0.3);
-$pdf->Rect(15, 34, 180, 28, 'DF');
+$pdf->Rect(15, 34, 180, 27, 'DF');
 
-$pdf->SetFont('Arial', 'B', 8);
+$pdf->SetFont('Arial', 'B', 7.5);
 $pdf->SetTextColor(194, 65, 12);
-$pdf->SetXY(20, 37);
+$pdf->SetXY(20, 36.5);
 $pdf->Cell(85, 4, 'STUDENT FULL NAME:', 0, 0, 'L');
 $pdf->Cell(85, 4, 'ID NUMBER:', 0, 1, 'L');
 
-$pdf->SetFont('Arial', 'B', 11);
+$pdf->SetFont('Arial', 'B', 10);
 $pdf->SetTextColor(28, 25, 23);
 $pdf->SetX(20);
 $pdf->Cell(85, 5, $fullname, 0, 0, 'L');
 $pdf->SetTextColor(234, 88, 12);
 $pdf->Cell(85, 5, $student_no, 0, 1, 'L');
 
-$pdf->Ln(2);
-
-$pdf->SetFont('Arial', 'B', 8);
+$pdf->SetFont('Arial', 'B', 7.5);
 $pdf->SetTextColor(194, 65, 12);
-$pdf->SetX(20);
+$pdf->SetXY(20, 48);
 $pdf->Cell(85, 4, 'ACADEMIC PROGRAM & SECTION:', 0, 0, 'L');
 $pdf->Cell(85, 4, 'DATE ISSUED:', 0, 1, 'L');
 
-$pdf->SetFont('Arial', 'B', 10);
+$pdf->SetFont('Arial', 'B', 9.5);
 $pdf->SetTextColor(28, 25, 23);
 $pdf->SetX(20);
 $pdf->Cell(85, 5, $course_section, 0, 0, 'L');
 $pdf->Cell(85, 5, $date_issued, 0, 1, 'L');
 
-$pdf->Ln(8);
-
-// Section Header
-$pdf->SetFont('Arial', 'B', 11);
+// Section Header at Y = 68
+$pdf->SetY(67);
+$pdf->SetFont('Arial', 'B', 10);
 $pdf->SetTextColor(28, 25, 23);
 $pdf->Cell(0, 6, 'ACADEMIC ASSESSMENT RECORD MATRIX', 0, 1, 'L');
 
@@ -205,37 +203,36 @@ foreach ($results as $row) {
     $fill = !$fill;
 }
 
-$pdf->Ln(8);
+$pdf->Ln(6);
 
 // Summary & Verification Box
+$summaryY = $pdf->GetY();
 $pdf->SetFillColor(245, 245, 244);
 $pdf->SetDrawColor(229, 229, 224);
-$pdf->Rect(15, $pdf->GetY(), 180, 25, 'DF');
+$pdf->Rect(15, $summaryY, 180, 22, 'DF');
 
-$currentY = $pdf->GetY();
-$pdf->SetXY(20, $currentY + 4);
-$pdf->SetFont('Arial', 'B', 8);
+$pdf->SetXY(20, $summaryY + 3);
+$pdf->SetFont('Arial', 'B', 7.5);
 $pdf->SetTextColor(120, 113, 108);
 $pdf->Cell(50, 4, 'CUMULATIVE AVERAGE GRADE:', 0, 0, 'L');
 $pdf->Cell(60, 4, 'OVERALL ACADEMIC OUTCOME:', 0, 0, 'L');
 $pdf->Cell(50, 4, 'EVALUATION ENGINE:', 0, 1, 'L');
 
 $pdf->SetX(20);
-$pdf->SetFont('Arial', 'B', 12);
+$pdf->SetFont('Arial', 'B', 11);
 $pdf->SetTextColor(234, 88, 12);
 $pdf->Cell(50, 6, $avg_gpa . '%', 0, 0, 'L');
 
-$pdf->SetFont('Arial', 'B', 10);
+$pdf->SetFont('Arial', 'B', 9.5);
 $pdf->SetTextColor(21, 128, 61);
 $pdf->Cell(60, 6, $overall_status, 0, 0, 'L');
 
-$pdf->SetFont('Arial', 'B', 9);
+$pdf->SetFont('Arial', 'B', 8.5);
 $pdf->SetTextColor(109, 40, 217); // Purple
 $pdf->Cell(50, 6, 'Groq Llama-3 AI Vision Engine', 0, 1, 'L');
 
-$pdf->Ln(20);
-
-// Signatures Section
+// Signatures Section at Y = 230
+$pdf->SetY(230);
 $pdf->SetFont('Arial', 'B', 8);
 $pdf->SetTextColor(120, 113, 108);
 
@@ -243,7 +240,7 @@ $pdf->Cell(85, 4, '_______________________________________', 0, 0, 'C');
 $pdf->Cell(10, 4, '', 0, 0);
 $pdf->Cell(85, 4, '_______________________________________', 0, 1, 'C');
 
-$pdf->SetFont('Arial', 'B', 9);
+$pdf->SetFont('Arial', 'B', 8.5);
 $pdf->SetTextColor(28, 25, 23);
 $pdf->Cell(85, 4, 'ACADEMIC DEPARTMENT REGISTRAR', 0, 0, 'C');
 $pdf->Cell(10, 4, '', 0, 0);
