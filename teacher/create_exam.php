@@ -45,6 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_exam'])) {
             }
 
             $pdo->commit();
+            logActivity("Created exam paper '{$title}' (" . count($questions) . " items) under {$specialization}.");
             $success_msg = "Exam and Answer Key for '{$specialization}' created successfully!";
         } catch (Exception $e) {
             $pdo->rollBack();

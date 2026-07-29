@@ -21,7 +21,13 @@ try {
 
     $latest_activities = [];
     try {
-        $stmtLogs = $pdo->query("SELECT * FROM exam_submissions ORDER BY id DESC LIMIT 5");
+        $stmtLogs = $pdo->query("
+            SELECT al.id, al.action_description, al.created_at, u.fullname, u.role, u.email 
+            FROM activity_logs al 
+            JOIN users u ON al.user_id = u.id 
+            ORDER BY al.id DESC 
+            LIMIT 5
+        ");
         $latest_activities = $stmtLogs->fetchAll(PDO::FETCH_ASSOC);
     } catch (PDOException $e) {
         $latest_activities = [];
@@ -319,24 +325,29 @@ try {
                                     <th class="p-4 pl-6">Operator User</th>
                                     <th class="p-4">Role</th>
                                     <th class="p-4">Action Event</th>
-                                    <th class="p-4 text-center">Score Recorded</th>
                                     <th class="p-4 pr-6 text-right">Timestamp</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-stone-100 dark:divide-stone-800 font-bold">
                                 <?php if (!empty($latest_activities)): ?>
                                     <?php foreach ($latest_activities as $act): ?>
+                                        <?php 
+                                        $role = strtolower($act['role']);
+                                        $badgeClass = 'bg-stone-100 dark:bg-stone-800 text-stone-700 dark:text-stone-300';
+                                        if ($role === 'teacher') $badgeClass = 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-400';
+                                        elseif ($role === 'student') $badgeClass = 'bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-400';
+                                        elseif ($role === 'admin') $badgeClass = 'bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-400';
+                                        ?>
                                         <tr class="hover:bg-stone-50/50 dark:hover:bg-stone-800/30 transition-all">
-                                            <td class="p-4 pl-6 text-stone-800 dark:text-stone-100 font-extrabold"><?php echo htmlspecialchars($act['student_name']); ?></td>
-                                            <td class="p-4"><span class="bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-400 px-2.5 py-0.5 rounded-md text-[10px] uppercase font-bold">STUDENT</span></td>
-                                            <td class="p-4 text-stone-600 dark:text-stone-300 font-semibold"><?php echo htmlspecialchars($act['exam_title']); ?></td>
-                                            <td class="p-4 text-center font-mono font-bold"><?php echo ($act['correct_count'] ?? 0) . ' / ' . ($act['total_items'] ?? 10); ?></td>
+                                            <td class="p-4 pl-6 text-stone-800 dark:text-stone-100 font-extrabold"><?php echo htmlspecialchars($act['fullname']); ?></td>
+                                            <td class="p-4"><span class="px-2.5 py-0.5 rounded-md text-[10px] uppercase font-bold <?php echo $badgeClass; ?>"><?php echo htmlspecialchars($act['role']); ?></span></td>
+                                            <td class="p-4 text-stone-600 dark:text-stone-300 font-semibold"><?php echo htmlspecialchars($act['action_description']); ?></td>
                                             <td class="p-4 pr-6 text-stone-400 text-right font-medium"><?php echo date('M d, Y h:i A', strtotime($act['created_at'])); ?></td>
                                         </tr>
                                     <?php endforeach; ?>
                                 <?php else: ?>
                                     <tr>
-                                        <td colspan="5" class="p-6 text-center text-stone-400 font-semibold">No audit trail records found in database.</td>
+                                        <td colspan="4" class="p-6 text-center text-stone-400 font-semibold">No audit trail records found in database.</td>
                                     </tr>
                                 <?php endif; ?>
                             </tbody>

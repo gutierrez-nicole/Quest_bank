@@ -7,8 +7,15 @@ requireRole('admin');
 $pdo = getDBConnection();
 
 try {
-    $logs = $pdo->query("SELECT * FROM exam_submissions ORDER BY id DESC")->fetchAll();
-} catch (PDOException $e) { die("Database error: " . $e->getMessage()); }
+    $logs = $pdo->query("
+        SELECT al.id, al.action_description, al.created_at, u.fullname, u.role, u.email 
+        FROM activity_logs al 
+        JOIN users u ON al.user_id = u.id 
+        ORDER BY al.id DESC
+    ")->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) { 
+    $logs = []; 
+}
 ?>
 
 <!DOCTYPE html>
@@ -29,8 +36,9 @@ try {
                 <div>
                     <a href="dashboard.php" class="text-xs font-bold text-orange-600 hover:underline"><i class="fa-solid fa-arrow-left mr-1"></i> Back to Dashboard</a>
                     <h1 class="text-2xl font-extrabold text-stone-800 mt-2"><i class="fa-solid fa-clipboard-list text-orange-600 mr-1"></i> Global System Activity Audit Log</h1>
+                    <p class="text-xs text-stone-400">Comprehensive real-time telemetry logging for Faculty Teachers, Students, and Administrators.</p>
                 </div>
-                <button onclick="window.print()" class="bg-stone-900 hover:bg-orange-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all">
+                <button onclick="window.print()" class="bg-stone-900 hover:bg-orange-600 text-white font-bold text-xs px-4 py-2.5 rounded-xl transition-all shadow-sm">
                     <i class="fa-solid fa-print mr-1"></i> Print Audit Trail
                 </button>
             </div>
@@ -41,22 +49,39 @@ try {
                         <thead>
                             <tr class="bg-stone-50 border-b text-stone-500 font-bold uppercase text-[10px]">
                                 <th class="p-3">Log Event ID</th>
-                                <th class="p-3">Student Target Name</th>
-                                <th class="p-3">Exam Action Processed</th>
-                                <th class="p-3 text-center">Score Recorded</th>
-                                <th class="p-3 text-center">Status</th>
+                                <th class="p-3">Operator User</th>
+                                <th class="p-3">System Role</th>
+                                <th class="p-3">Action Event Description</th>
+                                <th class="p-3 text-right">Timestamp</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y font-semibold">
-                            <?php foreach ($logs as $l): ?>
-                                <tr class="hover:bg-stone-50/50">
-                                    <td class="p-3 font-mono text-orange-600">#LOG-00<?php echo $l['id']; ?></td>
-                                    <td class="p-3 font-bold text-stone-800"><?php echo htmlspecialchars($l['student_name']); ?></td>
-                                    <td class="p-3"><?php echo htmlspecialchars($l['exam_title']); ?></td>
-                                    <td class="p-3 text-center font-bold font-mono"><?php echo $l['correct_count'] . ' / ' . $l['total_items']; ?></td>
-                                    <td class="p-3 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-bold <?php echo $l['status'] === 'Pass' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'; ?>"><?php echo htmlspecialchars($l['status']); ?></span></td>
+                            <?php if (!empty($logs)): ?>
+                                <?php foreach ($logs as $l): ?>
+                                    <tr class="hover:bg-stone-50/50">
+                                        <td class="p-3 font-mono text-orange-600">#LOG-00<?php echo $l['id']; ?></td>
+                                        <td class="p-3 font-bold text-stone-800"><?php echo htmlspecialchars($l['fullname']); ?></td>
+                                        <td class="p-3">
+                                            <?php 
+                                            $role = strtolower($l['role']);
+                                            $badgeClass = 'bg-stone-100 text-stone-700';
+                                            if ($role === 'teacher') $badgeClass = 'bg-blue-100 text-blue-800';
+                                            elseif ($role === 'student') $badgeClass = 'bg-orange-100 text-orange-800';
+                                            elseif ($role === 'admin') $badgeClass = 'bg-purple-100 text-purple-800';
+                                            ?>
+                                            <span class="px-2.5 py-0.5 rounded text-[10px] font-bold uppercase <?php echo $badgeClass; ?>">
+                                                <?php echo htmlspecialchars($l['role']); ?>
+                                            </span>
+                                        </td>
+                                        <td class="p-3 text-stone-600 font-medium"><?php echo htmlspecialchars($l['action_description']); ?></td>
+                                        <td class="p-3 text-right text-stone-400 font-medium"><?php echo date('M d, Y h:i A', strtotime($l['created_at'])); ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <tr>
+                                    <td colspan="5" class="p-6 text-center text-stone-400 font-semibold">No activity logs recorded yet.</td>
                                 </tr>
-                            <?php endforeach; ?>
+                            <?php endif; ?>
                         </tbody>
                     </table>
                 </div>

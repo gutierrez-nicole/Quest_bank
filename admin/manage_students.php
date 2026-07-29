@@ -38,6 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_student'])) {
             }
 
             $pdo->commit();
+            logActivity("Updated student directory profile and section assignment for '{$fullname}' ({$student_number}).");
             $success_msg = "Student record for '{$fullname}' updated successfully!";
         } catch (Exception $e) {
             $pdo->rollBack();
