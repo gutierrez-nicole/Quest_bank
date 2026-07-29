@@ -9,7 +9,6 @@ $pdo = getDBConnection();
 $success_msg = "";
 $error_msg = "";
 
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST' and isset($_POST['upload_material'])) {
     validateCSRFToken();
     $title = trim($_POST['title']);
@@ -59,7 +58,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' and isset($_POST['upload_material'])) 
     }
 }
 
-
 if (isset($_GET['delete_id'])) {
     $delete_id = intval($_GET['delete_id']);
     $stmtFind = $pdo->prepare("SELECT file_path FROM lesson_materials WHERE id = ? AND teacher_id = ?");
@@ -76,7 +74,6 @@ if (isset($_GET['delete_id'])) {
         $success_msg = "Lesson material removed successfully!";
     }
 }
-
 
 $stmtMat = $pdo->prepare("SELECT * FROM lesson_materials WHERE teacher_id = ? ORDER BY id DESC");
 $stmtMat->execute([$_SESSION['user_id']]);

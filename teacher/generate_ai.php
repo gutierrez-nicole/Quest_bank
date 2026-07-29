@@ -20,7 +20,6 @@ $success_msg = "";
 $error_msg = "";
 $generated_questions = null;
 
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_questions'])) {
     validateCSRFToken();
     $lesson_text = trim($_POST['lesson_text'] ?? '');
@@ -42,7 +41,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_questions'])
         $error_msg = "Please enter lesson material text and set valid question parameters.";
     }
 }
-
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
     validateCSRFToken();

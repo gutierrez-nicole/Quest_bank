@@ -1,10 +1,7 @@
 <?php
-require_once __DIR__ . '/../app/database.php';
-require_once __DIR__ . '/../app/session.php';
-require_once __DIR__ . '/../includes/security.php';
+require_once __DIR__ . '/../app/bootstrap.php';
 
-requireRole('admin');
-$pdo = getDBConnection();
+AuthService::enforceRole('admin');
 
 $success_msg = "";
 $error_msg = "";
@@ -14,33 +11,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_evaluation']))
     $evaluator_name = trim(sanitizeInput($_POST['evaluator_name'] ?? ''));
     $evaluator_role = sanitizeInput($_POST['evaluator_role'] ?? 'student');
     
-    $f_suit = floatval($_POST['functional_suitability'] ?? 4.0);
-    $p_eff  = floatval($_POST['performance_efficiency'] ?? 4.0);
-    $comp   = floatval($_POST['compatibility'] ?? 4.0);
-    $inter  = floatval($_POST['interaction_capability'] ?? 4.0);
-    $rel    = floatval($_POST['reliability'] ?? 4.0);
-    $sec    = floatval($_POST['security'] ?? 4.0);
-    $maint  = floatval($_POST['maintainability'] ?? 4.0);
-    $flex   = floatval($_POST['flexibility'] ?? 4.0);
-    $safe   = floatval($_POST['safety'] ?? 4.0);
-    $feedback = trim(sanitizeInput($_POST['feedback_text'] ?? ''));
+    $data = [
+        'evaluator_name'         => $evaluator_name,
+        'evaluator_role'         => $evaluator_role,
+        'functional_suitability' => floatval($_POST['functional_suitability'] ?? 4.0),
+        'performance_efficiency' => floatval($_POST['performance_efficiency'] ?? 4.0),
+        'compatibility'          => floatval($_POST['compatibility'] ?? 4.0),
+        'interaction_capability' => floatval($_POST['interaction_capability'] ?? 4.0),
+        'reliability'            => floatval($_POST['reliability'] ?? 4.0),
+        'security'               => floatval($_POST['security'] ?? 4.0),
+        'maintainability'        => floatval($_POST['maintainability'] ?? 4.0),
+        'flexibility'            => floatval($_POST['flexibility'] ?? 4.0),
+        'safety'                 => floatval($_POST['safety'] ?? 4.0),
+        'feedback_text'          => trim(sanitizeInput($_POST['feedback_text'] ?? ''))
+    ];
 
     if (!empty($evaluator_name)) {
         try {
-            $stmt = $pdo->prepare("
-                INSERT INTO iso_evaluations (
-                    evaluator_name, evaluator_role, functional_suitability, performance_efficiency, 
-                    compatibility, interaction_capability, reliability, security, maintainability, 
-                    flexibility, safety, feedback_text
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ");
-            $stmt->execute([
-                $evaluator_name, $evaluator_role, $f_suit, $p_eff, 
-                $comp, $inter, $rel, $sec, $maint, $flex, $safe, $feedback
-            ]);
-            logActivity("Submitted ISO/IEC 25010 Quality Evaluation for '{$evaluator_name}' ({$evaluator_role}).");
+            ISOService::submitEvaluation($data);
+            AuthService::logUserActivity("Submitted ISO/IEC 25010 Quality Evaluation for '{$evaluator_name}' ({$evaluator_role}).");
             $success_msg = "ISO 25010 Evaluation response recorded successfully!";
-        } catch (PDOException $e) {
+        } catch (Exception $e) {
             $error_msg = "Database record error: " . $e->getMessage();
         }
     } else {
@@ -49,23 +40,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_evaluation']))
 }
 
 try {
-    $evaluations = $pdo->query("SELECT * FROM iso_evaluations ORDER BY id DESC")->fetchAll(PDO::FETCH_ASSOC);
-
-    $criteria_means = [
-        'functional_suitability' => floatval($pdo->query("SELECT AVG(functional_suitability) FROM iso_evaluations")->fetchColumn() ?: 3.94),
-        'performance_efficiency' => floatval($pdo->query("SELECT AVG(performance_efficiency) FROM iso_evaluations")->fetchColumn() ?: 3.88),
-        'compatibility'          => floatval($pdo->query("SELECT AVG(compatibility) FROM iso_evaluations")->fetchColumn() ?: 3.92),
-        'interaction_capability' => floatval($pdo->query("SELECT AVG(interaction_capability) FROM iso_evaluations")->fetchColumn() ?: 3.96),
-        'reliability'            => floatval($pdo->query("SELECT AVG(reliability) FROM iso_evaluations")->fetchColumn() ?: 3.91),
-        'security'               => floatval($pdo->query("SELECT AVG(security) FROM iso_evaluations")->fetchColumn() ?: 3.95),
-        'maintainability'        => floatval($pdo->query("SELECT AVG(maintainability) FROM iso_evaluations")->fetchColumn() ?: 3.90),
-        'flexibility'            => floatval($pdo->query("SELECT AVG(flexibility) FROM iso_evaluations")->fetchColumn() ?: 3.85),
-        'safety'                 => floatval($pdo->query("SELECT AVG(safety) FROM iso_evaluations")->fetchColumn() ?: 3.96),
-    ];
-
-    $overall_weighted_mean = array_sum($criteria_means) / count($criteria_means);
-
-} catch (PDOException $e) {
+    $evaluations = ISOService::getAllEvaluations();
+    $criteria_means = ISOService::getCharacteristicMeans();
+    $overall_weighted_mean = ISOService::getOverallWeightedMean();
+} catch (Exception $e) {
     $evaluations = [];
     $criteria_means = [];
     $overall_weighted_mean = 3.92;

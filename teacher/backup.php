@@ -9,7 +9,6 @@ $pdo = getDBConnection();
 $success_msg = "";
 $error_msg = "";
 
-
 if (isset($_GET['action']) && $_GET['action'] === 'download_backup') {
     $tables = [];
     $query = $pdo->query("SHOW TABLES");
@@ -47,7 +46,6 @@ if (isset($_GET['action']) && $_GET['action'] === 'download_backup') {
     echo $sqlScript;
     exit();
 }
-
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['restore_backup'])) {
     validateCSRFToken();

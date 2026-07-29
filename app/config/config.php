@@ -1,10 +1,8 @@
 <?php
 
-
 if (!defined('BASE_PATH')) {
     define('BASE_PATH', dirname(__DIR__, 2));
 }
-
 
 $envFile = BASE_PATH . '/.env';
 if (file_exists($envFile)) {
@@ -19,19 +17,16 @@ if (file_exists($envFile)) {
     }
 }
 
-
 define('DB_HOST', getenv('DB_HOST') ?: '127.0.0.1');
 define('DB_NAME', getenv('DB_NAME') ?: 'bankquest_db');
 define('DB_USER', getenv('DB_USER') ?: 'root');
 define('DB_PASS', getenv('DB_PASS') ?: '');
 define('DB_CHARSET', 'utf8mb4');
 
-
 define('GROQ_API_KEY', getenv('GROQ_API_KEY') ?: '');
 define('GROQ_API_ENDPOINT', 'https://api.groq.com/openai/v1/chat/completions');
 define('GROQ_DEFAULT_MODEL', 'llama-3.3-70b-versatile');
 define('GROQ_FAST_MODEL', 'llama-3.1-8b-instant');
-
 
 define('APP_NAME', 'QuestBank');
 define('APP_INSTITUTION', 'Holy Cross College - Pampanga');

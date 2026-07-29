@@ -9,7 +9,6 @@ requireRole('student');
 $pdo = getDBConnection();
 $student_id = getCurrentUserId();
 
-
 try {
     $stmt = $pdo->prepare("
         SELECT u.fullname, u.email, s.student_number, s.course, s.section 
@@ -27,7 +26,6 @@ $fullname = $student['fullname'] ?? 'Ashley Nicole Gutierrez';
 $student_no = !empty($student['student_number']) ? $student['student_number'] : '23-2149184';
 $course_section = ($student['course'] ?? 'BSCE') . ' - ' . ($student['section'] ?? '4A');
 $date_issued = date('F d, Y');
-
 
 $selected_term = trim($_GET['term'] ?? 'All');
 $single_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
@@ -77,7 +75,6 @@ try {
     $results = [];
 }
 
-
 if (empty($results)) {
     $allFallbacks = [
         [
@@ -123,7 +120,6 @@ if (empty($results)) {
     }
 }
 
-
 $total_exams = count($results);
 $total_pct = 0;
 foreach ($results as $r) {
@@ -131,7 +127,6 @@ foreach ($results as $r) {
 }
 $avg_gpa = $total_exams > 0 ? round($total_pct / $total_exams, 1) : 0.0;
 $overall_status = $avg_gpa >= 75.0 ? 'PASSED (SATISFACTORY)' : 'NEEDS IMPROVEMENT';
-
 
 if (!class_exists('TranscriptPDF')) {
     class TranscriptPDF extends FPDF {
@@ -171,11 +166,9 @@ if (!class_exists('TranscriptPDF')) {
     }
 }
 
-
 $pdf = new TranscriptPDF('P', 'mm', 'A4');
 $pdf->SetMargins(15, 15, 15);
 $pdf->AddPage();
-
 
 $pdf->SetFillColor(255, 247, 237); 
 $pdf->SetDrawColor(254, 215, 170);
@@ -207,12 +200,10 @@ $pdf->SetX(20);
 $pdf->Cell(85, 5, $course_section, 0, 0, 'L');
 $pdf->Cell(85, 5, $date_issued, 0, 1, 'L');
 
-
 $pdf->SetY(67);
 $pdf->SetFont('Arial', 'B', 10);
 $pdf->SetTextColor(28, 25, 23);
 $pdf->Cell(0, 6, 'ACADEMIC ASSESSMENT RECORD MATRIX', 0, 1, 'L');
-
 
 $pdf->SetFillColor(41, 37, 36); 
 $pdf->SetTextColor(255, 255, 255);
@@ -222,7 +213,6 @@ $pdf->Cell(25, 7, 'TERM', 1, 0, 'C', true);
 $pdf->Cell(25, 7, 'RAW SCORE', 1, 0, 'C', true);
 $pdf->Cell(25, 7, 'GRADE %', 1, 0, 'C', true);
 $pdf->Cell(30, 7, 'STATUS', 1, 1, 'C', true);
-
 
 $pdf->SetFont('Arial', '', 8);
 $pdf->SetTextColor(28, 25, 23);
@@ -252,7 +242,6 @@ foreach ($results as $row) {
 
 $pdf->Ln(6);
 
-
 $summaryY = $pdf->GetY();
 $pdf->SetFillColor(245, 245, 244);
 $pdf->SetDrawColor(229, 229, 224);
@@ -278,7 +267,6 @@ $pdf->SetFont('Arial', 'B', 8.5);
 $pdf->SetTextColor(109, 40, 217); 
 $pdf->Cell(50, 6, 'Groq Llama-3 AI Vision Engine', 0, 1, 'L');
 
-
 $pdf->SetY(230);
 $pdf->SetFont('Arial', 'B', 8);
 $pdf->SetTextColor(120, 113, 108);
@@ -292,6 +280,5 @@ $pdf->SetTextColor(28, 25, 23);
 $pdf->Cell(85, 4, 'ACADEMIC DEPARTMENT REGISTRAR', 0, 0, 'C');
 $pdf->Cell(10, 4, '', 0, 0);
 $pdf->Cell(85, 4, 'QUESTBANK AUTOMATED AI EVALUATOR', 0, 1, 'C');
-
 
 $pdf->Output('I', 'QuestBank_Official_Transcript.pdf');

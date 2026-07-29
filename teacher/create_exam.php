@@ -9,7 +9,6 @@ $pdo = getDBConnection();
 $success_msg = "";
 $error_msg = "";
 
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_exam'])) {
     validateCSRFToken();
     $title = trim($_POST['title']);
@@ -55,7 +54,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_exam'])) {
         $error_msg = "Please fill in all details and add at least one question.";
     }
 }
-
 
 $stmtExams = $pdo->prepare("SELECT * FROM exams WHERE teacher_id = ? ORDER BY id DESC");
 $stmtExams->execute([$_SESSION['user_id']]);

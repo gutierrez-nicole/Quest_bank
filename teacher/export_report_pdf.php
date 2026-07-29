@@ -9,7 +9,6 @@ requireRole('teacher');
 $pdo = getDBConnection();
 $teacher_id = $_SESSION['user_id'];
 
-
 try {
     $stmtT = $pdo->prepare("SELECT fullname, email FROM users WHERE id = ?");
     $stmtT->execute([$teacher_id]);
@@ -19,7 +18,6 @@ try {
 }
 $teacher_name = $teacher['fullname'] ?? 'Prof. Jolas';
 $date_issued = date('F d, Y');
-
 
 $selected_exam = trim($_GET['exam_title'] ?? 'all');
 
@@ -69,7 +67,6 @@ $avg = floatval($stats['avg_percentage'] ?? 0);
 $max = floatval($stats['max_percentage'] ?? 0);
 $pass_rate = $total > 0 ? round(($pass / $total) * 100, 1) : 0.0;
 
-
 if (empty($submissions)) {
     $submissions = [
         [
@@ -111,7 +108,6 @@ if (empty($submissions)) {
     $max = 95.0;
 }
 
-
 if (!class_exists('FacultyReportPDF')) {
     class FacultyReportPDF extends FPDF {
         function Header() {
@@ -150,11 +146,9 @@ if (!class_exists('FacultyReportPDF')) {
     }
 }
 
-
 $pdf = new FacultyReportPDF('P', 'mm', 'A4');
 $pdf->SetMargins(15, 15, 15);
 $pdf->AddPage();
-
 
 $pdf->SetFillColor(255, 247, 237); 
 $pdf->SetDrawColor(254, 215, 170);
@@ -185,7 +179,6 @@ $pdf->SetTextColor(28, 25, 23);
 $pdf->SetX(20);
 $pdf->Cell(85, 5, 'BS Civil Engineering', 0, 0, 'L');
 $pdf->Cell(85, 5, $date_issued, 0, 1, 'L');
-
 
 $pdf->SetY(67);
 $pdf->SetFont('Arial', 'B', 9.5);
@@ -229,12 +222,10 @@ foreach ($boxes as $idx => $b) {
 
 $pdf->SetY($kpiY + 20);
 
-
 $pdf->SetFont('Arial', 'B', 9.5);
 $pdf->SetTextColor(28, 25, 23);
 $pdf->Cell(0, 5, 'STUDENT GRADE SUBMISSIONS MASTER LIST', 0, 1, 'L');
 $pdf->Ln(2);
-
 
 $pdf->SetFillColor(41, 37, 36); 
 $pdf->SetTextColor(255, 255, 255);
@@ -245,7 +236,6 @@ $pdf->Cell(20, 7, 'FORMAT', 1, 0, 'C', true);
 $pdf->Cell(15, 7, 'SCORE', 1, 0, 'C', true);
 $pdf->Cell(15, 7, 'GRADE %', 1, 0, 'C', true);
 $pdf->Cell(15, 7, 'STATUS', 1, 1, 'C', true);
-
 
 $pdf->SetFont('Arial', '', 7.5);
 $pdf->SetTextColor(28, 25, 23);
@@ -274,7 +264,6 @@ foreach ($submissions as $row) {
     $fill = !$fill;
 }
 
-
 $pdf->SetY(232);
 $pdf->SetFont('Arial', 'B', 8);
 $pdf->SetTextColor(120, 113, 108);
@@ -288,6 +277,5 @@ $pdf->SetTextColor(28, 25, 23);
 $pdf->Cell(85, 4, 'FACULTY INSTRUCTOR / PROFESSOR', 0, 0, 'C');
 $pdf->Cell(10, 4, '', 0, 0);
 $pdf->Cell(85, 4, 'CIVIL ENGINEERING DEPARTMENT CHAIR', 0, 1, 'C');
-
 
 $pdf->Output('I', 'QuestBank_Faculty_Analytics_Report.pdf');

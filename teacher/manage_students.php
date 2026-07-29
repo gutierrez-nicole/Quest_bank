@@ -10,7 +10,6 @@ $error_msg = "";
 
 $teacher_id = getCurrentUserId();
 
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['handle_request'])) {
     validateCSRFToken();
     $request_id = intval($_POST['request_id'] ?? 0);
@@ -50,7 +49,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['handle_request'])) {
     }
 }
 
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_section'])) {
     validateCSRFToken();
     $section_name = trim($_POST['section_name']);
@@ -69,7 +67,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_section'])) {
         $error_msg = "Please fill in all required section details.";
     }
 }
-
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_student'])) {
     validateCSRFToken();
@@ -91,16 +88,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_student'])) {
     }
 }
 
-
 $stmtSec = $pdo->prepare("SELECT * FROM sections WHERE teacher_id = ? ORDER BY id DESC");
 $stmtSec->execute([$teacher_id]);
 $sections = $stmtSec->fetchAll(PDO::FETCH_ASSOC);
 
-
 $stmtPending = $pdo->prepare("SELECT * FROM student_requests WHERE teacher_id = ? AND status = 'pending' ORDER BY id DESC");
 $stmtPending->execute([$teacher_id]);
 $pending_requests = $stmtPending->fetchAll(PDO::FETCH_ASSOC);
-
 
 $search_query = trim($_GET['search_student'] ?? '');
 if (!empty($search_query)) {

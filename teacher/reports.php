@@ -8,9 +8,7 @@ $pdo = getDBConnection();
 
 $teacher_id = $_SESSION['user_id'];
 
-
 $selected_exam = $_GET['exam_title'] ?? 'all';
-
 
 if ($selected_exam !== 'all') {
     $stmtStats = $pdo->prepare("
@@ -49,11 +47,9 @@ if ($selected_exam !== 'all') {
 $stats = $stmtStats->fetch(PDO::FETCH_ASSOC);
 $submissions = $stmtList->fetchAll(PDO::FETCH_ASSOC);
 
-
 $stmtExams = $pdo->prepare("SELECT DISTINCT exam_title FROM exam_submissions WHERE teacher_id = ?");
 $stmtExams->execute([$teacher_id]);
 $exam_options = $stmtExams->fetchAll(PDO::FETCH_COLUMN);
-
 
 $total = intval($stats['total_students'] ?? 0);
 $pass = intval($stats['total_pass'] ?? 0);

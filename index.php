@@ -1,10 +1,8 @@
 <?php
 
-
 require_once __DIR__ . '/app/database.php';
 require_once __DIR__ . '/app/session.php';
 require_once __DIR__ . '/includes/security.php';
-
 
 if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
     if ($_SESSION['role'] === 'student') header("Location: student/dashboard.php");
@@ -17,7 +15,6 @@ $pdo = getDBConnection();
 $error_msg = "";
 $success_msg = "";
 $active_form = "login";
-
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     validateCSRFToken();

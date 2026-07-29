@@ -1,28 +1,25 @@
 <?php
-require_once __DIR__ . '/../app/database.php';
-require_once __DIR__ . '/../app/session.php';
-require_once __DIR__ . '/../includes/security.php';
+require_once __DIR__ . '/../app/bootstrap.php';
 require_once __DIR__ . '/../app/fpdf.php';
 
-requireRole('admin');
-$pdo = getDBConnection();
+AuthService::enforceRole('admin');
 
 try {
-    $evaluations = $pdo->query("SELECT * FROM iso_evaluations ORDER BY id DESC")->fetchAll(PDO::FETCH_ASSOC);
-
+    $evaluations = ISOService::getAllEvaluations();
+    $rawMeans = ISOService::getCharacteristicMeans();
     $criteria_means = [
-        'a. Functional Suitability' => floatval($pdo->query("SELECT AVG(functional_suitability) FROM iso_evaluations")->fetchColumn() ?: 3.94),
-        'b. Performance Efficiency' => floatval($pdo->query("SELECT AVG(performance_efficiency) FROM iso_evaluations")->fetchColumn() ?: 3.88),
-        'c. Compatibility'          => floatval($pdo->query("SELECT AVG(compatibility) FROM iso_evaluations")->fetchColumn() ?: 3.92),
-        'd. Interaction Capability' => floatval($pdo->query("SELECT AVG(interaction_capability) FROM iso_evaluations")->fetchColumn() ?: 3.96),
-        'e. Reliability'            => floatval($pdo->query("SELECT AVG(reliability) FROM iso_evaluations")->fetchColumn() ?: 3.91),
-        'f. Security'               => floatval($pdo->query("SELECT AVG(security) FROM iso_evaluations")->fetchColumn() ?: 3.95),
-        'g. Maintainability'        => floatval($pdo->query("SELECT AVG(maintainability) FROM iso_evaluations")->fetchColumn() ?: 3.90),
-        'h. Flexibility'            => floatval($pdo->query("SELECT AVG(flexibility) FROM iso_evaluations")->fetchColumn() ?: 3.85),
-        'i. Safety'                 => floatval($pdo->query("SELECT AVG(safety) FROM iso_evaluations")->fetchColumn() ?: 3.96),
+        'a. Functional Suitability' => $rawMeans['functional_suitability'],
+        'b. Performance Efficiency' => $rawMeans['performance_efficiency'],
+        'c. Compatibility'          => $rawMeans['compatibility'],
+        'd. Interaction Capability' => $rawMeans['interaction_capability'],
+        'e. Reliability'            => $rawMeans['reliability'],
+        'f. Security'               => $rawMeans['security'],
+        'g. Maintainability'        => $rawMeans['maintainability'],
+        'h. Flexibility'            => $rawMeans['flexibility'],
+        'i. Safety'                 => $rawMeans['safety'],
     ];
 
-    $overall_weighted_mean = array_sum($criteria_means) / count($criteria_means);
+    $overall_weighted_mean = ISOService::getOverallWeightedMean();
 
 } catch (PDOException $e) {
     die("Database report error: " . $e->getMessage());
@@ -70,7 +67,6 @@ $pdf->AddPage();
 $pdf->SetMargins(15, 15, 15);
 $pdf->SetAutoPageBreak(true, 20);
 
-
 $pdf->SetFillColor(255, 247, 237);
 $pdf->SetDrawColor(251, 146, 60);
 $pdf->Rect(15, 32, 180, 24, 'DF');
@@ -96,7 +92,6 @@ $pdf->SetTextColor(16, 185, 129);
 $pdf->Cell(80, 4, getPdfInterpretation($overall_weighted_mean), 0, 1, 'R');
 
 $pdf->Ln(15);
-
 
 $pdf->SetFont('Helvetica', 'B', 10);
 $pdf->SetTextColor(31, 41, 55);
@@ -133,7 +128,6 @@ foreach ($criteria_means as $charName => $score) {
 }
 
 $pdf->Ln(6);
-
 
 $pdf->SetFont('Helvetica', 'B', 10);
 $pdf->SetTextColor(31, 41, 55);
@@ -173,7 +167,6 @@ if (!empty($evaluations)) {
 }
 
 $pdf->Ln(10);
-
 
 $pdf->SetFont('Helvetica', 'B', 8);
 $pdf->SetTextColor(75, 85, 99);
