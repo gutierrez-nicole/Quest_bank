@@ -1,10 +1,7 @@
 <?php
-require_once __DIR__ . '/../app/database.php';
-require_once __DIR__ . '/../app/session.php';
-require_once __DIR__ . '/../includes/security.php';
-require_once __DIR__ . '/../app/services/GroqService.php';
+require_once __DIR__ . '/../app/bootstrap.php';
 
-requireRole('teacher');
+AuthService::enforceRole('teacher');
 $pdo = getDBConnection();
 
 try {

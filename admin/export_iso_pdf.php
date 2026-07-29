@@ -21,8 +21,10 @@ try {
 
     $overall_weighted_mean = ISOService::getOverallWeightedMean();
 
-} catch (PDOException $e) {
-    die("Database report error: " . $e->getMessage());
+} catch (Exception $e) {
+    error_log("Export ISO PDF error: " . $e->getMessage());
+    http_response_code(500);
+    die("A database error occurred while generating the ISO PDF report.");
 }
 
 function getPdfInterpretation($score) {

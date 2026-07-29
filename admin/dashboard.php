@@ -1,9 +1,7 @@
 <?php
-require_once __DIR__ . '/../app/database.php';
-require_once __DIR__ . '/../app/session.php';
-require_once __DIR__ . '/../includes/security.php';
+require_once __DIR__ . '/../app/bootstrap.php';
 
-requireRole('admin');
+AuthService::enforceRole('admin');
 $pdo = getDBConnection();
 
 try {
