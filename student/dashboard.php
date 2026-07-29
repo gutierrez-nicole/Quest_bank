@@ -9,7 +9,7 @@ $pdo = getDBConnection();
 try {
     $student_id = getCurrentUserId();
 
-    // AJAX Handler for Submitting Online Exams
+    
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'submit_online_exam') {
         header('Content-Type: application/json');
         $exam_id = intval($_POST['exam_id'] ?? 0);
@@ -62,7 +62,7 @@ try {
         }
     }
 
-    // ==================== 1. STUDENT PROFILE INFO ====================
+    
     $stmt = $pdo->prepare("
         SELECT u.fullname, u.username, u.email, s.student_number, s.course, s.year_level, s.section 
         FROM users u 
@@ -72,7 +72,7 @@ try {
     $stmt->execute([$student_id]);
     $student = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    // Fallback info kung sakaling wala pang details sa database
+    
     if (!$student || empty($student['fullname'])) {
         $student = [
             'fullname' => $_SESSION['username'] ?? 'Student User',
@@ -85,7 +85,7 @@ try {
         ];
     }
 
-    // ==================== 2. AVERAGE SCORE ====================
+    
     $average_score = 0.0;
     try {
         $stmt = $pdo->prepare("
@@ -100,7 +100,7 @@ try {
         $average_score = "0.0";
     }
 
-    // ==================== 3. PASSING RATE ====================
+    
     $passing_rate = 0.0;
     try {
         $stmt = $pdo->prepare("
@@ -122,7 +122,7 @@ try {
         $passing_rate = "0.0";
     }
 
-    // ==================== 4. EXAMS COMPLETED ====================
+    
     $exams_completed = 0;
     try {
         $stmt = $pdo->prepare("
@@ -136,10 +136,10 @@ try {
         $exams_completed = 0;
     }
 
-    // ==================== 5. CLASS AVERAGE ====================
+    
     $class_average = 0.0;
     try {
-        // Get class average from same course/year/section
+        
         $stmt = $pdo->prepare("
             SELECT AVG(es.percentage) 
             FROM exam_submissions es
@@ -158,7 +158,7 @@ try {
         $class_average = "0.0";
     }
 
-    // ==================== 6. STRONG SUBJECTS (Top 2) ====================
+    
     $strong_subjects = [];
     try {
         $stmt = $pdo->prepare("
@@ -178,7 +178,7 @@ try {
         $strong_subjects = [];
     }
 
-    // Default if no data
+    
     if (empty($strong_subjects)) {
         $strong_subjects = [
             ['subject' => 'Web Development & REST APIs', 'avg_score' => 94.5],
@@ -186,7 +186,7 @@ try {
         ];
     }
 
-    // ==================== 7. WEAK SUBJECTS (Bottom 2) ====================
+    
     $weak_subjects = [];
     try {
         $stmt = $pdo->prepare("
@@ -206,7 +206,7 @@ try {
         $weak_subjects = [];
     }
 
-    // Default if no data
+    
     if (empty($weak_subjects)) {
         $weak_subjects = [
             ['subject' => 'Advanced System Architecture', 'avg_score' => 72.0],
@@ -214,7 +214,7 @@ try {
         ];
     }
 
-    // ==================== 8. PENDING EXAMS ====================
+    
     try {
         $stmt = $pdo->prepare("
             SELECT 
@@ -239,7 +239,7 @@ try {
         $pending_exams = [];
     }
 
-    // ==================== 9. BAR CHART: SUBJECT PERFORMANCE ====================
+    
     $chart_subjects = [];
     $chart_scores = [];
     
@@ -265,16 +265,16 @@ try {
             }
         }
     } catch (PDOException $e) {
-        // Fallback
+        
     }
     
-    // Default if no data
+    
     if (empty($chart_subjects)) {
         $chart_subjects = ['Web Dev', 'Database', 'SysArch', 'Discrete Math', 'DevOps'];
         $chart_scores = [94, 89, 72, 75, 90];
     }
 
-    // ==================== 10. LINE CHART: SCORE TREND ====================
+    
     $chart_exam_labels = [];
     $chart_exam_scores = [];
     
@@ -300,17 +300,17 @@ try {
             }
         }
     } catch (PDOException $e) {
-        // Fallback
+        
     }
     
-    // Default if no data
+    
     if (empty($chart_exam_labels)) {
         $chart_exam_labels = ['Quiz 1', 'Quiz 2', 'Midterm', 'Quiz 3', 'Finals'];
         $chart_exam_scores = [78, 85, 90, 88, 94];
     }
 
-    // ==================== 11. PIE CHART: TOPIC MASTERY ====================
-    $mastery_data = [0, 0, 0]; // [Mastered, Review Needed, Unassessed]
+    
+    $mastery_data = [0, 0, 0]; 
     
     try {
         $stmt = $pdo->prepare("
@@ -332,19 +332,19 @@ try {
             ];
         }
     } catch (PDOException $e) {
-        // Fallback
+        
     }
     
-    // Default if no data
+    
     if (array_sum($mastery_data) == 0) {
         $mastery_data = [65, 25, 10];
     }
 
-    // ==================== 12. RADAR CHART: SKILLS MATRIX ====================
-    $skills_data = [0, 0, 0, 0, 0]; // [Logic, Syntax, Architecture, Speed, Theory]
+    
+    $skills_data = [0, 0, 0, 0, 0]; 
     
     try {
-        // Calculate based on exam categories or types
+        
         $stmt = $pdo->prepare("
             SELECT AVG(percentage) as avg_score
             FROM exam_submissions
@@ -354,7 +354,7 @@ try {
         $avg = $stmt->fetchColumn();
         
         if ($avg) {
-            // Distribute scores with some variation
+            
             $base = (float)$avg;
             $skills_data = [
                 round($base + rand(-5, 10), 0),
@@ -365,15 +365,15 @@ try {
             ];
         }
     } catch (PDOException $e) {
-        // Fallback
+        
     }
     
-    // Default if no data
+    
     if (array_sum($skills_data) == 0) {
         $skills_data = [85, 92, 70, 88, 80];
     }
 
-    // ==================== 13. EXAM RESULTS TABLE (Docx Figure 15) ====================
+    
     $selected_term = trim($_GET['term'] ?? 'All');
     $exam_results = [];
     try {
@@ -419,7 +419,7 @@ try {
         $exam_results = [];
     }
 
-    // ==================== 14. EXAM HISTORY ====================
+    
     $exam_history = [];
     try {
         $stmt = $pdo->prepare("
@@ -439,7 +439,7 @@ try {
         $exam_history = [];
     }
 
-    // ==================== 15. NOTIFICATIONS ====================
+    
     $notifications = [];
     try {
         $stmt = $pdo->prepare("
@@ -458,7 +458,7 @@ try {
         $notifications = [];
     }
 
-    // Default UX Fallback Notifications if empty
+    
     if (empty($notifications)) {
         $notifications = [
             [
@@ -490,13 +490,13 @@ try {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QuestBank - Student AI Dashboard</title>
-    <!-- Tailwind CSS CDN -->
+    
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- FontAwesome Icons -->
+    
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Chart.js CDN for Animated Analytics -->
+    
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Google Fonts -->
+    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -545,13 +545,13 @@ try {
 </head>
 <body class="bg-[#f3f4f6] dark:bg-[#09090b] text-stone-800 dark:text-stone-100 min-h-screen flex transition-colors duration-300">
 
-    <!-- ================= SIDEBAR NAVIGATION ================= -->
+    
     <?php require_once __DIR__ . '/../includes/student_sidebar.php'; ?>
 
-    <!-- ================= MAIN CONTENT CONTAINER ================= -->
+    
     <main class="flex-grow flex flex-col min-w-0 ml-16 lg:ml-64 min-h-screen">
         
-        <!-- TOP NAV HEADERBAR -->
+        
         <header class="bg-white dark:bg-stone-900 border-b border-stone-200 dark:border-stone-800 px-6 py-4 flex items-center justify-between sticky top-0 z-20 shadow-xs">
             <div class="flex items-center gap-3">
                 <h2 class="text-base md:text-lg font-extrabold text-stone-800 dark:text-stone-100">
@@ -560,13 +560,13 @@ try {
             </div>
             
             <div class="flex items-center gap-3 md:gap-4">
-                <!-- Dark Mode Toggle Button -->
+                
                 <button onclick="toggleDarkMode()" class="w-10 h-10 rounded-xl border border-stone-200 dark:border-stone-800 flex items-center justify-center text-stone-500 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition-all">
                     <i class="fa-solid fa-moon text-sm dark:hidden"></i>
                     <i class="fa-solid fa-sun text-sm hidden dark:block text-amber-400"></i>
                 </button>
 
-                <!-- Notifications Button -->
+                
                 <button onclick="switchTab('notifications')" class="w-10 h-10 rounded-xl border border-stone-200 dark:border-stone-800 flex items-center justify-center text-stone-500 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition-all relative">
                     <i class="fa-solid fa-bell text-sm"></i>
                     <?php if (!empty($notifications)): ?>
@@ -575,7 +575,7 @@ try {
                     <?php endif; ?>
                 </button>
                 
-                <!-- Quick Student Avatar Badge -->
+                
                 <div class="flex items-center gap-3 pl-3 border-l border-stone-200 dark:border-stone-800">
                     <div class="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-950/60 text-orange-600 font-black flex items-center justify-center shadow-inner text-sm">
                         <?php echo strtoupper(substr($student['fullname'], 0, 2)); ?>
@@ -588,13 +588,13 @@ try {
             </div>
         </header>
 
-        <!-- CONTENT BODY WRAPPER -->
+        
         <div class="p-6 md:p-8 space-y-6">
 
-            <!-- ================= 1. TAB: STUDENT DASHBOARD ================= -->
+            
             <div id="tab-dashboard" class="tab-content active space-y-6">
                 
-                <!-- Student Card Information -->
+                
                 <div class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl p-6 shadow-sm flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 animate-card-hover">
                     <div class="flex items-center gap-5">
                         <div class="w-16 h-16 rounded-2xl bg-orange-gradient text-white flex items-center justify-center font-black text-2xl shadow-lg shadow-orange-500/20">
@@ -621,7 +621,7 @@ try {
                     </div>
                 </div>
 
-                <!-- QUICK STATS CARDS -->
+                
                 <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
                     <div class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-4 rounded-2xl shadow-sm animate-card-hover flex items-center justify-between">
                         <div>
@@ -665,7 +665,7 @@ try {
                     </div>
                 </div>
 
-                <!-- STRENGTHS AND WEAKNESSES SUMMARY -->
+                
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div class="bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/50 rounded-2xl p-5 shadow-sm space-y-3">
                         <div class="flex items-center justify-between">
@@ -700,7 +700,7 @@ try {
                     </div>
                 </div>
 
-                <!-- ACTIVE EXAMS LAUNCHER -->
+                
                 <div class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl p-6 shadow-sm space-y-4">
                     <div class="flex items-center justify-between border-b border-stone-100 dark:border-stone-800 pb-3">
                         <h3 class="text-sm font-extrabold text-stone-800 dark:text-stone-100 flex items-center gap-2">
@@ -734,7 +734,7 @@ try {
                     </div>
                 </div>
 
-                <!-- SEMESTER EXAM RESULTS & EVALUATIONS (Docx Figure 15) -->
+                
                 <div id="exam-results-section" class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl shadow-sm overflow-hidden p-6 space-y-4">
                     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-stone-100 dark:border-stone-800 pb-4">
                         <div>
@@ -748,7 +748,7 @@ try {
                         </a>
                     </div>
 
-                    <!-- SEMESTER TERM FILTER BUTTONS (Prelim, Midterm, Finals - Docx Figure 15) -->
+                    
                     <div class="flex items-center gap-2 flex-wrap">
                         <span class="text-xs font-bold text-stone-400 uppercase mr-2"><i class="fa-solid fa-filter text-orange-500 mr-1"></i> Filter Term:</span>
                         <a href="dashboard.php?term=All#exam-results-section" class="px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all <?php echo ($selected_term === 'All') ? 'bg-orange-600 text-white shadow-sm' : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 hover:bg-stone-200'; ?>">
@@ -822,12 +822,12 @@ try {
                 </div>
             </div>
 
-            <!-- ================= 2. TAB: ONLINE EXAM INTERFACE ================= -->
+            
             <div id="tab-take-exam" class="tab-content no-copy space-y-6">
-                <!-- EXAM INTERFACE CONTAINER -->
+                
                 <div class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl shadow-xl overflow-hidden">
                     
-                    <!-- EXAM HEADERBAR WITH TIMER -->
+                    
                     <div class="bg-stone-950 text-stone-100 p-4 md:p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-stone-800">
                         <div>
                             <span class="bg-orange-600 text-white text-[10px] font-black px-2.5 py-0.5 rounded-md uppercase">Secured Proctored Session</span>
@@ -839,7 +839,7 @@ try {
                                 <i class="fa-solid fa-expand mr-1"></i> Fullscreen Mode
                             </button>
                             
-                            <!-- TIMER DISPLAY -->
+                            
                             <div class="bg-stone-900 border border-stone-800 px-4 py-2 rounded-xl flex items-center gap-2">
                                 <i class="fa-solid fa-clock text-orange-500 animate-pulse text-sm"></i>
                                 <span id="timer_display" class="font-mono font-black text-base text-orange-500">59:59</span>
@@ -847,7 +847,7 @@ try {
                         </div>
                     </div>
 
-                    <!-- PROGRESS BAR & AUTO SAVE BANNER -->
+                    
                     <div class="bg-stone-50 dark:bg-stone-800/40 px-6 py-2 border-b border-stone-200 dark:border-stone-800 flex justify-between items-center text-xs">
                         <div class="flex items-center gap-2 text-emerald-600 font-bold text-[11px]">
                             <i class="fa-solid fa-cloud-check"></i> <span id="auto_save_text">Answers Auto-Saved locally</span>
@@ -859,7 +859,7 @@ try {
 
                     <div class="p-6 md:p-8 grid grid-cols-1 lg:grid-cols-4 gap-8">
                         
-                        <!-- MAIN QUESTION BOARD -->
+                        
                         <div class="lg:col-span-3 space-y-6">
                             <div class="flex items-center justify-between">
                                 <span class="text-xs font-extrabold uppercase text-orange-500 tracking-wider">Question <span id="current_q_num">1</span> of 5</span>
@@ -871,7 +871,7 @@ try {
                                     Which of the following describes the practice of continuous integration (CI) in software development?
                                 </h4>
 
-                                <!-- CHOICES CONTAINER -->
+                                
                                 <div id="choices_container" class="space-y-3 pt-2">
                                     <label class="flex items-center gap-3 p-4 border border-stone-200 dark:border-stone-800 rounded-xl hover:border-orange-500 dark:hover:border-orange-500 cursor-pointer transition-all bg-stone-50/50 dark:bg-stone-800/20">
                                         <input type="radio" name="exam_q1" value="A" class="accent-orange-600 w-4 h-4">
@@ -892,7 +892,7 @@ try {
                                 </div>
                             </div>
 
-                            <!-- CONTROLS & REVIEW -->
+                            
                             <div class="pt-6 border-t border-stone-100 dark:border-stone-800 flex justify-between items-center">
                                 <button id="btn_prev" onclick="prevQuestion()" class="bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-300 font-bold text-xs px-4 py-2.5 rounded-xl transition-all opacity-50 cursor-not-allowed" disabled>
                                     <i class="fa-solid fa-arrow-left mr-1"></i> Previous
@@ -903,7 +903,7 @@ try {
                             </div>
                         </div>
 
-                        <!-- SIDE PANEL QUESTION NAVIGATION GRID -->
+                        
                         <div class="space-y-4 border-l border-stone-100 dark:border-stone-800 pl-0 lg:pl-6">
                             <h5 class="text-xs font-extrabold uppercase text-stone-500">Question Navigation</h5>
                             <div class="grid grid-cols-5 gap-2" id="q_nav_grid">
@@ -925,7 +925,7 @@ try {
                 </div>
             </div>
 
-            <!-- ================= 3. TAB: EXAM RESULTS (Docx Figure 15) ================= -->
+            
             <div id="tab-exam-results" class="tab-content space-y-6">
                 <div class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl shadow-sm overflow-hidden p-6 space-y-4">
                     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-stone-100 dark:border-stone-800 pb-4">
@@ -940,7 +940,7 @@ try {
                         </a>
                     </div>
 
-                    <!-- SEMESTER TERM FILTER BUTTONS (Prelim, Midterm, Finals - Docx Figure 15) -->
+                    
                     <div class="flex items-center gap-2 flex-wrap">
                         <span class="text-xs font-bold text-stone-400 uppercase mr-2"><i class="fa-solid fa-filter text-orange-500 mr-1"></i> Filter Term:</span>
                         <a href="dashboard.php?term=All" class="px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all <?php echo ($selected_term === 'All') ? 'bg-orange-600 text-white shadow-sm' : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 hover:bg-stone-200'; ?>">
@@ -1014,12 +1014,12 @@ try {
                 </div>
             </div>
 
-            <!-- ================= 4. TAB: FULL ANALYTICS MODULE ================= -->
+            
             <div id="tab-analytics" class="tab-content space-y-6">
-                <!-- ANIMATED CHARTS SECTION -->
+                
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     
-                    <!-- BAR CHART -->
+                    
                     <div class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-5 rounded-2xl shadow-sm">
                         <h4 class="text-xs font-extrabold uppercase text-stone-700 dark:text-stone-200 mb-3">
                             <i class="fa-solid fa-chart-column text-orange-500 mr-1"></i> Subject Performance Analysis (Bar Chart)
@@ -1027,7 +1027,7 @@ try {
                         <div class="h-60 w-full"><canvas id="studentBarChart"></canvas></div>
                     </div>
 
-                    <!-- LINE CHART -->
+                    
                     <div class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-5 rounded-2xl shadow-sm">
                         <h4 class="text-xs font-extrabold uppercase text-stone-700 dark:text-stone-200 mb-3">
                             <i class="fa-solid fa-chart-line text-orange-500 mr-1"></i> Score Trend Progression (Line Chart)
@@ -1035,7 +1035,7 @@ try {
                         <div class="h-60 w-full"><canvas id="studentLineChart"></canvas></div>
                     </div>
 
-                    <!-- PIE CHART -->
+                    
                     <div class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-5 rounded-2xl shadow-sm">
                         <h4 class="text-xs font-extrabold uppercase text-stone-700 dark:text-stone-200 mb-3">
                             <i class="fa-solid fa-chart-pie text-orange-500 mr-1"></i> Topic Mastery Breakdown (Pie Chart)
@@ -1043,7 +1043,7 @@ try {
                         <div class="h-60 w-full flex justify-center"><canvas id="studentPieChart"></canvas></div>
                     </div>
 
-                    <!-- RADAR CHART -->
+                    
                     <div class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-5 rounded-2xl shadow-sm">
                         <h4 class="text-xs font-extrabold uppercase text-stone-700 dark:text-stone-200 mb-3">
                             <i class="fa-solid fa-compass text-orange-500 mr-1"></i> Skills & Strengths Evaluation (Radar Chart)
@@ -1053,7 +1053,7 @@ try {
                 </div>
             </div>
 
-            <!-- ================= 5. TAB: HISTORY ================= -->
+            
             <div id="tab-history" class="tab-content space-y-6">
                 <div class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl p-6 shadow-sm space-y-4">
                     <h3 class="text-sm font-extrabold text-stone-800 dark:text-stone-100 uppercase tracking-wider border-b border-stone-100 dark:border-stone-800 pb-3">
@@ -1080,7 +1080,7 @@ try {
                 </div>
             </div>
 
-            <!-- ================= 6. TAB: NOTIFICATIONS ================= -->
+            
             <div id="tab-notifications" class="tab-content space-y-6">
                 <div class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl p-6 shadow-sm space-y-4">
                     <h3 class="text-sm font-extrabold text-stone-800 dark:text-stone-100 uppercase tracking-wider border-b border-stone-100 dark:border-stone-800 pb-3">
@@ -1125,7 +1125,7 @@ try {
         </div>
     </main>
 
-    <!-- SUBMIT CONFIRMATION MODAL -->
+    
     <div id="submit_modal" class="fixed inset-0 bg-stone-950/70 backdrop-blur-xs hidden items-center justify-center z-50 p-4">
         <div class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-6 rounded-2xl max-w-sm w-full space-y-4 shadow-2xl">
             <h4 class="font-extrabold text-base text-stone-800 dark:text-stone-100">Finalize & Submit Exam?</h4>
@@ -1137,7 +1137,7 @@ try {
         </div>
     </div>
 
-    <!-- LOGOUT CONFIRMATION MODAL -->
+    
     <div id="logout_modal" class="fixed inset-0 bg-stone-950/70 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
         <div class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-6 rounded-2xl max-w-sm w-full space-y-4 shadow-2xl animate-fadeIn">
             <div class="flex items-center gap-3">
@@ -1160,7 +1160,7 @@ try {
         </div>
     </div>
 
-    <!-- JAVASCRIPT LOGIC CONTROLLERS -->
+    
     <script>
         // LOGOUT MODAL FUNCTIONS
         function openLogoutModal() {

@@ -1,11 +1,11 @@
 <?php
-// index.php - QuestBank Main Authentication Gateway & Registration Portal
+
 
 require_once __DIR__ . '/app/database.php';
 require_once __DIR__ . '/app/session.php';
 require_once __DIR__ . '/includes/security.php';
 
-// Redirect user if already logged in
+
 if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
     if ($_SESSION['role'] === 'student') header("Location: student/dashboard.php");
     elseif ($_SESSION['role'] === 'teacher') header("Location: teacher/dashboard.php");
@@ -18,11 +18,11 @@ $error_msg = "";
 $success_msg = "";
 $active_form = "login";
 
-// Form Processing
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     validateCSRFToken();
     
-    // 1. LOGIN LOGIC
+    
     if (isset($_POST['action_login'])) {
         $email = trim($_POST['email'] ?? '');
         $password = trim($_POST['password'] ?? '');
@@ -49,7 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // 2. REGISTRATION LOGIC
+    
     if (isset($_POST['action_register'])) {
         $active_form = "register"; 
         
@@ -112,11 +112,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QuestBank - Login & Portal Access</title>
-    <!-- Tailwind CSS CDN -->
+    
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- FontAwesome Icons -->
+    
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Google Fonts -->
+    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght=300;400;500;600;700;800&family=Playfair+Display:ital,wght=0,600;1,600&display=swap" rel="stylesheet">
@@ -160,7 +160,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body class="bg-[#f3f4f6] dark:bg-[#09090b] text-stone-800 dark:text-stone-100 h-screen overflow-hidden flex flex-col md:flex-row transition-colors duration-300">
 
-    <!-- LEFT SIDE: BRANDING -->
+    
     <div class="bg-stone-950 text-white w-full md:w-5/12 lg:w-1/2 p-6 md:p-12 flex flex-col justify-between relative overflow-hidden h-1/3 md:h-full flex-shrink-0 border-b md:border-b-0 md:border-r border-stone-800">
         <div class="absolute inset-0 opacity-20 pointer-events-none">
             <div class="absolute -top-10 -left-10 w-96 h-96 rounded-full border border-orange-500/30 blur-xl"></div>
@@ -201,16 +201,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     </div>
 
-    <!-- RIGHT SIDE: AUTH FORMS -->
+    
     <div class="w-full md:w-7/12 lg:w-1/2 flex flex-col justify-center items-center p-6 md:p-12 relative overflow-y-auto custom-scrollbar h-2/3 md:h-full">
         
-        <!-- SKELETON LOADER OVERLAY -->
+        
         <div id="skeleton-overlay" class="hidden absolute inset-0 bg-white/90 dark:bg-stone-950/90 z-50 flex-col items-center justify-center space-y-4 p-8">
             <div class="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
             <p class="text-xs font-bold text-stone-600 dark:text-stone-300">Authenticating credentials...</p>
         </div>
 
-        <!-- NOTIFICATIONS -->
+        
         <div class="w-full max-w-md mb-4 space-y-2">
             <?php if (!empty($error_msg)): ?>
                 <div class="bg-rose-500/10 border border-rose-500/30 p-3 rounded-xl text-xs text-rose-600 dark:text-rose-400 font-semibold flex items-center gap-2">
@@ -225,7 +225,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?php endif; ?>
         </div>
 
-        <!-- 1. LOGIN FORM -->
+        
         <div id="login-box" class="w-full max-w-md space-y-5 form-fade <?php echo ($active_form === 'login') ? '' : 'hidden'; ?>">
             <div>
                 <span class="text-[10px] font-black tracking-widest text-orange-500 uppercase">Faculty & Student Gateway</span>
@@ -270,7 +270,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         </div>
 
-        <!-- 2. REGISTRATION FORM -->
+        
         <div id="register-box" class="w-full max-w-md space-y-4 form-fade overflow-y-auto max-h-[calc(100vh-100px)] custom-scrollbar pr-1 <?php echo ($active_form === 'register') ? '' : 'hidden'; ?>">
             <div>
                 <span class="text-[10px] font-black tracking-widest text-orange-500 uppercase">Create Account</span>
@@ -315,7 +315,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                 </div>
 
-                <!-- STUDENT SPECIFIC FIELDS -->
+                
                 <div id="student-fields" class="hidden space-y-3 border-l-2 border-orange-500 pl-3 py-1">
                     <div class="grid grid-cols-2 gap-3">
                         <div>
@@ -366,7 +366,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
     </div>
 
-    <!-- JS LOGIC CONTROLS -->
+    
     <script>
         function toggleDarkMode() {
             document.documentElement.classList.toggle('dark');

@@ -9,7 +9,7 @@ $pdo = getDBConnection();
 $success_msg = "";
 $error_msg = "";
 
-// Upload File Logic
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' and isset($_POST['upload_material'])) {
     validateCSRFToken();
     $title = trim($_POST['title']);
@@ -59,7 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' and isset($_POST['upload_material'])) 
     }
 }
 
-// Delete File Logic
+
 if (isset($_GET['delete_id'])) {
     $delete_id = intval($_GET['delete_id']);
     $stmtFind = $pdo->prepare("SELECT file_path FROM lesson_materials WHERE id = ? AND teacher_id = ?");
@@ -77,7 +77,7 @@ if (isset($_GET['delete_id'])) {
     }
 }
 
-// Fetch Teacher's Uploaded Materials
+
 $stmtMat = $pdo->prepare("SELECT * FROM lesson_materials WHERE teacher_id = ? ORDER BY id DESC");
 $stmtMat->execute([$_SESSION['user_id']]);
 $materials = $stmtMat->fetchAll(PDO::FETCH_ASSOC);
@@ -115,7 +115,7 @@ $materials = $stmtMat->fetchAll(PDO::FETCH_ASSOC);
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
-            <!-- LEFT COLUMN: UPLOAD FORM -->
+            
             <div class="bg-white border border-stone-200 rounded-2xl p-5 shadow-sm space-y-4 h-fit">
                 <h3 class="text-sm font-bold uppercase tracking-wider text-stone-700 border-b pb-2"><i class="fa-solid fa-cloud-arrow-up text-orange-500 mr-1"></i> Upload New Material</h3>
                 
@@ -147,7 +147,7 @@ $materials = $stmtMat->fetchAll(PDO::FETCH_ASSOC);
                 </form>
             </div>
 
-            <!-- RIGHT COLUMN: MATERIALS REPOSITORY LIST -->
+            
             <div class="lg:col-span-2 bg-white border border-stone-200 rounded-2xl p-6 shadow-sm space-y-4">
                 <div class="flex items-center justify-between border-b pb-3">
                     <h3 class="text-sm font-bold uppercase tracking-wider text-stone-700"><i class="fa-solid fa-folder-open text-orange-500 mr-1"></i> Lesson Repository</h3>

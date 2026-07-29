@@ -30,13 +30,13 @@ try {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QuestBank - Admin AI Console</title>
-    <!-- Tailwind CSS CDN -->
+    
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- FontAwesome for Icons -->
+    
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Chart.js CDN -->
+    
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Google Fonts -->
+    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght=300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -97,13 +97,13 @@ try {
 </head>
 <body class="bg-[#f3f4f6] dark:bg-[#09090b] text-stone-800 dark:text-stone-100 min-h-screen flex transition-colors duration-300">
 
-    <!-- ================= SIDEBAR NAVIGATION ================= -->
+    
     <?php require_once __DIR__ . '/../includes/admin_sidebar.php'; ?>
 
-    <!-- ================= MAIN CONTENT AREA ================= -->
+    
     <main class="flex-grow flex flex-col min-w-0 ml-16 lg:ml-64 min-h-screen">
         
-        <!-- TOP NAVIGATION HEADERBAR -->
+        
         <header class="bg-white dark:bg-stone-900 border-b border-stone-200 dark:border-stone-800 px-6 py-4 flex items-center justify-between sticky top-0 z-20 shadow-xs">
             <div>
                 <h2 class="text-base md:text-lg font-extrabold text-stone-800 dark:text-stone-100">Administrator Command Console</h2>
@@ -111,20 +111,20 @@ try {
             </div>
             
             <div class="flex items-center gap-3 md:gap-4">
-                <!-- Dark Mode Toggle -->
+                
                 <button onclick="toggleDarkMode()" class="w-10 h-10 rounded-xl border border-stone-200 dark:border-stone-800 flex items-center justify-center text-stone-500 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition-all">
                     <i class="fa-solid fa-moon text-sm dark:hidden"></i>
                     <i class="fa-solid fa-sun text-sm hidden dark:block text-amber-400"></i>
                 </button>
 
-                <!-- Notifications Button -->
+                
                 <button class="w-10 h-10 rounded-xl border border-stone-200 dark:border-stone-800 flex items-center justify-center text-stone-500 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition-all relative">
                     <i class="fa-solid fa-bell text-sm"></i>
                     <span class="absolute top-2.5 right-2.5 w-2 h-2 bg-orange-500 rounded-full animate-ping"></span>
                     <span class="absolute top-2.5 right-2.5 w-2 h-2 bg-orange-500 rounded-full"></span>
                 </button>
                 
-                <!-- Admin Avatar Badge -->
+                
                 <div class="flex items-center gap-3 pl-3 border-l border-stone-200 dark:border-stone-800">
                     <div class="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-950/60 text-orange-600 font-black flex items-center justify-center shadow-inner text-sm">
                         AD
@@ -137,10 +137,10 @@ try {
             </div>
         </header>
 
-        <!-- DASHBOARD CONTAINER BODY -->
+        
         <div class="p-6 md:p-8 space-y-6">
 
-            <!-- SKELETON LOADING CONTAINER (Auto Hide via JS) -->
+            
             <div id="skeleton-container" class="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <div class="h-24 skeleton rounded-2xl"></div>
                 <div class="h-24 skeleton rounded-2xl"></div>
@@ -148,10 +148,10 @@ try {
                 <div class="h-24 skeleton rounded-2xl"></div>
             </div>
 
-            <!-- MAIN TAB: MODERN DASHBOARD -->
+            
             <div id="tab-dashboard" class="tab-content active space-y-6">
                 
-                <!-- ANIMATED COUNTER CARDS GRID -->
+                
                 <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-4 rounded-2xl shadow-sm animate-card-hover flex items-center justify-between">
                         <div>
@@ -218,7 +218,7 @@ try {
                     </div>
                 </div>
 
-                <!-- PREDICTION SUMMARY CARD -->
+                
                 <div class="bg-gradient-to-r from-stone-900 to-stone-950 text-white rounded-2xl p-6 shadow-xl border border-stone-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                     <div class="space-y-1">
                         <span class="bg-orange-600 text-white text-[10px] font-black px-2.5 py-0.5 rounded-md uppercase tracking-wider">AI Predictive Insights Model</span>
@@ -230,10 +230,10 @@ try {
                     </button>
                 </div>
 
-                <!-- FULL ANIMATED CHARTS MODULE (Bar, Pie, Line, Area, Radar, Heatmap) -->
+                
                 <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
                     
-                    <!-- 1. BAR CHART -->
+                    
                     <div class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-5 rounded-2xl shadow-sm">
                         <h4 class="text-xs font-extrabold uppercase text-stone-700 dark:text-stone-200 mb-3">
                             <i class="fa-solid fa-chart-column text-orange-500 mr-1.5"></i> Department Passing Rates (Bar Chart)
@@ -241,7 +241,7 @@ try {
                         <div class="h-56 w-full"><canvas id="adminBarChart"></canvas></div>
                     </div>
 
-                    <!-- 2. PIE CHART -->
+                    
                     <div class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-5 rounded-2xl shadow-sm">
                         <h4 class="text-xs font-extrabold uppercase text-stone-700 dark:text-stone-200 mb-3">
                             <i class="fa-solid fa-chart-pie text-orange-500 mr-1.5"></i> Exam Submissions Status (Pie Chart)
@@ -249,7 +249,7 @@ try {
                         <div class="h-56 w-full flex justify-center"><canvas id="adminPieChart"></canvas></div>
                     </div>
 
-                    <!-- 3. LINE CHART -->
+                    
                     <div class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-5 rounded-2xl shadow-sm">
                         <h4 class="text-xs font-extrabold uppercase text-stone-700 dark:text-stone-200 mb-3">
                             <i class="fa-solid fa-chart-line text-orange-500 mr-1.5"></i> Monthly Active Users (Line Chart)
@@ -257,7 +257,7 @@ try {
                         <div class="h-56 w-full"><canvas id="adminLineChart"></canvas></div>
                     </div>
 
-                    <!-- 4. AREA CHART -->
+                    
                     <div class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-5 rounded-2xl shadow-sm">
                         <h4 class="text-xs font-extrabold uppercase text-stone-700 dark:text-stone-200 mb-3">
                             <i class="fa-solid fa-chart-area text-orange-500 mr-1.5"></i> System Storage & OCR Traffic (Area Chart)
@@ -265,7 +265,7 @@ try {
                         <div class="h-56 w-full"><canvas id="adminAreaChart"></canvas></div>
                     </div>
 
-                    <!-- 5. RADAR CHART -->
+                    
                     <div class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-5 rounded-2xl shadow-sm">
                         <h4 class="text-xs font-extrabold uppercase text-stone-700 dark:text-stone-200 mb-3">
                             <i class="fa-solid fa-compass text-orange-500 mr-1.5"></i> AI Accuracy Metrics (Radar Chart)
@@ -273,7 +273,7 @@ try {
                         <div class="h-56 w-full flex justify-center"><canvas id="adminRadarChart"></canvas></div>
                     </div>
 
-                    <!-- 6. HEATMAP (Simulated Matrix Grid) -->
+                    
                     <div class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-5 rounded-2xl shadow-sm space-y-3">
                         <h4 class="text-xs font-extrabold uppercase text-stone-700 dark:text-stone-200">
                             <i class="fa-solid fa-fire text-orange-500 mr-1.5"></i> Peak System Load Density (Heatmap Grid)
@@ -291,7 +291,7 @@ try {
 
                 </div>
 
-                <!-- LATEST ACTIVITIES AUDIT LOG TABLE -->
+                
                 <div class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl shadow-sm overflow-hidden">
                     <div class="p-6 border-b border-stone-100 dark:border-stone-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                         <div>
@@ -340,7 +340,7 @@ try {
         </div>
     </main>
 
-    <!-- LOGOUT CONFIRMATION MODAL -->
+    
     <div id="logout_modal" class="fixed inset-0 bg-stone-950/70 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
         <div class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-6 rounded-2xl max-w-sm w-full space-y-4 shadow-2xl animate-fadeIn">
             <div class="flex items-center gap-3">
@@ -363,7 +363,7 @@ try {
         </div>
     </div>
 
-    <!-- JAVASCRIPT CONTROLLERS & ANIMATED CHART INITIALIZATION -->
+    
     <script>
         // LOGOUT MODAL FUNCTIONS
         function openLogoutModal() {

@@ -1,5 +1,5 @@
 <?php
-// student/export_pdf.php - FPDF Academic Transcript Generator
+
 require_once __DIR__ . '/../app/database.php';
 require_once __DIR__ . '/../app/session.php';
 require_once __DIR__ . '/../includes/security.php';
@@ -9,7 +9,7 @@ requireRole('student');
 $pdo = getDBConnection();
 $student_id = getCurrentUserId();
 
-// 1. Fetch Student Details
+
 try {
     $stmt = $pdo->prepare("
         SELECT u.fullname, u.email, s.student_number, s.course, s.section 
@@ -28,7 +28,7 @@ $student_no = !empty($student['student_number']) ? $student['student_number'] : 
 $course_section = ($student['course'] ?? 'BSCE') . ' - ' . ($student['section'] ?? '4A');
 $date_issued = date('F d, Y');
 
-// 2. Fetch Exam Submissions with Dynamic Term & ID Filtering
+
 $selected_term = trim($_GET['term'] ?? 'All');
 $single_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
@@ -77,7 +77,7 @@ try {
     $results = [];
 }
 
-// Fallback sample results if empty (Includes Prelim, Midterm, & Finals)
+
 if (empty($results)) {
     $allFallbacks = [
         [
@@ -123,7 +123,7 @@ if (empty($results)) {
     }
 }
 
-// Compute Summary Metrics
+
 $total_exams = count($results);
 $total_pct = 0;
 foreach ($results as $r) {
@@ -132,19 +132,19 @@ foreach ($results as $r) {
 $avg_gpa = $total_exams > 0 ? round($total_pct / $total_exams, 1) : 0.0;
 $overall_status = $avg_gpa >= 75.0 ? 'PASSED (SATISFACTORY)' : 'NEEDS IMPROVEMENT';
 
-// 3. Custom FPDF Class Setup
+
 if (!class_exists('TranscriptPDF')) {
     class TranscriptPDF extends FPDF {
         function Header() {
-            // Outer Decorative Double Border
+            
             $this->Rect(5, 5, 200, 287);
             $this->SetLineWidth(0.5);
             $this->Rect(7, 7, 196, 283);
 
-            // Header Title
+            
             $this->SetY(11);
             $this->SetFont('Arial', 'B', 18);
-            $this->SetTextColor(234, 88, 12); // Orange-600
+            $this->SetTextColor(234, 88, 12); 
             $this->Cell(0, 7, 'QUESTBANK ACADEMY', 0, 1, 'C');
             
             $this->SetFont('Arial', 'B', 8.5);
@@ -155,7 +155,7 @@ if (!class_exists('TranscriptPDF')) {
             $this->SetTextColor(28, 25, 23);
             $this->Cell(0, 5, 'OFFICIAL STUDENT EVALUATION TRANSCRIPT', 0, 1, 'C');
             
-            // Orange Separator Line
+            
             $this->SetDrawColor(249, 115, 22);
             $this->SetLineWidth(0.8);
             $this->Line(15, 30, 195, 30);
@@ -171,13 +171,13 @@ if (!class_exists('TranscriptPDF')) {
     }
 }
 
-// 4. Generate PDF Output
+
 $pdf = new TranscriptPDF('P', 'mm', 'A4');
 $pdf->SetMargins(15, 15, 15);
 $pdf->AddPage();
 
-// Student Information Block (Boxed Grid at Y = 35)
-$pdf->SetFillColor(255, 247, 237); // Light Orange Tint
+
+$pdf->SetFillColor(255, 247, 237); 
 $pdf->SetDrawColor(254, 215, 170);
 $pdf->SetLineWidth(0.3);
 $pdf->Rect(15, 34, 180, 27, 'DF');
@@ -207,14 +207,14 @@ $pdf->SetX(20);
 $pdf->Cell(85, 5, $course_section, 0, 0, 'L');
 $pdf->Cell(85, 5, $date_issued, 0, 1, 'L');
 
-// Section Header at Y = 68
+
 $pdf->SetY(67);
 $pdf->SetFont('Arial', 'B', 10);
 $pdf->SetTextColor(28, 25, 23);
 $pdf->Cell(0, 6, 'ACADEMIC ASSESSMENT RECORD MATRIX', 0, 1, 'L');
 
-// Table Headers
-$pdf->SetFillColor(41, 37, 36); // Stone 900
+
+$pdf->SetFillColor(41, 37, 36); 
 $pdf->SetTextColor(255, 255, 255);
 $pdf->SetFont('Arial', 'B', 8);
 $pdf->Cell(75, 7, ' ASSESSMENT & SUBJECT TITLE', 1, 0, 'L', true);
@@ -223,7 +223,7 @@ $pdf->Cell(25, 7, 'RAW SCORE', 1, 0, 'C', true);
 $pdf->Cell(25, 7, 'GRADE %', 1, 0, 'C', true);
 $pdf->Cell(30, 7, 'STATUS', 1, 1, 'C', true);
 
-// Table Rows
+
 $pdf->SetFont('Arial', '', 8);
 $pdf->SetTextColor(28, 25, 23);
 $fill = false;
@@ -236,12 +236,12 @@ foreach ($results as $row) {
     $pdf->SetFont('Arial', 'B', 8);
     $pdf->Cell(25, 7, number_format($row['percentage'], 1) . '%', 1, 0, 'C', $fill);
     
-    // Status Badge Color
+    
     if ($row['status'] === 'Pass' || $row['percentage'] >= 75) {
-        $pdf->SetTextColor(21, 128, 61); // Green
+        $pdf->SetTextColor(21, 128, 61); 
         $pdf->Cell(30, 7, 'PASSED', 1, 1, 'C', $fill);
     } else {
-        $pdf->SetTextColor(190, 18, 60); // Red
+        $pdf->SetTextColor(190, 18, 60); 
         $pdf->Cell(30, 7, 'FAILED', 1, 1, 'C', $fill);
     }
     
@@ -252,7 +252,7 @@ foreach ($results as $row) {
 
 $pdf->Ln(6);
 
-// Summary & Verification Box
+
 $summaryY = $pdf->GetY();
 $pdf->SetFillColor(245, 245, 244);
 $pdf->SetDrawColor(229, 229, 224);
@@ -275,10 +275,10 @@ $pdf->SetTextColor(21, 128, 61);
 $pdf->Cell(60, 6, $overall_status, 0, 0, 'L');
 
 $pdf->SetFont('Arial', 'B', 8.5);
-$pdf->SetTextColor(109, 40, 217); // Purple
+$pdf->SetTextColor(109, 40, 217); 
 $pdf->Cell(50, 6, 'Groq Llama-3 AI Vision Engine', 0, 1, 'L');
 
-// Signatures Section at Y = 230
+
 $pdf->SetY(230);
 $pdf->SetFont('Arial', 'B', 8);
 $pdf->SetTextColor(120, 113, 108);
@@ -293,5 +293,5 @@ $pdf->Cell(85, 4, 'ACADEMIC DEPARTMENT REGISTRAR', 0, 0, 'C');
 $pdf->Cell(10, 4, '', 0, 0);
 $pdf->Cell(85, 4, 'QUESTBANK AUTOMATED AI EVALUATOR', 0, 1, 'C');
 
-// Output PDF Stream
+
 $pdf->Output('I', 'QuestBank_Official_Transcript.pdf');

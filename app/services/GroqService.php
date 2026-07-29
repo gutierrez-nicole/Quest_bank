@@ -1,13 +1,10 @@
 <?php
-// app/services/GroqService.php - Service Layer for Groq Cloud API
+
 
 require_once __DIR__ . '/../config/config.php';
 
 class GroqService {
-    
-    /**
-     * Send a request to Groq API endpoint
-     */
+
     private static function sendRequest($payload, $apiKey = null) {
         $key = $apiKey ?: GROQ_API_KEY;
         if (empty($key)) {
@@ -41,9 +38,6 @@ class GroqService {
         return ['success' => true, 'data' => $decoded];
     }
 
-    /**
-     * Generate Exam Questions from Lesson Material and Civil Engineering Specialization
-     */
     public static function generateQuestions($lessonText, $numQuestions, $subject, $examTitle, $specialization = 'Structural Engineering', $apiKey = null) {
         $prompt = "You are an expert Civil Engineering professor specializing in {$specialization} and academic assessment creation. "
                 . "Generate exactly {$numQuestions} high-quality Civil Engineering examination questions for the subject '{$subject}' (Specialization: {$specialization}) titled '{$examTitle}' "
@@ -78,9 +72,6 @@ class GroqService {
         return ['error' => 'Failed to parse AI output into valid JSON questions schema. Raw response: ' . substr($content, 0, 200)];
     }
 
-    /**
-     * Evaluate Answer Sheet via OCR / Vision AI
-     */
     public static function evaluateAnswerSheet($studentName, $examTitle, $uploadType, $answerKey, $simulatedOrExtractedText, $apiKey = null) {
         $prompt = "You are an advanced educational AI OCR and grading system for Civil Engineering assessments. "
                 . "Analyze the student exam paper for student '{$studentName}', exam '{$examTitle}'. "

@@ -77,11 +77,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_submission'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QuestBank - OCR Answer Checker</title>
-    <!-- Tailwind CSS CDN -->
+    
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- FontAwesome for Icons -->
+    
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Google Fonts -->
+    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -107,13 +107,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_submission'])) {
 </head>
 <body class="bg-[#fffbf7] min-h-screen flex">
 
-    <!-- ================= SIDEBAR NAVIGATION ================= -->
+    
     <?php require_once __DIR__ . '/../includes/teacher_sidebar.php'; ?>
 
-    <!-- ================= MAIN CONTENT AREA ================= -->
+    
     <main class="flex-grow flex flex-col min-w-0 ml-16 lg:ml-64 min-h-screen">
         
-        <!-- TOP NAV HEADERBAR -->
+        
         <header class="bg-white border-b border-stone-200 px-6 py-4 flex items-center justify-between flex-shrink-0">
             <div>
                 <h2 class="text-lg font-bold text-stone-800"><i class="fa-solid fa-expand text-orange-600 mr-2"></i>Automated OCR Answer Checker</h2>
@@ -138,10 +138,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_submission'])) {
             </div>
         </header>
 
-        <!-- DASHBOARD CONTAINER BODY PANEL -->
+        
         <div class="flex-grow overflow-y-auto p-6 space-y-6 custom-scrollbar">
 
-            <!-- NOTIFICATION ALERTS -->
+            
             <?php if (!empty($success_msg)): ?>
                 <div class="bg-emerald-50 border-l-4 border-emerald-500 p-4 rounded-xl text-xs font-semibold text-emerald-800 flex items-center justify-between shadow-sm animate-fadeIn">
                     <span class="flex items-center gap-2"><i class="fa-solid fa-circle-check text-emerald-600 text-sm"></i> <?php echo $success_msg; ?></span>
@@ -156,10 +156,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_submission'])) {
                 </div>
             <?php endif; ?>
 
-            <!-- MAIN OCR WORKBENCH GRID -->
+            
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 
-                <!-- LEFT FORM PANEL (5 COLUMNS) -->
+                
                 <div class="lg:col-span-5 bg-white border border-stone-200 rounded-2xl p-6 shadow-sm space-y-5">
                     <div class="flex items-center justify-between border-b border-stone-100 pb-3">
                         <h3 class="text-xs font-extrabold uppercase tracking-wider text-stone-800 flex items-center gap-2">
@@ -230,12 +230,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_submission'])) {
                     </form>
                 </div>
 
-                <!-- RIGHT OUTPUT WORKBENCH (7 COLUMNS) -->
+                
                 <div class="lg:col-span-7 space-y-6">
                     <?php if ($ai_analyzed_data): ?>
                         <div class="bg-white border border-stone-200 rounded-2xl p-6 shadow-sm space-y-6 animate-fadeIn">
                             
-                            <!-- RESULT HEADER BAR -->
+                            
                             <div class="flex items-center justify-between border-b border-stone-100 pb-4">
                                 <div>
                                     <h3 class="text-sm font-extrabold text-stone-800 uppercase tracking-tight flex items-center gap-2">
@@ -249,7 +249,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_submission'])) {
                                 </span>
                             </div>
 
-                            <!-- METRICS CARDS GRID -->
+                            
                             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                 <div class="bg-emerald-50/70 border border-emerald-200 p-3.5 rounded-2xl text-center">
                                     <p class="text-[10px] font-extrabold text-emerald-700 uppercase tracking-wider">Correct</p>
@@ -269,7 +269,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_submission'])) {
                                 </div>
                             </div>
 
-                            <!-- ITEMIZED BREAKDOWN TABLE -->
+                            
                             <div class="space-y-3">
                                 <h4 class="text-xs font-bold text-stone-700 uppercase tracking-wider flex items-center justify-between">
                                     <span>Itemized Answer Review:</span>
@@ -300,7 +300,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_submission'])) {
                                 </div>
                             </div>
 
-                            <!-- SAVE SUBMISSION FORM -->
+                            
                             <form action="upload_check.php" method="POST" class="pt-4 border-t border-stone-100 flex justify-between items-center">
                                 <?php echo csrfInputField(); ?>
                                 <a href="upload_check.php" class="text-xs font-bold text-stone-500 hover:text-stone-800 transition-colors">
@@ -322,7 +322,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_submission'])) {
                             </form>
                         </div>
                     <?php else: ?>
-                        <!-- EMPTY STANDBY STATE -->
+                        
                         <div class="bg-white border border-stone-200 rounded-2xl p-12 text-center text-stone-400 space-y-4 shadow-sm flex flex-col items-center justify-center min-h-[420px]">
                             <div class="w-16 h-16 bg-orange-50 text-orange-600 rounded-2xl flex items-center justify-center text-3xl animate-pulseGlow shadow-inner">
                                 <i class="fa-solid fa-microchip"></i>
@@ -342,7 +342,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_submission'])) {
         </div>
     </main>
 
-    <!-- LOADING OVERLAY MODAL FOR GROQ API -->
+    
     <div id="loading_overlay" class="fixed inset-0 bg-stone-950/80 backdrop-blur-sm hidden flex-col items-center justify-center z-50 p-4 space-y-4">
         <div class="w-16 h-16 border-4 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
         <div class="text-center space-y-1">
@@ -351,7 +351,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_submission'])) {
         </div>
     </div>
 
-    <!-- LOGOUT CONFIRMATION MODAL -->
+    
     <div id="logout_modal" class="fixed inset-0 bg-stone-950/70 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
         <div class="bg-white border border-stone-200 p-6 rounded-2xl max-w-sm w-full space-y-4 shadow-2xl animate-fadeIn">
             <div class="flex items-center gap-3">
@@ -374,7 +374,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_submission'])) {
         </div>
     </div>
 
-    <!-- WEBCAM CAMERA CAPTURE MODAL -->
+    
     <div id="webcam_modal" class="fixed inset-0 bg-stone-900/80 backdrop-blur-sm hidden items-center justify-center z-50 p-4 animate-fadeIn">
         <div class="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 border border-stone-200">
             <div class="flex items-center justify-between border-b border-stone-100 pb-3">
@@ -392,7 +392,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_submission'])) {
                 </button>
             </div>
 
-            <!-- LIVE CAMERA VIEWFINDER -->
+            
             <div class="relative bg-stone-950 rounded-2xl overflow-hidden shadow-inner border border-stone-800 h-64 flex items-center justify-center">
                 <video id="webcam_video" autoplay playsinline class="w-full h-full object-cover"></video>
                 <div class="absolute inset-4 border-2 border-dashed border-orange-500/60 rounded-xl pointer-events-none flex items-center justify-center">
@@ -411,7 +411,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_submission'])) {
         </div>
     </div>
 
-    <!-- JAVASCRIPT HANDLERS -->
+    
     <script>
         let webcamStream = null;
 

@@ -10,7 +10,7 @@ $success_msg = "";
 $error_msg = "";
 
 try {
-    // 1. ADD NEW TEACHER ACCOUNT
+    
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_teacher'])) {
         validateCSRFToken();
         $fullname = trim($_POST['fullname'] ?? '');
@@ -31,7 +31,7 @@ try {
         }
     }
 
-    // 2. DELETE TEACHER ACCOUNT
+    
     if (isset($_GET['delete_id'])) {
         $delete_id = intval($_GET['delete_id']);
         try {
@@ -43,7 +43,7 @@ try {
         }
     }
 
-    // FETCH ALL TEACHERS
+    
     $stmtTeachers = $pdo->query("SELECT id, fullname, username, email, created_at FROM users WHERE role = 'teacher' ORDER BY id DESC");
     $teachers = $stmtTeachers->fetchAll();
 
@@ -58,11 +58,11 @@ try {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QuestBank - Manage Faculty Teachers</title>
-    <!-- Tailwind CSS CDN -->
+    
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- FontAwesome Icons -->
+    
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Google Fonts -->
+    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght=300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -77,7 +77,7 @@ try {
     <main class="flex-1 ml-16 lg:ml-64 p-6 md:p-12 overflow-y-auto min-h-screen">
         <div class="max-w-6xl mx-auto space-y-6">
         
-        <!-- HEADER -->
+        
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
                 <a href="dashboard.php" class="text-xs font-bold text-orange-600 hover:underline flex items-center gap-1">
@@ -90,7 +90,7 @@ try {
             </div>
         </div>
 
-        <!-- ALERTS -->
+        
         <?php if (!empty($success_msg)): ?>
             <div class="bg-emerald-50 border-l-4 border-emerald-500 p-4 rounded-xl text-xs font-semibold text-emerald-700">
                 <i class="fa-solid fa-circle-check mr-1"></i> <?php echo $success_msg; ?>
@@ -104,7 +104,7 @@ try {
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
-            <!-- LEFT FORM: CREATE NEW TEACHER -->
+            
             <div class="bg-white border border-stone-200 rounded-2xl p-6 shadow-sm space-y-4 h-fit">
                 <h3 class="text-sm font-extrabold uppercase tracking-wider text-stone-800 border-b pb-3">
                     <i class="fa-solid fa-user-plus text-orange-500 mr-1"></i> Register Faculty Member
@@ -137,7 +137,7 @@ try {
                 </form>
             </div>
 
-            <!-- RIGHT TABLE: TEACHERS DIRECTORY LIST -->
+            
             <div class="lg:col-span-2 bg-white border border-stone-200 rounded-2xl p-6 shadow-sm space-y-4">
                 <div class="flex items-center justify-between border-b pb-3">
                     <h3 class="text-sm font-extrabold uppercase tracking-wider text-stone-800">

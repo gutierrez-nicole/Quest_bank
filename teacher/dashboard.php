@@ -11,12 +11,12 @@ $request_msg = "";
 try {
     $teacher_id = getCurrentUserId();
 
-    // ==================== 1. PROFILE INFO ====================
+    
     $stmt = $pdo->prepare("SELECT fullname, username, email FROM users WHERE id = ?");
     $stmt->execute([$teacher_id]);
     $teacher = $stmt->fetch();
 
-    // ==================== 2. HANDLE STUDENT JOIN REQUESTS (Docx Figure 10 & 13) ====================
+    
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['handle_request'])) {
         validateCSRFToken();
         $request_id = intval($_POST['request_id'] ?? 0);
@@ -56,12 +56,12 @@ try {
         }
     }
 
-    // Fetch pending student join requests for this teacher
+    
     $stmtPending = $pdo->prepare("SELECT * FROM student_requests WHERE teacher_id = ? AND status = 'pending' ORDER BY id DESC");
     $stmtPending->execute([$teacher_id]);
     $pending_requests = $stmtPending->fetchAll(PDO::FETCH_ASSOC);
 
-    // ==================== 3. TOTAL HANDLED STUDENTS ====================
+    
     $total_students = 0;
     try {
         $stmt = $pdo->prepare("
@@ -91,7 +91,7 @@ try {
         $total_students = 0;
     }
 
-    // ==================== 4. TOTAL EXAMS CREATED ====================
+    
     $total_exams = 0;
     try {
         $stmt = $pdo->prepare("SELECT COUNT(*) FROM exams WHERE teacher_id = ?");
@@ -106,7 +106,7 @@ try {
         $total_exams = 0;
     }
 
-    // ==================== 5. TOTAL SUBMISSIONS & AVERAGE SCORE ====================
+    
     $total_checked = 0;
     $avg_percentage = 0;
     try {
@@ -131,7 +131,7 @@ try {
         $avg_percentage = 0;
     }
 
-    // ==================== 6. BAR CHART: SECTION PERFORMANCE ====================
+    
     $sections_labels = [];
     $sections_pass_rates = [];
     $sections_fail_rates = [];
@@ -172,7 +172,7 @@ try {
             }
         }
     } catch (PDOException $e) {
-        // Fallback
+        
     }
     
     if (empty($sections_labels)) {
@@ -181,7 +181,7 @@ try {
         $sections_fail_rates = [8, 12, 5, 15];
     }
 
-    // ==================== 7. RECENT EXAMS & RECENT SUBMISSIONS ====================
+    
     $recent_submissions = [];
     try {
         $stmt = $pdo->prepare("
@@ -218,13 +218,13 @@ try {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QuestBank - Teacher Dashboard</title>
-    <!-- Tailwind CSS CDN -->
+    
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- FontAwesome for Icons -->
+    
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Chart.js CDN -->
+    
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Google Fonts -->
+    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -243,13 +243,13 @@ try {
 </head>
 <body class="bg-[#fffbf7] min-h-screen flex">
 
-    <!-- ================= SIDEBAR NAVIGATION ================= -->
+    
     <?php require_once __DIR__ . '/../includes/teacher_sidebar.php'; ?>
 
-    <!-- ================= MAIN CONTENT AREA ================= -->
+    
     <main class="flex-grow flex flex-col min-w-0 ml-16 lg:ml-64 min-h-screen">
         
-        <!-- TOP NAV HEADERBAR -->
+        
         <header class="bg-white border-b border-stone-200 px-6 py-4 flex items-center justify-between flex-shrink-0">
             <div>
                 <h2 class="text-lg font-bold text-stone-800">Faculty Dashboard Workspace</h2>
@@ -269,10 +269,10 @@ try {
             </div>
         </header>
 
-        <!-- DASHBOARD CONTAINER BODY PANEL -->
+        
         <div class="flex-grow overflow-y-auto p-6 space-y-6 custom-scrollbar">
 
-            <!-- NOTIFICATION ALERT FOR REQUEST ACTIONS -->
+            
             <?php if (!empty($request_msg)): ?>
                 <div class="bg-emerald-50 border-l-4 border-emerald-500 p-4 rounded-xl text-xs font-semibold text-emerald-800 flex items-center justify-between shadow-sm animate-fadeIn">
                     <span class="flex items-center gap-2"><i class="fa-solid fa-circle-check text-emerald-600 text-sm"></i> <?php echo $request_msg; ?></span>
@@ -280,7 +280,7 @@ try {
                 </div>
             <?php endif; ?>
 
-            <!-- QUICK STATISTICS HUB OVERVIEW -->
+            
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div class="bg-white p-4 border border-stone-200 rounded-xl flex items-center justify-between shadow-sm hover:shadow-md transition-shadow">
                     <div>
@@ -324,7 +324,7 @@ try {
                 </div>
             </div>
 
-            <!-- STUDENT SUBJECT JOIN REQUESTS CARD (Docx Figure 10 & 13) -->
+            
             <div class="bg-white border border-stone-200 p-5 rounded-2xl shadow-sm space-y-4">
                 <div class="flex items-center justify-between border-b border-stone-100 pb-3">
                     <div>
@@ -378,7 +378,7 @@ try {
                 <?php endif; ?>
             </div>
 
-            <!-- ANALYTICS VISUAL SECTION (BAR CHART) -->
+            
             <div class="bg-white border border-stone-200 p-5 rounded-2xl shadow-sm">
                 <div class="flex items-center justify-between mb-4 border-b pb-2">
                     <div>
@@ -391,7 +391,7 @@ try {
                 </div>
             </div>
 
-            <!-- RECENT SUBMISSIONS TABLE -->
+            
             <div class="bg-white border border-stone-200 p-5 rounded-2xl shadow-sm space-y-4">
                 <div class="flex items-center justify-between border-b pb-3">
                     <h3 class="text-sm font-bold text-stone-800"><i class="fa-solid fa-clock-rotate-left text-orange-500 mr-1.5"></i> Recent Evaluated Submissions</h3>
@@ -437,7 +437,7 @@ try {
         </div>
     </main>
 
-    <!-- CHART.JS INIT SCRIPT -->
+    
     <script>
         const ctx = document.getElementById('sectionBarChart').getContext('2d');
         new Chart(ctx, {

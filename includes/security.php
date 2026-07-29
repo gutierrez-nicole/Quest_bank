@@ -1,5 +1,5 @@
 <?php
-// includes/security.php - QuestBank Security, Anti-CSRF, and Sanitization Helper
+
 
 require_once __DIR__ . '/../app/session.php';
 

@@ -1,5 +1,5 @@
 <?php
-// app/database.php - Centralized PDO Database Singleton Connection Helper
+
 
 require_once __DIR__ . '/config/config.php';
 

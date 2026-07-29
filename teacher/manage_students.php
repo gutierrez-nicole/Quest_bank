@@ -10,7 +10,7 @@ $error_msg = "";
 
 $teacher_id = getCurrentUserId();
 
-// 1. Handle Student Join Request Actions (Docx Figure 10 & 13)
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['handle_request'])) {
     validateCSRFToken();
     $request_id = intval($_POST['request_id'] ?? 0);
@@ -50,7 +50,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['handle_request'])) {
     }
 }
 
-// 2. Add New Section
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_section'])) {
     validateCSRFToken();
     $section_name = trim($_POST['section_name']);
@@ -70,7 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_section'])) {
     }
 }
 
-// 3. Add New Student manually by Student Number Search
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_student'])) {
     validateCSRFToken();
     $student_number = trim($_POST['student_number']);
@@ -91,17 +91,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_student'])) {
     }
 }
 
-// Fetch Teacher's Sections
+
 $stmtSec = $pdo->prepare("SELECT * FROM sections WHERE teacher_id = ? ORDER BY id DESC");
 $stmtSec->execute([$teacher_id]);
 $sections = $stmtSec->fetchAll(PDO::FETCH_ASSOC);
 
-// Fetch Pending Join Requests
+
 $stmtPending = $pdo->prepare("SELECT * FROM student_requests WHERE teacher_id = ? AND status = 'pending' ORDER BY id DESC");
 $stmtPending->execute([$teacher_id]);
 $pending_requests = $stmtPending->fetchAll(PDO::FETCH_ASSOC);
 
-// Search Student Filter (Docx Figure 10)
+
 $search_query = trim($_GET['search_student'] ?? '');
 if (!empty($search_query)) {
     $stmtStud = $pdo->prepare("
@@ -131,11 +131,11 @@ $students = $stmtStud->fetchAll(PDO::FETCH_ASSOC);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QuestBank - Student Roster & Join Requests</title>
-    <!-- Tailwind CSS CDN -->
+    
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- FontAwesome Icons -->
+    
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Google Fonts -->
+    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -143,10 +143,10 @@ $students = $stmtStud->fetchAll(PDO::FETCH_ASSOC);
 </head>
 <body class="bg-[#fffbf7] min-h-screen flex">
 
-    <!-- ================= SIDEBAR NAVIGATION ================= -->
+    
     <?php require_once __DIR__ . '/../includes/teacher_sidebar.php'; ?>
 
-    <!-- ================= MAIN CONTENT AREA ================= -->
+    
     <main class="flex-1 ml-16 lg:ml-64 p-6 md:p-12 overflow-y-auto min-h-screen">
         <div class="max-w-6xl mx-auto space-y-6">
             <div class="flex items-center justify-between">
@@ -164,7 +164,7 @@ $students = $stmtStud->fetchAll(PDO::FETCH_ASSOC);
                 <div class="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl text-xs font-semibold text-red-700"><?php echo $error_msg; ?></div>
             <?php endif; ?>
 
-            <!-- PENDING JOIN REQUESTS PANEL (Docx Figure 10) -->
+            
             <?php if (!empty($pending_requests)): ?>
                 <div class="bg-white border border-stone-200 p-5 rounded-2xl shadow-sm space-y-4">
                     <h3 class="text-sm font-bold text-stone-800 border-b pb-2 flex items-center gap-2">
@@ -207,10 +207,10 @@ $students = $stmtStud->fetchAll(PDO::FETCH_ASSOC);
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 
-                <!-- LEFT COLUMN: FORMS (SECTION & STUDENT) -->
+                
                 <div class="space-y-6">
                     
-                    <!-- 1. ADD SECTION FORM -->
+                    
                     <div class="bg-white border border-stone-200 rounded-2xl p-5 shadow-sm space-y-4">
                         <h3 class="text-sm font-bold uppercase tracking-wider text-stone-700 border-b pb-2"><i class="fa-solid fa-users-rectangle text-orange-500 mr-1"></i> Create New Section</h3>
                         
@@ -234,7 +234,7 @@ $students = $stmtStud->fetchAll(PDO::FETCH_ASSOC);
                         </form>
                     </div>
 
-                    <!-- 2. ADD STUDENT BY SEARCH FORM (Docx Figure 10) -->
+                    
                     <div class="bg-white border border-stone-200 rounded-2xl p-5 shadow-sm space-y-4">
                         <h3 class="text-sm font-bold uppercase tracking-wider text-stone-700 border-b pb-2"><i class="fa-solid fa-user-plus text-orange-500 mr-1"></i> Enroll Student Manually</h3>
                         
@@ -269,12 +269,12 @@ $students = $stmtStud->fetchAll(PDO::FETCH_ASSOC);
 
                 </div>
 
-                <!-- RIGHT COLUMN: ENROLLED STUDENTS ROSTER & SEARCH (Docx Figure 10 & 13) -->
+                
                 <div class="lg:col-span-2 bg-white border border-stone-200 rounded-2xl p-6 shadow-sm space-y-4">
                     <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b pb-3">
                         <h3 class="text-sm font-bold uppercase tracking-wider text-stone-700"><i class="fa-solid fa-list text-orange-500 mr-1"></i> Enrolled Student Roster</h3>
                         
-                        <!-- Search Student by Student Number (Docx Figure 10) -->
+                        
                         <form action="manage_students.php" method="GET" class="flex items-center gap-2 w-full sm:w-auto">
                             <div class="relative w-full sm:w-48">
                                 <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-stone-400 text-xs"></i>

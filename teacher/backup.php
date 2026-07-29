@@ -9,7 +9,7 @@ $pdo = getDBConnection();
 $success_msg = "";
 $error_msg = "";
 
-// 1. GENERATE SQL BACKUP DOWNLOAD
+
 if (isset($_GET['action']) && $_GET['action'] === 'download_backup') {
     $tables = [];
     $query = $pdo->query("SHOW TABLES");
@@ -48,7 +48,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'download_backup') {
     exit();
 }
 
-// 2. RESTORE SQL BACKUP FILE
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['restore_backup'])) {
     validateCSRFToken();
     if (isset($_FILES['backup_file']) && $_FILES['backup_file']['error'] === UPLOAD_ERR_OK) {
@@ -97,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['restore_backup'])) {
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 
-                <!-- DOWNLOAD BACKUP -->
+                
                 <div class="bg-white border border-stone-200 rounded-2xl p-6 shadow-sm space-y-4 flex flex-col justify-between">
                     <div>
                         <div class="w-12 h-12 bg-orange-100 text-orange-600 rounded-2xl flex items-center justify-center font-bold text-xl mb-3">
@@ -111,7 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['restore_backup'])) {
                     </a>
                 </div>
 
-                <!-- RESTORE BACKUP -->
+                
                 <div class="bg-white border border-stone-200 rounded-2xl p-6 shadow-sm space-y-4">
                     <div>
                         <div class="w-12 h-12 bg-stone-100 text-stone-700 rounded-2xl flex items-center justify-center font-bold text-xl mb-3">

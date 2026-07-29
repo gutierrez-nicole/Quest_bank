@@ -9,7 +9,7 @@ $pdo = getDBConnection();
 $success_msg = "";
 $error_msg = "";
 
-// Save New Exam Header and Questions
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_exam'])) {
     validateCSRFToken();
     $title = trim($_POST['title']);
@@ -23,12 +23,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_exam'])) {
         try {
             $pdo->beginTransaction();
 
-            // Insert Exam Record with Specialization
+            
             $stmt = $pdo->prepare("INSERT INTO exams (teacher_id, title, subject, specialization, time_limit, total_items) VALUES (?, ?, ?, ?, ?, ?)");
             $stmt->execute([$_SESSION['user_id'], $title, $subject, $specialization, $time_limit, count($questions)]);
             $exam_id = $pdo->lastInsertId();
 
-            // Insert Question Items
+            
             $qStmt = $pdo->prepare("INSERT INTO exam_questions (exam_id, question_text, question_type, option_a, option_b, option_c, option_d, correct_answer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
             
             foreach ($questions as $q) {
@@ -55,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_exam'])) {
     }
 }
 
-// Fetch Existing Exams
+
 $stmtExams = $pdo->prepare("SELECT * FROM exams WHERE teacher_id = ? ORDER BY id DESC");
 $stmtExams->execute([$_SESSION['user_id']]);
 $existing_exams = $stmtExams->fetchAll(PDO::FETCH_ASSOC);
@@ -67,11 +67,11 @@ $existing_exams = $stmtExams->fetchAll(PDO::FETCH_ASSOC);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QuestBank - Create Exam & Question Bank</title>
-    <!-- Tailwind CSS CDN -->
+    
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- FontAwesome Icons -->
+    
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Google Fonts -->
+    
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght=400;600;700;800&display=swap" rel="stylesheet">
@@ -79,10 +79,10 @@ $existing_exams = $stmtExams->fetchAll(PDO::FETCH_ASSOC);
 </head>
 <body class="bg-[#fffbf7] min-h-screen flex">
 
-    <!-- ================= SIDEBAR NAVIGATION ================= -->
+    
     <?php require_once __DIR__ . '/../includes/teacher_sidebar.php'; ?>
 
-    <!-- ================= MAIN CONTENT AREA ================= -->
+    
     <main class="flex-1 ml-16 lg:ml-64 p-6 md:p-12 overflow-y-auto min-h-screen">
         <div class="max-w-6xl mx-auto space-y-6">
             <div class="flex items-center justify-between">
@@ -102,7 +102,7 @@ $existing_exams = $stmtExams->fetchAll(PDO::FETCH_ASSOC);
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 
-                <!-- LEFT FORM: EXAM CREATOR -->
+                
                 <div class="lg:col-span-2 bg-white border border-stone-200 rounded-2xl p-6 shadow-sm space-y-6">
                     <form action="create_exam.php" method="POST" id="examForm" class="space-y-6">
                         <?php echo csrfInputField(); ?>
@@ -123,7 +123,7 @@ $existing_exams = $stmtExams->fetchAll(PDO::FETCH_ASSOC);
                         </div>
 
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <!-- Civil Engineering Specialization Selector (Docx Figure 11) -->
+                            
                             <div class="space-y-1">
                                 <label class="text-xs font-bold text-stone-600">Civil Engineering Branch</label>
                                 <select name="specialization" required class="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs outline-none focus:border-orange-500">
@@ -138,7 +138,7 @@ $existing_exams = $stmtExams->fetchAll(PDO::FETCH_ASSOC);
                             </div>
                         </div>
 
-                        <!-- DYNAMIC QUESTIONS CONTAINER -->
+                        
                         <div class="space-y-4 pt-4 border-t">
                             <div class="flex items-center justify-between">
                                 <h3 class="text-sm font-bold uppercase tracking-wider text-stone-700"><i class="fa-solid fa-list-check text-orange-500 mr-1"></i> Question Items</h3>
@@ -148,7 +148,7 @@ $existing_exams = $stmtExams->fetchAll(PDO::FETCH_ASSOC);
                             </div>
 
                             <div id="questions_container" class="space-y-4">
-                                <!-- Items will be dynamically added via JavaScript -->
+                                
                             </div>
                         </div>
 
@@ -158,7 +158,7 @@ $existing_exams = $stmtExams->fetchAll(PDO::FETCH_ASSOC);
                     </form>
                 </div>
 
-                <!-- RIGHT PANEL: EXISTING EXAMS LIST -->
+                
                 <div class="bg-white border border-stone-200 rounded-2xl p-6 shadow-sm space-y-4 h-fit">
                     <h3 class="text-sm font-bold uppercase tracking-wider text-stone-700 border-b pb-3"><i class="fa-solid fa-database text-orange-500 mr-1"></i> Saved Question Bank</h3>
                     
@@ -186,7 +186,7 @@ $existing_exams = $stmtExams->fetchAll(PDO::FETCH_ASSOC);
         </div>
     </main>
 
-    <!-- DYNAMIC QUESTION ROW SCRIPT -->
+    
     <script>
         let questionCount = 0;
 

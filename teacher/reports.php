@@ -8,10 +8,10 @@ $pdo = getDBConnection();
 
 $teacher_id = $_SESSION['user_id'];
 
-// Filter Handler
+
 $selected_exam = $_GET['exam_title'] ?? 'all';
 
-// Query Parameters
+
 if ($selected_exam !== 'all') {
     $stmtStats = $pdo->prepare("
         SELECT 
@@ -49,12 +49,12 @@ if ($selected_exam !== 'all') {
 $stats = $stmtStats->fetch(PDO::FETCH_ASSOC);
 $submissions = $stmtList->fetchAll(PDO::FETCH_ASSOC);
 
-// Fetch Distinct Exam Titles for Filter Dropdown
+
 $stmtExams = $pdo->prepare("SELECT DISTINCT exam_title FROM exam_submissions WHERE teacher_id = ?");
 $stmtExams->execute([$teacher_id]);
 $exam_options = $stmtExams->fetchAll(PDO::FETCH_COLUMN);
 
-// Computations
+
 $total = intval($stats['total_students'] ?? 0);
 $pass = intval($stats['total_pass'] ?? 0);
 $fail = intval($stats['total_fail'] ?? 0);
@@ -80,7 +80,7 @@ $pass_rate = $total > 0 ? ($pass / $total) * 100 : 0;
     <main class="flex-1 ml-16 lg:ml-64 p-6 md:p-12 overflow-y-auto min-h-screen">
         <div class="max-w-6xl mx-auto space-y-6">
         
-        <!-- HEADERBAR -->
+        
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
                 <a href="dashboard.php" class="text-xs font-bold text-orange-600 hover:underline"><i class="fa-solid fa-arrow-left mr-1"></i> Back to Dashboard</a>
@@ -88,7 +88,7 @@ $pass_rate = $total > 0 ? ($pass / $total) * 100 : 0;
                 <p class="text-xs text-stone-400">Statistical breakdown of OCR scanned papers and student scores.</p>
             </div>
 
-            <!-- EXAM FILTER DROPDOWN -->
+            
             <form method="GET" action="reports.php" class="flex items-center gap-2">
                 <label class="text-xs font-bold text-stone-600">Filter Exam:</label>
                 <select name="exam_title" onchange="this.form.submit()" class="bg-white border border-stone-200 text-xs font-bold rounded-xl px-4 py-2 outline-none cursor-pointer focus:border-orange-500 shadow-sm">
@@ -102,7 +102,7 @@ $pass_rate = $total > 0 ? ($pass / $total) * 100 : 0;
             </form>
         </div>
 
-        <!-- STATISTICAL METRICS CARDS -->
+        
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             <div class="bg-white p-4 border border-stone-200 rounded-2xl shadow-sm text-center">
                 <p class="text-[10px] font-bold uppercase text-stone-400">Total Scanned</p>
@@ -130,7 +130,7 @@ $pass_rate = $total > 0 ? ($pass / $total) * 100 : 0;
             </div>
         </div>
 
-        <!-- DETAILED EVALUATION RECORDS TABLE -->
+        
         <div class="bg-white border border-stone-200 rounded-2xl p-6 shadow-sm space-y-4">
             <div class="flex items-center justify-between border-b pb-3">
                 <h3 class="text-sm font-bold uppercase tracking-wider text-stone-700">
