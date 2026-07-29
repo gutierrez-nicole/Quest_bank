@@ -40,13 +40,12 @@ $stmtExams = $pdo->prepare("SELECT DISTINCT exam_title FROM exam_submissions WHE
 $stmtExams->execute([$teacher_id]);
 $exam_options = $stmtExams->fetchAll(PDO::FETCH_COLUMN);
 
-$total = intval($stats['total_students'] ?? 0);
+$total_students = intval($stats['total_students'] ?? 0);
 $pass = intval($stats['total_pass'] ?? 0);
 $fail = intval($stats['total_fail'] ?? 0);
-$avg = floatval($stats['avg_percentage'] ?? 0);
-$max = floatval($stats['max_percentage'] ?? 0);
-$min = floatval($stats['min_percentage'] ?? 0);
-$pass_rate = $total > 0 ? ($pass / $total) * 100 : 0;
+$avg_percentage = floatval($stats['avg_percentage'] ?? 0);
+$max_percentage = floatval($stats['max_percentage'] ?? 0);
+$pass_rate = $total_students > 0 ? ($pass / $total_students) * 100 : 0;
 ?>
 
 <!DOCTYPE html>
@@ -91,7 +90,7 @@ $pass_rate = $total > 0 ? ($pass / $total) * 100 : 0;
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             <div class="bg-white p-4 border border-stone-200 rounded-2xl shadow-sm text-center">
                 <p class="text-[10px] font-bold uppercase text-stone-400">Total Scanned</p>
-                <p class="text-2xl font-black text-stone-800 mt-1"><?php echo $total; ?></p>
+                <p class="text-2xl font-black text-stone-800 mt-1"><?php echo $total_students; ?></p>
             </div>
             <div class="bg-emerald-50 p-4 border border-emerald-100 rounded-2xl shadow-sm text-center">
                 <p class="text-[10px] font-bold uppercase text-emerald-700">Passed</p>
@@ -107,11 +106,11 @@ $pass_rate = $total > 0 ? ($pass / $total) * 100 : 0;
             </div>
             <div class="bg-white p-4 border border-stone-200 rounded-2xl shadow-sm text-center">
                 <p class="text-[10px] font-bold uppercase text-stone-400">Class Average</p>
-                <p class="text-2xl font-black text-stone-800 mt-1"><?php echo number_format($avg, 1); ?>%</p>
+                <p class="text-2xl font-black text-stone-800 mt-1"><?php echo number_format($avg_percentage, 1); ?>%</p>
             </div>
             <div class="bg-white p-4 border border-stone-200 rounded-2xl shadow-sm text-center">
                 <p class="text-[10px] font-bold uppercase text-stone-400">Highest Score</p>
-                <p class="text-2xl font-black text-emerald-600 mt-1"><?php echo number_format($max, 1); ?>%</p>
+                <p class="text-2xl font-black text-emerald-600 mt-1"><?php echo number_format($max_percentage, 1); ?>%</p>
             </div>
         </div>
 

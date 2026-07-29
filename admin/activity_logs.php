@@ -71,24 +71,24 @@ try {
                         </thead>
                         <tbody class="divide-y font-semibold">
                             <?php if (!empty($logs)): ?>
-                                <?php foreach ($logs as $l): ?>
+                                <?php foreach ($logs as $log): ?>
                                     <tr class="hover:bg-stone-50/50">
-                                        <td class="p-3 font-mono text-orange-600">#LOG-00<?php echo $l['id']; ?></td>
-                                        <td class="p-3 font-bold text-stone-800"><?php echo htmlspecialchars($l['fullname']); ?></td>
+                                        <td class="p-3 font-mono text-orange-600">#LOG-00<?php echo $log['id']; ?></td>
+                                        <td class="p-3 font-bold text-stone-800"><?php echo htmlspecialchars($log['fullname']); ?></td>
                                         <td class="p-3">
                                             <?php 
-                                            $role = strtolower($l['role']);
+                                            $role = strtolower($log['role']);
                                             $badgeClass = 'bg-stone-100 text-stone-700';
                                             if ($role === 'teacher') $badgeClass = 'bg-blue-100 text-blue-800';
                                             elseif ($role === 'student') $badgeClass = 'bg-orange-100 text-orange-800';
                                             elseif ($role === 'admin') $badgeClass = 'bg-purple-100 text-purple-800';
                                             ?>
                                             <span class="px-2.5 py-0.5 rounded text-[10px] font-bold uppercase <?php echo $badgeClass; ?>">
-                                                <?php echo htmlspecialchars($l['role']); ?>
+                                                <?php echo htmlspecialchars($log['role']); ?>
                                             </span>
                                         </td>
-                                        <td class="p-3 text-stone-600 font-medium"><?php echo htmlspecialchars($l['action_description']); ?></td>
-                                        <td class="p-3 text-right text-stone-400 font-medium"><?php echo date('M d, Y h:i A', strtotime($l['created_at'])); ?></td>
+                                        <td class="p-3 text-stone-600 font-medium"><?php echo htmlspecialchars($log['action_description']); ?></td>
+                                        <td class="p-3 text-right text-stone-400 font-medium"><?php echo date('M d, Y h:i A', strtotime($log['created_at'])); ?></td>
                                     </tr>
                                 <?php endforeach; ?>
                             <?php else: ?>

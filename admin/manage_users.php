@@ -33,8 +33,9 @@ try {
     }
 
     
-    if (isset($_GET['delete_id'])) {
-        $delete_id = intval($_GET['delete_id']);
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_user'])) {
+        validateCSRFToken();
+        $delete_id = intval($_POST['delete_id'] ?? 0);
         
         if ($delete_id == getCurrentUserId()) {
             $error_msg = "You cannot delete your own active administrator account!";
@@ -175,29 +176,34 @@ try {
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-stone-100 font-semibold">
-                                <?php foreach ($users as $u): ?>
+                                <?php foreach ($users as $user): ?>
                                     <tr class="hover:bg-stone-50/50 transition-all">
                                         <td class="p-3 font-bold text-stone-800">
                                             <div>
-                                                <p class="text-stone-900"><?php echo htmlspecialchars($u['fullname']); ?></p>
-                                                <p class="text-[10px] text-stone-400 font-normal"><?php echo htmlspecialchars($u['email']); ?></p>
+                                                <p class="text-stone-900"><?php echo htmlspecialchars($user['fullname']); ?></p>
+                                                <p class="text-[10px] text-stone-400 font-normal"><?php echo htmlspecialchars($user['email']); ?></p>
                                             </div>
                                         </td>
-                                        <td class="p-3 font-mono font-bold text-orange-600"><?php echo htmlspecialchars($u['username']); ?></td>
+                                        <td class="p-3 font-mono font-bold text-orange-600"><?php echo htmlspecialchars($user['username']); ?></td>
                                         <td class="p-3">
-                                            <?php if ($u['role'] === 'admin'): ?>
+                                            <?php if ($user['role'] === 'admin'): ?>
                                                 <span class="bg-purple-100 text-purple-700 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase">Admin</span>
-                                            <?php elseif ($u['role'] === 'teacher'): ?>
-                                                <span class="bg-orange-100 text-orange-700 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase">Teacher</span>
+                                            <?php elseif ($user['role'] === 'teacher'): ?>
+                                                <span class="bg-blue-100 text-blue-700 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase">Teacher</span>
                                             <?php else: ?>
-                                                <span class="bg-blue-100 text-blue-700 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase">Student</span>
+                                                <span class="bg-orange-100 text-orange-700 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase">Student</span>
                                             <?php endif; ?>
                                         </td>
                                         <td class="p-3 text-center">
-                                            <?php if ($u['id'] != $_SESSION['user_id']): ?>
-                                                <a href="manage_users.php?delete_id=<?php echo $u['id']; ?>" onclick="return confirm('Are you sure you want to delete this account?');" class="bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all inline-flex items-center gap-1">
-                                                    <i class="fa-solid fa-trash"></i> Delete
-                                                </a>
+                                            <?php if ($user['id'] != getCurrentUserId()): ?>
+                                                <form method="POST" style="display:inline" onsubmit="return confirm('Are you sure you want to delete this account?');">
+                                                    <?php echo csrfInputField(); ?>
+                                                    <input type="hidden" name="delete_user" value="1">
+                                                    <input type="hidden" name="delete_id" value="<?php echo $user['id']; ?>">
+                                                    <button type="submit" class="bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all inline-flex items-center gap-1">
+                                                        <i class="fa-solid fa-trash"></i> Delete
+                                                    </button>
+                                                </form>
                                             <?php else: ?>
                                                 <span class="text-[10px] text-stone-400 italic">Current Session</span>
                                             <?php endif; ?>

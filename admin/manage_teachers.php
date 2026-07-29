@@ -32,8 +32,9 @@ try {
     }
 
     
-    if (isset($_GET['delete_id'])) {
-        $delete_id = intval($_GET['delete_id']);
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_teacher'])) {
+        validateCSRFToken();
+        $delete_id = intval($_POST['delete_id'] ?? 0);
         try {
             $stmt = $pdo->prepare("DELETE FROM users WHERE id = ? AND role = 'teacher'");
             $stmt->execute([$delete_id]);
@@ -160,22 +161,27 @@ try {
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-stone-100 font-semibold">
-                                <?php foreach ($teachers as $t): ?>
+                                <?php foreach ($teachers as $teacher): ?>
                                     <tr class="hover:bg-stone-50/50 transition-all">
                                         <td class="p-3 font-bold text-stone-800">
                                             <div class="flex items-center gap-2">
                                                 <div class="w-7 h-7 rounded-lg bg-orange-100 text-orange-700 flex items-center justify-center font-black text-[10px]">
-                                                    <?php echo strtoupper(substr($t['fullname'], 0, 2)); ?>
+                                                    <?php echo strtoupper(substr($teacher['fullname'], 0, 2)); ?>
                                                 </div>
-                                                <?php echo htmlspecialchars($t['fullname']); ?>
+                                                <?php echo htmlspecialchars($teacher['fullname']); ?>
                                             </div>
                                         </td>
-                                        <td class="p-3 font-mono font-bold text-orange-600"><?php echo htmlspecialchars($t['username']); ?></td>
-                                        <td class="p-3 text-stone-500"><?php echo htmlspecialchars($t['email']); ?></td>
+                                        <td class="p-3 font-mono font-bold text-orange-600"><?php echo htmlspecialchars($teacher['username']); ?></td>
+                                        <td class="p-3 text-stone-500"><?php echo htmlspecialchars($teacher['email']); ?></td>
                                         <td class="p-3 text-center">
-                                            <a href="manage_teachers.php?delete_id=<?php echo $t['id']; ?>" onclick="return confirm('Are you sure you want to delete this teacher account?');" class="bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all inline-flex items-center gap-1">
-                                                <i class="fa-solid fa-trash"></i> Remove
-                                            </a>
+                                            <form method="POST" style="display:inline" onsubmit="return confirm('Are you sure you want to delete this teacher account?');">
+                                                <?php echo csrfInputField(); ?>
+                                                <input type="hidden" name="delete_teacher" value="1">
+                                                <input type="hidden" name="delete_id" value="<?php echo $teacher['id']; ?>">
+                                                <button type="submit" class="bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all inline-flex items-center gap-1">
+                                                    <i class="fa-solid fa-trash"></i> Remove
+                                                </button>
+                                            </form>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>

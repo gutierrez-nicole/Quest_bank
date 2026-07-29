@@ -9,12 +9,12 @@ $pdo = getDBConnection();
 $success_msg = "";
 $error_msg = "";
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' and isset($_POST['upload_material'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_material'])) {
     validateCSRFToken();
     $title = trim($_POST['title']);
     $subject = trim($_POST['subject']);
 
-    if (isset($_FILES['lesson_file']) and $_FILES['lesson_file']['error'] === UPLOAD_ERR_OK) {
+    if (isset($_FILES['lesson_file']) && $_FILES['lesson_file']['error'] === UPLOAD_ERR_OK) {
         $file_tmp = $_FILES['lesson_file']['tmp_name'];
         $file_name = $_FILES['lesson_file']['name'];
         $file_size = $_FILES['lesson_file']['size'];
@@ -69,26 +69,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' and isset($_POST['upload_material'])) 
     }
 }
 
-if (isset($_GET['delete_id'])) {
-    $delete_id = intval($_GET['delete_id']);
-    $stmtFind = $pdo->prepare("SELECT file_path FROM lesson_materials WHERE id = ? AND teacher_id = ?");
-    $stmtFind->execute([$delete_id, $_SESSION['user_id']]);
-    $material = $stmtFind->fetch(PDO::FETCH_ASSOC);
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_material'])) {
+    validateCSRFToken();
+    $delete_id = intval($_POST['delete_id'] ?? 0);
+    $stmtFindMaterial = $pdo->prepare("SELECT file_path FROM lesson_materials WHERE id = ? AND teacher_id = ?");
+    $stmtFindMaterial->execute([$delete_id, getCurrentUserId()]);
+    $material = $stmtFindMaterial->fetch(PDO::FETCH_ASSOC);
 
     if ($material) {
         $full_path = __DIR__ . '/' . $material['file_path'];
         if (file_exists($full_path)) {
             unlink($full_path);
         }
-        $stmtDel = $pdo->prepare("DELETE FROM lesson_materials WHERE id = ?");
-        $stmtDel->execute([$delete_id]);
+        $stmtDeleteMaterial = $pdo->prepare("DELETE FROM lesson_materials WHERE id = ?");
+        $stmtDeleteMaterial->execute([$delete_id]);
         $success_msg = "Lesson material removed successfully!";
     }
 }
 
-$stmtMat = $pdo->prepare("SELECT * FROM lesson_materials WHERE teacher_id = ? ORDER BY id DESC");
-$stmtMat->execute([$_SESSION['user_id']]);
-$materials = $stmtMat->fetchAll(PDO::FETCH_ASSOC);
+$stmtMaterials = $pdo->prepare("SELECT * FROM lesson_materials WHERE teacher_id = ? ORDER BY id DESC");
+$stmtMaterials->execute([getCurrentUserId()]);
+$materials = $stmtMaterials->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <!DOCTYPE html>
