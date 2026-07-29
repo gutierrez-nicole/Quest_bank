@@ -28,9 +28,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_questions'])
     $subject = trim($_POST['subject'] ?? '');
     $exam_title = trim($_POST['exam_title'] ?? '');
     $specialization = trim($_POST['specialization'] ?? 'Structural Engineering');
+    $question_type = trim($_POST['question_type'] ?? 'multiple_choice');
 
     if (!empty($lesson_text) && $num_questions > 0) {
-        $result = GroqService::generateQuestions($lesson_text, $num_questions, $subject, $exam_title, $specialization);
+        $result = GroqService::generateQuestions($lesson_text, $num_questions, $subject, $exam_title, $specialization, $question_type);
         if (isset($result['success'])) {
             $generated_questions = $result['questions'];
             $success_msg = "AI generated " . count($generated_questions) . " question items for {$specialization} successfully!";
@@ -201,6 +202,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                             <?php echo htmlspecialchars($label); ?>
                                         </option>
                                     <?php endforeach; ?>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="space-y-1">
+                            <label class="text-xs font-bold text-stone-700">Target Question Format / Quiz Type</label>
+                            <div class="relative">
+                                <i class="fa-solid fa-list-ol absolute left-3.5 top-3 text-orange-500 text-xs"></i>
+                                <select name="question_type" required class="w-full bg-stone-50 border border-stone-200 rounded-xl pl-9 pr-4 py-2.5 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500 focus:bg-white transition-all">
+                                    <option value="multiple_choice" <?php echo (($_POST['question_type'] ?? '') === 'multiple_choice') ? 'selected' : ''; ?>>Multiple Choice (Options A-D)</option>
+                                    <option value="true_false" <?php echo (($_POST['question_type'] ?? '') === 'true_false') ? 'selected' : ''; ?>>True or False</option>
+                                    <option value="identification" <?php echo (($_POST['question_type'] ?? '') === 'identification') ? 'selected' : ''; ?>>Identification</option>
+                                    <option value="fill_in_the_blank" <?php echo (($_POST['question_type'] ?? '') === 'fill_in_the_blank') ? 'selected' : ''; ?>>Fill-in-the-Blank</option>
+                                    <option value="matching_type" <?php echo (($_POST['question_type'] ?? '') === 'matching_type') ? 'selected' : ''; ?>>Matching Type</option>
+                                    <option value="problem_solving" <?php echo (($_POST['question_type'] ?? '') === 'problem_solving') ? 'selected' : ''; ?>>Problem Solving / Math Formulas</option>
                                 </select>
                             </div>
                         </div>

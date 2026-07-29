@@ -123,6 +123,20 @@ if (!empty($search_query)) {
     $stmtStud->execute([$teacher_id]);
 }
 $students = $stmtStud->fetchAll(PDO::FETCH_ASSOC);
+
+$at_risk_students = [];
+try {
+    $stmtRisk = $pdo->prepare("
+        SELECT student_name, exam_title, percentage, correct_count, total_items, created_at 
+        FROM exam_submissions 
+        WHERE teacher_id = ? AND percentage < 75 
+        ORDER BY id DESC
+    ");
+    $stmtRisk->execute([$teacher_id]);
+    $at_risk_students = $stmtRisk->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    $at_risk_students = [];
+}
 ?>
 
 <!DOCTYPE html>
@@ -165,6 +179,29 @@ $students = $stmtStud->fetchAll(PDO::FETCH_ASSOC);
             <?php endif; ?>
 
             
+            <?php if (!empty($at_risk_students)): ?>
+                <div class="bg-amber-50/80 border border-amber-200 p-5 rounded-2xl shadow-sm space-y-3">
+                    <div class="flex items-center justify-between border-b border-amber-200 pb-2">
+                        <h3 class="text-sm font-extrabold uppercase text-amber-900 flex items-center gap-2">
+                            <i class="fa-solid fa-triangle-exclamation text-amber-600"></i> Early Warning: Academically At-Risk Students (< 75% Score)
+                        </h3>
+                        <span class="bg-amber-200 text-amber-900 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase">Action Required</span>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <?php foreach ($at_risk_students as $risk): ?>
+                            <div class="p-3 bg-white border border-amber-200/80 rounded-xl space-y-1 text-xs">
+                                <div class="flex items-center justify-between">
+                                    <span class="font-extrabold text-stone-800"><?php echo htmlspecialchars($risk['student_name']); ?></span>
+                                    <span class="bg-rose-100 text-rose-800 font-mono font-bold text-[10px] px-2 py-0.5 rounded"><?php echo number_format($risk['percentage'], 1); ?>% (AT-RISK)</span>
+                                </div>
+                                <p class="text-[11px] text-stone-500">Exam: <strong class="text-stone-700"><?php echo htmlspecialchars($risk['exam_title']); ?></strong> (Score: <?php echo $risk['correct_count'] . '/' . $risk['total_items']; ?>)</p>
+                                <p class="text-[10px] text-amber-700 font-semibold italic">Recommendation: Schedule targeted tutorial in Civil Engineering fundamentals.</p>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
+
             <?php if (!empty($pending_requests)): ?>
                 <div class="bg-white border border-stone-200 p-5 rounded-2xl shadow-sm space-y-4">
                     <h3 class="text-sm font-bold text-stone-800 border-b pb-2 flex items-center gap-2">

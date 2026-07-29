@@ -38,13 +38,14 @@ class GroqService {
         return ['success' => true, 'data' => $decoded];
     }
 
-    public static function generateQuestions($lessonText, $numQuestions, $subject, $examTitle, $specialization = 'Structural Engineering', $apiKey = null) {
+    public static function generateQuestions($lessonText, $numQuestions, $subject, $examTitle, $specialization = 'Structural Engineering', $questionType = 'multiple_choice', $apiKey = null) {
         $prompt = "You are an expert Civil Engineering professor specializing in {$specialization} and academic assessment creation. "
                 . "Generate exactly {$numQuestions} high-quality Civil Engineering examination questions for the subject '{$subject}' (Specialization: {$specialization}) titled '{$examTitle}' "
+                . "Target Question Type Format: '{$questionType}' (Types supported: multiple_choice, true_false, identification, fill_in_the_blank, matching_type, problem_solving). "
                 . "based on the following lesson content: \"{$lessonText}\". "
                 . "Include a mix of theoretical concepts, formula applications, and engineering scenario items relevant to {$specialization}. "
                 . "Format response strictly as a JSON array of objects without markdown fences or code blocks. "
-                . "Each object MUST have: \"question\" (string), \"type\" (\"multiple_choice\" or \"identification\"), "
+                . "Each object MUST have: \"question\" (string), \"type\" (string), "
                 . "\"opt_a\" (string or null), \"opt_b\" (string or null), \"opt_c\" (string or null), \"opt_d\" (string or null), "
                 . "\"correct_answer\" (string), and \"explanation\" (string containing detailed step-by-step Civil Engineering formula/concept solution).";
 
