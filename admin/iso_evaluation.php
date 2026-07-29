@@ -104,9 +104,9 @@ function getLikertInterpretation($score) {
                     <button onclick="openAddEvalModal()" class="bg-orange-600 hover:bg-orange-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition-all shadow-md flex items-center gap-2">
                         <i class="fa-solid fa-plus"></i> Submit Quality Evaluation
                     </button>
-                    <button onclick="window.print()" class="bg-stone-900 hover:bg-orange-600 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition-all shadow-md">
-                        <i class="fa-solid fa-print mr-1"></i> Print Matrix
-                    </button>
+                    <a href="export_iso_pdf.php" target="_blank" class="bg-stone-900 hover:bg-orange-600 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition-all shadow-md flex items-center gap-2">
+                        <i class="fa-solid fa-file-pdf text-orange-400"></i> Export FPDF Matrix PDF
+                    </a>
                 </div>
             </div>
 
