@@ -197,67 +197,37 @@ $kpiY = $pdf->GetY();
 $pdf->SetFillColor(250, 250, 249);
 $pdf->SetDrawColor(229, 229, 224);
 
-// Box 1: Total Scanned
-$pdf->Rect(15, $kpiY, 28, 16, 'DF');
-$pdf->SetXY(15, $kpiY + 2);
-$pdf->SetFont('Arial', 'B', 6.5);
-$pdf->SetTextColor(120, 113, 108);
-$pdf->Cell(28, 3, 'TOTAL SCANNED', 0, 1, 'C');
-$pdf->SetFont('Arial', 'B', 11);
-$pdf->SetTextColor(28, 25, 23);
-$pdf->Cell(28, 7, (string)$total, 0, 0, 'C');
+$boxes = [
+    ['title' => 'TOTAL SCANNED', 'val' => (string)$total, 'color' => [28, 25, 23]],
+    ['title' => 'PASSED', 'val' => (string)$pass, 'color' => [21, 128, 61]],
+    ['title' => 'FAILED', 'val' => (string)$fail, 'color' => [190, 18, 60]],
+    ['title' => 'PASS RATE', 'val' => number_format($pass_rate, 1) . '%', 'color' => [234, 88, 12]],
+    ['title' => 'CLASS AVERAGE', 'val' => number_format($avg, 1) . '%', 'color' => [28, 25, 23]],
+    ['title' => 'HIGHEST SCORE', 'val' => number_format($max, 1) . '%', 'color' => [21, 128, 61]]
+];
 
-// Box 2: Passed
-$pdf->Rect(45, $kpiY, 28, 16, 'DF');
-$pdf->SetXY(45, $kpiY + 2);
-$pdf->SetFont('Arial', 'B', 6.5);
-$pdf->SetTextColor(21, 128, 61);
-$pdf->Cell(28, 3, 'PASSED', 0, 1, 'C');
-$pdf->SetFont('Arial', 'B', 11);
-$pdf->SetTextColor(21, 128, 61);
-$pdf->Cell(28, 7, (string)$pass, 0, 0, 'C');
+$boxW = 28;
+$gap = 2.4;
+$startX = 15;
 
-// Box 3: Failed
-$pdf->Rect(75, $kpiY, 28, 16, 'DF');
-$pdf->SetXY(75, $kpiY + 2);
-$pdf->SetFont('Arial', 'B', 6.5);
-$pdf->SetTextColor(190, 18, 60);
-$pdf->Cell(28, 3, 'FAILED', 0, 1, 'C');
-$pdf->SetFont('Arial', 'B', 11);
-$pdf->SetTextColor(190, 18, 60);
-$pdf->Cell(28, 7, (string)$fail, 0, 0, 'C');
+foreach ($boxes as $idx => $b) {
+    $xPos = $startX + ($idx * ($boxW + $gap));
+    $pdf->Rect($xPos, $kpiY, $boxW, 15, 'DF');
+    
+    // Title Line
+    $pdf->SetXY($xPos, $kpiY + 2);
+    $pdf->SetFont('Arial', 'B', 6);
+    $pdf->SetTextColor(120, 113, 108);
+    $pdf->Cell($boxW, 3, $b['title'], 0, 0, 'C');
+    
+    // Value Line
+    $pdf->SetXY($xPos, $kpiY + 6.5);
+    $pdf->SetFont('Arial', 'B', 10);
+    $pdf->SetTextColor($b['color'][0], $b['color'][1], $b['color'][2]);
+    $pdf->Cell($boxW, 6, $b['val'], 0, 0, 'C');
+}
 
-// Box 4: Pass Rate
-$pdf->Rect(105, $kpiY, 28, 16, 'DF');
-$pdf->SetXY(105, $kpiY + 2);
-$pdf->SetFont('Arial', 'B', 6.5);
-$pdf->SetTextColor(194, 65, 12);
-$pdf->Cell(28, 3, 'PASS RATE', 0, 1, 'C');
-$pdf->SetFont('Arial', 'B', 11);
-$pdf->SetTextColor(234, 88, 12);
-$pdf->Cell(28, 7, number_format($pass_rate, 1) . '%', 0, 0, 'C');
-
-// Box 5: Class Average
-$pdf->Rect(135, $kpiY, 28, 16, 'DF');
-$pdf->SetXY(135, $kpiY + 2);
-$pdf->SetFont('Arial', 'B', 6.5);
-$pdf->SetTextColor(120, 113, 108);
-$pdf->Cell(28, 3, 'CLASS AVERAGE', 0, 1, 'C');
-$pdf->SetFont('Arial', 'B', 11);
-$pdf->SetTextColor(28, 25, 23);
-$pdf->Cell(28, 7, number_format($avg, 1) . '%', 0, 0, 'C');
-
-// Box 6: Highest Score
-$pdf->Rect(165, $kpiY, 30, 16, 'DF');
-$pdf->SetXY(165, $kpiY + 2);
-$pdf->SetFont('Arial', 'B', 6.5);
-$pdf->SetTextColor(21, 128, 61);
-$pdf->Cell(30, 3, 'HIGHEST SCORE', 0, 1, 'C');
-$pdf->SetFont('Arial', 'B', 11);
-$pdf->SetTextColor(21, 128, 61);
-$pdf->Cell(30, 7, number_format($max, 1) . '%', 0, 0, 'C');
-
-$pdf->SetY($kpiY + 21);
+$pdf->SetY($kpiY + 20);
 
 // Master Submissions Table Header
 $pdf->SetFont('Arial', 'B', 9.5);
@@ -268,38 +238,38 @@ $pdf->Ln(2);
 // Table Headers
 $pdf->SetFillColor(41, 37, 36); // Stone 900
 $pdf->SetTextColor(255, 255, 255);
-$pdf->SetFont('Arial', 'B', 8);
-$pdf->Cell(55, 7, ' STUDENT NAME', 1, 0, 'L', true);
+$pdf->SetFont('Arial', 'B', 7.5);
+$pdf->Cell(50, 7, ' STUDENT NAME', 1, 0, 'L', true);
 $pdf->Cell(65, 7, 'EXAM TITLE', 1, 0, 'L', true);
 $pdf->Cell(20, 7, 'FORMAT', 1, 0, 'C', true);
-$pdf->Cell(20, 7, 'SCORE', 1, 0, 'C', true);
-$pdf->Cell(20, 7, 'GRADE %', 1, 0, 'C', true);
-$pdf->Cell(0, 7, 'STATUS', 1, 1, 'C', true);
+$pdf->Cell(15, 7, 'SCORE', 1, 0, 'C', true);
+$pdf->Cell(15, 7, 'GRADE %', 1, 0, 'C', true);
+$pdf->Cell(15, 7, 'STATUS', 1, 1, 'C', true);
 
 // Table Rows
-$pdf->SetFont('Arial', '', 8);
+$pdf->SetFont('Arial', '', 7.5);
 $pdf->SetTextColor(28, 25, 23);
 $fill = false;
 
 foreach ($submissions as $row) {
     $pdf->SetFillColor(250, 250, 249);
-    $pdf->Cell(55, 7, ' ' . substr($row['student_name'], 0, 30), 1, 0, 'L', $fill);
-    $pdf->Cell(65, 7, substr($row['exam_title'], 0, 38), 1, 0, 'L', $fill);
+    $pdf->Cell(50, 7, ' ' . substr($row['student_name'], 0, 28), 1, 0, 'L', $fill);
+    $pdf->Cell(65, 7, substr($row['exam_title'], 0, 36), 1, 0, 'L', $fill);
     $pdf->Cell(20, 7, strtoupper($row['upload_type'] ?? 'SCANNED'), 1, 0, 'C', $fill);
-    $pdf->Cell(20, 7, ($row['correct_count'] ?? 0) . ' / ' . ($row['total_items'] ?? 10), 1, 0, 'C', $fill);
+    $pdf->Cell(15, 7, ($row['correct_count'] ?? 0) . ' / ' . ($row['total_items'] ?? 10), 1, 0, 'C', $fill);
     
-    $pdf->SetFont('Arial', 'B', 8);
-    $pdf->Cell(20, 7, number_format((float)($row['percentage'] ?? 0), 1) . '%', 1, 0, 'C', $fill);
+    $pdf->SetFont('Arial', 'B', 7.5);
+    $pdf->Cell(15, 7, number_format((float)($row['percentage'] ?? 0), 1) . '%', 1, 0, 'C', $fill);
     
     if (($row['status'] ?? '') === 'Pass' || ($row['percentage'] ?? 0) >= 75) {
         $pdf->SetTextColor(21, 128, 61); // Green
-        $pdf->Cell(0, 7, 'PASSED', 1, 1, 'C', $fill);
+        $pdf->Cell(15, 7, 'PASSED', 1, 1, 'C', $fill);
     } else {
         $pdf->SetTextColor(190, 18, 60); // Red
-        $pdf->Cell(0, 7, 'FAILED', 1, 1, 'C', $fill);
+        $pdf->Cell(15, 7, 'FAILED', 1, 1, 'C', $fill);
     }
     
-    $pdf->SetFont('Arial', '', 8);
+    $pdf->SetFont('Arial', '', 7.5);
     $pdf->SetTextColor(28, 25, 23);
     $fill = !$fill;
 }
