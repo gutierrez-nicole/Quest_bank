@@ -1,13 +1,12 @@
 <?php
-require_once __DIR__ . '/../app/database.php';
-require_once __DIR__ . '/../app/session.php';
-require_once __DIR__ . '/../includes/security.php';
+require_once __DIR__ . '/../app/bootstrap.php';
+require_once __DIR__ . '/../app/services/DepartmentService.php';
 
-requireRole('admin');
-$pdo = getDBConnection();
+AuthService::enforceRole('admin');
 
 $success_msg = '';
 $error_msg = '';
+$currentUserId = getCurrentUserId();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     validateCSRFToken();
@@ -20,13 +19,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $faculty_head = trim(sanitizeInput($_POST['faculty_head'] ?? ''));
 
         if (!empty($dept_code) && !empty($dept_name)) {
-            try {
-                $stmt = $pdo->prepare("INSERT INTO departments (dept_code, dept_name, programs, faculty_head) VALUES (?, ?, ?, ?)");
-                $stmt->execute([$dept_code, $dept_name, $programs, $faculty_head]);
-                logActivity("Created new department '{$dept_name}' ({$dept_code}).");
+            if (DepartmentService::addDepartment($dept_code, $dept_name, $programs, $faculty_head, $currentUserId)) {
                 $success_msg = "Department '{$dept_name}' created successfully!";
-            } catch (PDOException $e) {
-                $error_msg = "Database error: " . $e->getMessage();
+            } else {
+                $error_msg = "Failed to create department.";
             }
         } else {
             $error_msg = "Please provide both Department Code and Department Name.";
@@ -39,13 +35,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $faculty_head = trim(sanitizeInput($_POST['faculty_head'] ?? ''));
 
         if ($dept_id > 0 && !empty($dept_code) && !empty($dept_name)) {
-            try {
-                $stmt = $pdo->prepare("UPDATE departments SET dept_code = ?, dept_name = ?, programs = ?, faculty_head = ? WHERE id = ?");
-                $stmt->execute([$dept_code, $dept_name, $programs, $faculty_head, $dept_id]);
-                logActivity("Updated department details for '{$dept_name}' ({$dept_code}).");
+            if (DepartmentService::updateDepartment($dept_id, $dept_code, $dept_name, $programs, $faculty_head, $currentUserId)) {
                 $success_msg = "Department '{$dept_name}' updated successfully!";
-            } catch (PDOException $e) {
-                $error_msg = "Database error: " . $e->getMessage();
+            } else {
+                $error_msg = "Failed to update department.";
             }
         } else {
             $error_msg = "Invalid department record or missing required fields.";
@@ -53,27 +46,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'delete') {
         $dept_id = intval($_POST['dept_id'] ?? 0);
         if ($dept_id > 0) {
-            try {
-                $stmtName = $pdo->prepare("SELECT dept_name FROM departments WHERE id = ?");
-                $stmtName->execute([$dept_id]);
-                $deptName = $stmtName->fetchColumn() ?: "ID #{$dept_id}";
-
-                $stmt = $pdo->prepare("DELETE FROM departments WHERE id = ?");
-                $stmt->execute([$dept_id]);
-                logActivity("Deleted department record '{$deptName}'.");
-                $success_msg = "Department '{$deptName}' removed successfully!";
-            } catch (PDOException $e) {
-                $error_msg = "Database error: " . $e->getMessage();
+            if (DepartmentService::deleteDepartment($dept_id, $currentUserId)) {
+                $success_msg = "Department removed successfully!";
+            } else {
+                $error_msg = "Failed to delete department.";
             }
         }
     }
 }
 
-try {
-    $departments = $pdo->query("SELECT * FROM departments ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
-    $departments = [];
-}
+$departments = DepartmentService::getAllDepartments();
 ?>
 <!DOCTYPE html>
 <html lang="en">
