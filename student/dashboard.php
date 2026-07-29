@@ -817,11 +817,11 @@ try {
 
                             <!-- CONTROLS & REVIEW -->
                             <div class="pt-6 border-t border-stone-100 dark:border-stone-800 flex justify-between items-center">
-                                <button class="bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-300 font-bold text-xs px-4 py-2.5 rounded-xl transition-all opacity-50 cursor-not-allowed">
+                                <button id="btn_prev" onclick="prevQuestion()" class="bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-300 font-bold text-xs px-4 py-2.5 rounded-xl transition-all opacity-50 cursor-not-allowed" disabled>
                                     <i class="fa-solid fa-arrow-left mr-1"></i> Previous
                                 </button>
-                                <button onclick="nextQuestion()" class="bg-stone-900 hover:bg-orange-600 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-all shadow-sm">
-                                    Next Question <i class="fa-solid fa-arrow-right ml-1"></i>
+                                <button id="btn_next" onclick="nextQuestion()" class="bg-stone-900 hover:bg-orange-600 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-all shadow-sm flex items-center gap-1">
+                                    <span id="btn_next_text">Next Question</span> <i id="btn_next_icon" class="fa-solid fa-arrow-right"></i>
                                 </button>
                             </div>
                         </div>
@@ -829,17 +829,17 @@ try {
                         <!-- SIDE PANEL QUESTION NAVIGATION GRID -->
                         <div class="space-y-4 border-l border-stone-100 dark:border-stone-800 pl-0 lg:pl-6">
                             <h5 class="text-xs font-extrabold uppercase text-stone-500">Question Navigation</h5>
-                            <div class="grid grid-cols-5 gap-2">
-                                <button class="w-9 h-9 rounded-lg bg-orange-600 text-white font-bold text-xs">1</button>
-                                <button class="w-9 h-9 rounded-lg bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 font-bold text-xs hover:border-orange-500 border">2</button>
-                                <button class="w-9 h-9 rounded-lg bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 font-bold text-xs hover:border-orange-500 border">3</button>
-                                <button class="w-9 h-9 rounded-lg bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 font-bold text-xs hover:border-orange-500 border">4</button>
-                                <button class="w-9 h-9 rounded-lg bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 font-bold text-xs hover:border-orange-500 border">5</button>
+                            <div class="grid grid-cols-5 gap-2" id="q_nav_grid">
+                                <button onclick="jumpToQuestion(0)" id="q_nav_0" class="w-9 h-9 rounded-lg bg-orange-600 text-white font-bold text-xs transition-all">1</button>
+                                <button onclick="jumpToQuestion(1)" id="q_nav_1" class="w-9 h-9 rounded-lg bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 font-bold text-xs hover:border-orange-500 border transition-all">2</button>
+                                <button onclick="jumpToQuestion(2)" id="q_nav_2" class="w-9 h-9 rounded-lg bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 font-bold text-xs hover:border-orange-500 border transition-all">3</button>
+                                <button onclick="jumpToQuestion(3)" id="q_nav_3" class="w-9 h-9 rounded-lg bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 font-bold text-xs hover:border-orange-500 border transition-all">4</button>
+                                <button onclick="jumpToQuestion(4)" id="q_nav_4" class="w-9 h-9 rounded-lg bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 font-bold text-xs hover:border-orange-500 border transition-all">5</button>
                             </div>
 
                             <div class="pt-4 space-y-2 border-t border-stone-100 dark:border-stone-800">
-                                <button onclick="openSubmitModal()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-md">
-                                    <i class="fa-solid fa-paper-plane mr-1"></i> Finalize & Submit
+                                <button onclick="openSubmitModal()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-3 rounded-xl transition-all shadow-md flex items-center justify-center gap-1.5">
+                                    <i class="fa-solid fa-paper-plane"></i> Finalize & Submit
                                 </button>
                             </div>
                         </div>
@@ -1124,9 +1124,160 @@ try {
         }
 
         // 3. Online Exam Session Trigger & Security Scripts
-        function startExamSession() {
+        // 3. Dynamic Exam Session Engine & Question Pagination
+        const activeExamQuestions = [
+            {
+                num: 1,
+                title: "Which of the following describes the practice of continuous integration (CI) in software development?",
+                opt_a: "Frequently merging code changes into a central repository followed by automated builds.",
+                opt_b: "Deploying code manually to production servers every month.",
+                opt_c: "Writing code without testing until final release phase.",
+                opt_d: "Managing user interface styling frameworks only.",
+                correct: "A"
+            },
+            {
+                num: 2,
+                title: "What is the standard unit of Soil Shear Strength in Geotechnical Engineering analysis?",
+                opt_a: "Kilopascals (kPa)",
+                opt_b: "Kilonewtons (kN)",
+                opt_c: "Meters per second (m/s)",
+                opt_d: "Joules (J)",
+                correct: "A"
+            },
+            {
+                num: 3,
+                title: "Terzaghi's Bearing Capacity theory applies primarily to which class of foundation structures?",
+                opt_a: "Shallow Footings (Strip, Square, Circular)",
+                opt_b: "Deep Bored Piles",
+                opt_c: "Offshore Driven Caissons",
+                opt_d: "Pre-stressed Concrete Micropiles",
+                correct: "A"
+            },
+            {
+                num: 4,
+                title: "In Darcy's Law governing fluid flow in porous soil media, what parameter does coefficient 'k' represent?",
+                opt_a: "Hydraulic Conductivity (Permeability)",
+                opt_b: "Hydraulic Gradient",
+                opt_c: "Total Hydraulic Head",
+                opt_d: "Seepage Velocity Factor",
+                correct: "A"
+            },
+            {
+                num: 5,
+                title: "In reinforced concrete flexural design, what parameter does f'c specify?",
+                opt_a: "Specified compressive strength of concrete at 28 days",
+                opt_b: "Yield strength of main reinforcement bars",
+                opt_c: "Modulus of elasticity of concrete",
+                opt_d: "Maximum allowable shear stress",
+                correct: "A"
+            }
+        ];
+
+        let currentQuestionIndex = 0;
+        let userAnswers = {};
+
+        function startExamSession(examId) {
+            currentQuestionIndex = 0;
+            userAnswers = {};
             switchTab('take-exam');
             startTimer(3600);
+            renderCurrentQuestion();
+        }
+
+        function renderCurrentQuestion() {
+            const q = activeExamQuestions[currentQuestionIndex];
+            document.getElementById('current_q_num').innerText = q.num;
+            document.getElementById('question_title').innerText = q.title;
+
+            // Render Choices
+            const choicesContainer = document.getElementById('choices_container');
+            const selectedAns = userAnswers[currentQuestionIndex];
+
+            choicesContainer.innerHTML = `
+                <label onclick="saveAnswer('A')" class="flex items-center gap-3 p-4 border rounded-xl cursor-pointer transition-all ${selectedAns === 'A' ? 'border-orange-500 bg-orange-50/40 dark:bg-orange-950/30 font-bold' : 'border-stone-200 dark:border-stone-800 hover:border-orange-400 bg-stone-50/50 dark:bg-stone-800/20'}">
+                    <input type="radio" name="exam_q_choice" value="A" ${selectedAns === 'A' ? 'checked' : ''} class="accent-orange-600 w-4 h-4">
+                    <span class="text-xs">A. ${q.opt_a}</span>
+                </label>
+                <label onclick="saveAnswer('B')" class="flex items-center gap-3 p-4 border rounded-xl cursor-pointer transition-all ${selectedAns === 'B' ? 'border-orange-500 bg-orange-50/40 dark:bg-orange-950/30 font-bold' : 'border-stone-200 dark:border-stone-800 hover:border-orange-400 bg-stone-50/50 dark:bg-stone-800/20'}">
+                    <input type="radio" name="exam_q_choice" value="B" ${selectedAns === 'B' ? 'checked' : ''} class="accent-orange-600 w-4 h-4">
+                    <span class="text-xs">B. ${q.opt_b}</span>
+                </label>
+                <label onclick="saveAnswer('C')" class="flex items-center gap-3 p-4 border rounded-xl cursor-pointer transition-all ${selectedAns === 'C' ? 'border-orange-500 bg-orange-50/40 dark:bg-orange-950/30 font-bold' : 'border-stone-200 dark:border-stone-800 hover:border-orange-400 bg-stone-50/50 dark:bg-stone-800/20'}">
+                    <input type="radio" name="exam_q_choice" value="C" ${selectedAns === 'C' ? 'checked' : ''} class="accent-orange-600 w-4 h-4">
+                    <span class="text-xs">C. ${q.opt_c}</span>
+                </label>
+                <label onclick="saveAnswer('D')" class="flex items-center gap-3 p-4 border rounded-xl cursor-pointer transition-all ${selectedAns === 'D' ? 'border-orange-500 bg-orange-50/40 dark:bg-orange-950/30 font-bold' : 'border-stone-200 dark:border-stone-800 hover:border-orange-400 bg-stone-50/50 dark:bg-stone-800/20'}">
+                    <input type="radio" name="exam_q_choice" value="D" ${selectedAns === 'D' ? 'checked' : ''} class="accent-orange-600 w-4 h-4">
+                    <span class="text-xs">D. ${q.opt_d}</span>
+                </label>
+            `;
+
+            // Update Prev Button
+            const btnPrev = document.getElementById('btn_prev');
+            if (currentQuestionIndex === 0) {
+                btnPrev.disabled = true;
+                btnPrev.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                btnPrev.disabled = false;
+                btnPrev.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+
+            // Update Next Button
+            const btnNextText = document.getElementById('btn_next_text');
+            const btnNextIcon = document.getElementById('btn_next_icon');
+            if (currentQuestionIndex === activeExamQuestions.length - 1) {
+                btnNextText.innerText = "Finish Exam";
+                btnNextIcon.className = "fa-solid fa-flag-checkered";
+            } else {
+                btnNextText.innerText = "Next Question";
+                btnNextIcon.className = "fa-solid fa-arrow-right";
+            }
+
+            // Update Navigation Grid Highlights
+            for (let i = 0; i < activeExamQuestions.length; i++) {
+                const navBtn = document.getElementById(`q_nav_${i}`);
+                if (navBtn) {
+                    if (i === currentQuestionIndex) {
+                        navBtn.className = "w-9 h-9 rounded-lg bg-orange-600 text-white font-black text-xs shadow-md border-2 border-orange-400 transition-all";
+                    } else if (userAnswers[i] !== undefined) {
+                        navBtn.className = "w-9 h-9 rounded-lg bg-emerald-600 text-white font-bold text-xs shadow-sm transition-all";
+                    } else {
+                        navBtn.className = "w-9 h-9 rounded-lg bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 font-bold text-xs hover:border-orange-500 border transition-all";
+                    }
+                }
+            }
+
+            // Update Progress Bar
+            const progressPct = ((currentQuestionIndex + 1) / activeExamQuestions.length) * 100;
+            document.getElementById('exam_progress').style.width = `${progressPct}%`;
+        }
+
+        function saveAnswer(choice) {
+            userAnswers[currentQuestionIndex] = choice;
+            renderCurrentQuestion();
+        }
+
+        function nextQuestion() {
+            if (currentQuestionIndex < activeExamQuestions.length - 1) {
+                currentQuestionIndex++;
+                renderCurrentQuestion();
+            } else {
+                openSubmitModal();
+            }
+        }
+
+        function prevQuestion() {
+            if (currentQuestionIndex > 0) {
+                currentQuestionIndex--;
+                renderCurrentQuestion();
+            }
+        }
+
+        function jumpToQuestion(index) {
+            if (index >= 0 && index < activeExamQuestions.length) {
+                currentQuestionIndex = index;
+                renderCurrentQuestion();
+            }
         }
 
         function toggleFullscreen() {
@@ -1159,11 +1310,6 @@ try {
                     switchTab('exam-results');
                 }
             }, 1000);
-        }
-
-        function nextQuestion() {
-            // Placeholder for next question logic
-            alert("Next question functionality to be implemented");
         }
 
         function openSubmitModal() { 
