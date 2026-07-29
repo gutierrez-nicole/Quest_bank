@@ -19,6 +19,14 @@ try {
     $completed_exams = $pdo->query("SELECT COUNT(*) FROM exam_submissions WHERE status = 'Pass'")->fetchColumn() ?: 130;
     $avg_score = $pdo->query("SELECT AVG(percentage) FROM exam_submissions")->fetchColumn() ?: 86.4;
 
+    $latest_activities = [];
+    try {
+        $stmtLogs = $pdo->query("SELECT * FROM exam_submissions ORDER BY id DESC LIMIT 5");
+        $latest_activities = $stmtLogs->fetchAll(PDO::FETCH_ASSOC);
+    } catch (PDOException $e) {
+        $latest_activities = [];
+    }
+
 } catch (PDOException $e) {
     die("Database error: " . $e->getMessage());
 }
@@ -311,25 +319,26 @@ try {
                                     <th class="p-4 pl-6">Operator User</th>
                                     <th class="p-4">Role</th>
                                     <th class="p-4">Action Event</th>
-                                    <th class="p-4">IP Address</th>
+                                    <th class="p-4 text-center">Score Recorded</th>
                                     <th class="p-4 pr-6 text-right">Timestamp</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-stone-100 dark:divide-stone-800 font-bold">
-                                <tr class="hover:bg-stone-50/50 dark:hover:bg-stone-800/30 transition-all">
-                                    <td class="p-4 pl-6 text-stone-800 dark:text-stone-100">Prof. Santos</td>
-                                    <td class="p-4"><span class="bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-400 px-2.5 py-0.5 rounded-md text-[10px]">TEACHER</span></td>
-                                    <td class="p-4 text-stone-600 dark:text-stone-300">Generated AI Midterm Exam for DevOps Principles.</td>
-                                    <td class="p-4 font-mono text-stone-400">192.168.1.42</td>
-                                    <td class="p-4 pr-6 text-stone-400 text-right">July 20, 2026 10:14 PM</td>
-                                </tr>
-                                <tr class="hover:bg-stone-50/50 dark:hover:bg-stone-800/30 transition-all">
-                                    <td class="p-4 pl-6 text-stone-800 dark:text-stone-100">John Doe</td>
-                                    <td class="p-4"><span class="bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-400 px-2.5 py-0.5 rounded-md text-[10px]">STUDENT</span></td>
-                                    <td class="p-4 text-stone-600 dark:text-stone-300">Submitted Handwritten scanned script answer key package.</td>
-                                    <td class="p-4 font-mono text-stone-400">192.168.1.105</td>
-                                    <td class="p-4 pr-6 text-stone-400 text-right">July 20, 2026 09:44 PM</td>
-                                </tr>
+                                <?php if (!empty($latest_activities)): ?>
+                                    <?php foreach ($latest_activities as $act): ?>
+                                        <tr class="hover:bg-stone-50/50 dark:hover:bg-stone-800/30 transition-all">
+                                            <td class="p-4 pl-6 text-stone-800 dark:text-stone-100 font-extrabold"><?php echo htmlspecialchars($act['student_name']); ?></td>
+                                            <td class="p-4"><span class="bg-orange-100 dark:bg-orange-950 text-orange-700 dark:text-orange-400 px-2.5 py-0.5 rounded-md text-[10px] uppercase font-bold">STUDENT</span></td>
+                                            <td class="p-4 text-stone-600 dark:text-stone-300 font-semibold"><?php echo htmlspecialchars($act['exam_title']); ?></td>
+                                            <td class="p-4 text-center font-mono font-bold"><?php echo ($act['correct_count'] ?? 0) . ' / ' . ($act['total_items'] ?? 10); ?></td>
+                                            <td class="p-4 pr-6 text-stone-400 text-right font-medium"><?php echo date('M d, Y h:i A', strtotime($act['created_at'])); ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                <?php else: ?>
+                                    <tr>
+                                        <td colspan="5" class="p-6 text-center text-stone-400 font-semibold">No audit trail records found in database.</td>
+                                    </tr>
+                                <?php endif; ?>
                             </tbody>
                         </table>
                     </div>
