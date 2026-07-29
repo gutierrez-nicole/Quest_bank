@@ -21,11 +21,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' and isset($_POST['upload_material'])) 
         $file_ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
 
         $allowed_exts = ['pdf', 'docx', 'pptx', 'txt'];
+        $allowed_mimes = [
+            'application/pdf',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'text/plain',
+            'application/octet-stream'
+        ];
 
-        if (in_array($file_ext, $allowed_exts)) {
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime_type = finfo_file($finfo, $file_tmp);
+        finfo_close($finfo);
+
+        if ($file_size <= 10485760 && in_array($file_ext, $allowed_exts) && in_array($mime_type, $allowed_mimes)) {
             $upload_dir = __DIR__ . '/uploads/';
             if (!is_dir($upload_dir)) {
-                mkdir($upload_dir, 0777, true);
+                mkdir($upload_dir, 0755, true);
             }
 
             $new_file_name = uniqid('lesson_') . '.' . $file_ext;

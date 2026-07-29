@@ -35,8 +35,10 @@ try {
     $params = [];
 
     if ($single_id > 0) {
-        $where[] = "es.id = ?";
+        $where[] = "es.id = ? AND (es.student_id = ? OR es.student_name LIKE ?)";
         $params[] = $single_id;
+        $params[] = $student_id;
+        $params[] = "%{$fullname}%";
     } else {
         $where[] = "(es.student_id = ? OR es.student_name LIKE ?)";
         $params[] = $student_id;

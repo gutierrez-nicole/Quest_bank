@@ -1,7 +1,14 @@
 <?php
 
 if (session_status() === PHP_SESSION_NONE) {
+    ini_set('session.cookie_httponly', 1);
+    ini_set('session.cookie_samesite', 'Lax');
+    ini_set('session.use_strict_mode', 1);
     session_start();
+}
+
+function regenerateSecureSession() {
+    session_regenerate_id(true);
 }
 
 function requireLogin() {
