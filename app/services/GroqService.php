@@ -37,16 +37,20 @@ class GroqService {
         return ['success' => true, 'data' => $decoded];
     }
 
-    public static function generateQuestions($lessonText, $numQuestions, $subject, $examTitle, $specialization = 'Structural Engineering', $questionType = 'multiple_choice', $apiKey = null) {
+    public static function generateQuestions($lessonText, $numQuestions, $subject, $examTitle, $specialization = 'Structural Engineering', $questionType = 'multiple_choice', $difficulty = 'medium', $apiKey = null) {
+        $startTime = microtime(true);
+
         $prompt = "You are an expert Civil Engineering professor specializing in {$specialization} and academic assessment creation. "
-                . "Generate exactly {$numQuestions} high-quality Civil Engineering examination questions for the subject '{$subject}' (Specialization: {$specialization}) titled '{$examTitle}' "
-                . "Target Question Type Format: '{$questionType}' (Types supported: multiple_choice, true_false, identification, fill_in_the_blank, matching_type, problem_solving). "
+                . "Generate exactly {$numQuestions} high-quality Civil Engineering examination questions for the subject '{$subject}' (Specialization: {$specialization}) titled '{$examTitle}'. "
+                . "Target Difficulty Level: '{$difficulty}'. "
+                . "Target Question Type Format: '{$questionType}' (Supported types: multiple_choice, true_false, identification, fill_in_the_blank, matching_type, problem_solving, math_formula). "
                 . "based on the following lesson content: \"{$lessonText}\". "
-                . "Include a mix of theoretical concepts, formula applications, and engineering scenario items relevant to {$specialization}. "
+                . "Include a mix of theoretical concepts, formula applications, and engineering scenario items. "
                 . "Format response strictly as a JSON array of objects without markdown fences or code blocks. "
                 . "Each object MUST have: \"question\" (string), \"type\" (string), "
                 . "\"opt_a\" (string or null), \"opt_b\" (string or null), \"opt_c\" (string or null), \"opt_d\" (string or null), "
-                . "\"correct_answer\" (string), and \"explanation\" (string containing detailed step-by-step Civil Engineering formula/concept solution).";
+                . "\"correct_answer\" (string), \"formula_latex\" (string or null), \"matching_pairs\" (object or null), "
+                . "and \"explanation\" (string containing detailed step-by-step Civil Engineering formula/concept solution).";
 
         $payload = [
             'model' => GROQ_DEFAULT_MODEL,
@@ -61,25 +65,47 @@ class GroqService {
             return $res;
         }
 
+        $executionTime = round((microtime(true) - $startTime) * 1000, 2);
+        $usage = $res['data']['usage'] ?? ['total_tokens' => 0];
+
         $content = $res['data']['choices'][0]['message']['content'] ?? '';
         $cleanContent = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', trim($content));
         $cleanJson = json_decode(trim($cleanContent), true);
 
         if (json_last_error() === JSON_ERROR_NONE && is_array($cleanJson)) {
-            return ['success' => true, 'questions' => $cleanJson];
+            return [
+                'success' => true,
+                'questions' => $cleanJson,
+                'metadata' => [
+                    'model' => GROQ_DEFAULT_MODEL,
+                    'generation_time_ms' => $executionTime,
+                    'token_usage' => $usage['total_tokens'] ?? 0,
+                    'prompt' => mb_substr($prompt, 0, 500),
+                    'difficulty' => $difficulty
+                ]
+            ];
         }
 
         return ['error' => 'Failed to parse AI output into valid JSON questions schema. Raw response: ' . substr($content, 0, 200)];
     }
 
-    public static function evaluateAnswerSheet($studentName, $examTitle, $uploadType, $answerKey, $simulatedOrExtractedText, $apiKey = null) {
-        $prompt = "You are an advanced educational AI OCR and grading system for Civil Engineering assessments. "
-                . "Analyze the student exam paper for student '{$studentName}', exam '{$examTitle}'. "
-                . "Answer Key provided by Teacher: {$answerKey}. "
-                . "Student Answers extracted: {$simulatedOrExtractedText}. "
-                . "Calculate score parameters meticulously: Total items, Correct count, Wrong count, Percentage Grade (0-100), Status ('Pass' if percentage >= 75, else 'Fail'). "
-                . "Return ONLY a valid JSON object string matching schema: "
-                . "{\"correct\": 4, \"wrong\": 1, \"total_items\": 5, \"percentage\": 80, \"status\": \"Pass\", \"questions\": [{\"num\": 1, \"q\": \"Question text\", \"student_ans\": \"Ans\", \"key_ans\": \"Key\", \"is_correct\": true, \"explanation\": \"Step-by-step Civil Engineering formula solution & explanation\"}]}";
+    public static function evaluateAnswerSheetDetailed($studentName, $examTitle, $uploadType, $answerKey, $ocrExtractedText, $apiKey = null) {
+        $startTime = microtime(true);
+
+        $prompt = "You are an advanced AI evaluation system for Civil Engineering exam grading. "
+                . "Evaluate student exam paper for Student: '{$studentName}', Exam: '{$examTitle}'. "
+                . "Answer Key provided: \"{$answerKey}\". "
+                . "OCR Extracted Student Answers: \"{$ocrExtractedText}\". "
+                . "Perform question-by-question comparative evaluation. "
+                . "Classify each item status as 'correct', 'incorrect', or 'partially_correct'. "
+                . "Assign confidence score (0-100%), detailed reason, and flag 'suggested_manual_review' (true if confidence < 75 or answer is partially correct). "
+                . "Return ONLY a valid JSON object matching schema: "
+                . "{"
+                . "\"total_items\": 5, \"correct_count\": 4, \"wrong_count\": 1, \"percentage\": 80.0, \"status\": \"Pass\", \"overall_confidence\": 92.5, "
+                . "\"items\": ["
+                . "{\"num\": 1, \"student_answer\": \"Ans\", \"correct_answer\": \"Key\", \"result\": \"correct\", \"confidence\": 95.0, \"reason\": \"Exact match\", \"suggested_manual_review\": false}"
+                . "]"
+                . "}";
 
         $payload = [
             'model' => GROQ_DEFAULT_MODEL,
@@ -94,14 +120,20 @@ class GroqService {
             return $res;
         }
 
+        $executionTime = round((microtime(true) - $startTime) * 1000, 2);
+
         $content = $res['data']['choices'][0]['message']['content'] ?? '';
         $cleanContent = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', trim($content));
         $cleanJson = json_decode(trim($cleanContent), true);
 
         if (json_last_error() === JSON_ERROR_NONE && is_array($cleanJson)) {
-            return ['success' => true, 'evaluation' => $cleanJson];
+            return [
+                'success' => true,
+                'evaluation' => $cleanJson,
+                'execution_time_ms' => $executionTime
+            ];
         }
 
-        return ['error' => 'Failed to parse AI grading output into JSON. Raw output: ' . substr($content, 0, 200)];
+        return ['error' => 'Failed to parse AI evaluation output into JSON. Raw output: ' . substr($content, 0, 200)];
     }
 }

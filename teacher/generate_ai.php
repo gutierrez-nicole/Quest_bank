@@ -3,74 +3,140 @@ require_once __DIR__ . '/../app/bootstrap.php';
 
 AuthService::enforceRole('teacher');
 $pdo = getDBConnection();
-
-try {
-    $teacher_id = getCurrentUserId();
-    $stmt = $pdo->prepare("SELECT fullname, username, email FROM users WHERE id = ?");
-    $stmt->execute([$teacher_id]);
-    $teacher = $stmt->fetch();
-} catch (PDOException $e) {
-    die("Database error: " . $e->getMessage());
-}
+$teacher_id = getCurrentUserId();
 
 $success_msg = "";
 $error_msg = "";
 $generated_questions = null;
+$ai_meta_output = null;
+
+// Fetch teacher's completed lesson materials
+$stmtMaterials = $pdo->prepare("SELECT id, title, subject, lesson_text, word_count, page_count FROM lesson_materials WHERE teacher_id = ? AND processing_status = 'completed' ORDER BY id DESC");
+$stmtMaterials->execute([$teacher_id]);
+$completed_lessons = $stmtMaterials->fetchAll(PDO::FETCH_ASSOC);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_questions'])) {
     validateCSRFToken();
+    $input_source = $_POST['input_source'] ?? 'manual';
+    $selected_lesson_ids = $_POST['selected_lessons'] ?? [];
     $lesson_text = trim($_POST['lesson_text'] ?? '');
     $num_questions = intval($_POST['num_questions'] ?? 5);
-    $subject = trim($_POST['subject'] ?? '');
-    $exam_title = trim($_POST['exam_title'] ?? '');
-    $specialization = trim($_POST['specialization'] ?? 'Structural Engineering');
+    $subject = trim(sanitizeInput($_POST['subject'] ?? ''));
+    $exam_title = trim(sanitizeInput($_POST['exam_title'] ?? ''));
+    $specialization = trim(sanitizeInput($_POST['specialization'] ?? 'Structural Engineering'));
     $question_type = trim($_POST['question_type'] ?? 'multiple_choice');
+    $difficulty = trim($_POST['difficulty'] ?? 'medium');
 
-    if (!empty($lesson_text) && $num_questions > 0) {
-        $result = GroqService::generateQuestions($lesson_text, $num_questions, $subject, $exam_title, $specialization, $question_type);
+    $final_lesson_content = "";
+    $associated_lesson_ids = [];
+
+    if ($input_source === 'extracted' && !empty($selected_lesson_ids)) {
+        if (in_array('all', $selected_lesson_ids)) {
+            foreach ($completed_lessons as $cl) {
+                $final_lesson_content .= "\n\n=== Lesson: {$cl['title']} ({$cl['subject']}) ===\n" . $cl['lesson_text'];
+                $associated_lesson_ids[] = $cl['id'];
+            }
+        } else {
+            $placeholders = implode(',', array_fill(0, count($selected_lesson_ids), '?'));
+            $stmtFetchSel = $pdo->prepare("SELECT id, title, subject, lesson_text FROM lesson_materials WHERE id IN ($placeholders) AND teacher_id = ?");
+            $params = array_merge(array_map('intval', $selected_lesson_ids), [$teacher_id]);
+            $stmtFetchSel->execute($params);
+            $selLessons = $stmtFetchSel->fetchAll(PDO::FETCH_ASSOC);
+
+            foreach ($selLessons as $sl) {
+                $final_lesson_content .= "\n\n=== Lesson: {$sl['title']} ({$sl['subject']}) ===\n" . $sl['lesson_text'];
+                $associated_lesson_ids[] = $sl['id'];
+            }
+        }
+    } else {
+        $final_lesson_content = $lesson_text;
+    }
+
+    if (!empty(trim($final_lesson_content)) && $num_questions > 0) {
+        $result = GroqService::generateQuestions($final_lesson_content, $num_questions, $subject, $exam_title, $specialization, $question_type, $difficulty);
         if (isset($result['success'])) {
             $generated_questions = $result['questions'];
-            $success_msg = "AI generated " . count($generated_questions) . " question items for {$specialization} successfully!";
+            $ai_meta_output = array_merge($result['metadata'] ?? [], ['lesson_ids' => $associated_lesson_ids]);
+            $success_msg = "AI successfully generated " . count($generated_questions) . " question items from " . ($input_source === 'extracted' ? count($associated_lesson_ids) . " extracted lesson(s)" : "manual text") . "!";
         } else {
             $error_msg = $result['error'] ?? "Failed to generate AI questions.";
         }
     } else {
-        $error_msg = "Please enter lesson material text and set valid question parameters.";
+        $error_msg = "Please select extracted lesson materials or paste valid lesson content.";
     }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
     validateCSRFToken();
-    $title = trim($_POST['save_title']);
-    $subject = trim($_POST['save_subject']);
-    $specialization = trim($_POST['save_specialization'] ?? 'Structural Engineering');
+    $title = trim(sanitizeInput($_POST['save_title'] ?? ''));
+    $subject = trim(sanitizeInput($_POST['save_subject'] ?? ''));
+    $specialization = trim(sanitizeInput($_POST['save_specialization'] ?? 'Structural Engineering'));
+    $difficulty = trim($_POST['save_difficulty'] ?? 'medium');
     $questions = $_POST['questions'] ?? [];
+    $meta_json = $_POST['save_ai_metadata'] ?? '{}';
+    $lesson_ids_str = $_POST['save_lesson_ids'] ?? '';
 
     if (!empty($title) && !empty($subject) && !empty($questions)) {
         try {
             $pdo->beginTransaction();
 
-            $stmt = $pdo->prepare("INSERT INTO exams (teacher_id, title, subject, specialization, time_limit, total_items) VALUES (?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$_SESSION['user_id'], $title, $subject, $specialization, 60, count($questions)]);
+            $stmt = $pdo->prepare("
+                INSERT INTO exams 
+                (teacher_id, title, subject, specialization, difficulty, time_limit, total_items, ai_metadata, lesson_ids) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+            $stmt->execute([
+                $teacher_id, 
+                $title, 
+                $subject, 
+                $specialization, 
+                $difficulty, 
+                60, 
+                count($questions),
+                $meta_json,
+                $lesson_ids_str
+            ]);
             $exam_id = $pdo->lastInsertId();
 
-            $qStmt = $pdo->prepare("INSERT INTO exam_questions (exam_id, question_text, question_type, option_a, option_b, option_c, option_d, correct_answer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+            $qStmt = $pdo->prepare("
+                INSERT INTO exam_questions 
+                (exam_id, question_text, question_type, option_a, option_b, option_c, option_d, correct_answer, formula_latex, matching_pairs, points) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
             
+            $seenQuestions = [];
+            $savedCount = 0;
+
             foreach ($questions as $q) {
+                $qText = trim($q['text'] ?? '');
+                if (empty($qText) || in_array(mb_strtolower($qText), $seenQuestions)) {
+                    continue; // Skip duplicate question text
+                }
+                $seenQuestions[] = mb_strtolower($qText);
+
                 $qStmt->execute([
                     $exam_id,
-                    $q['text'],
-                    $q['type'],
+                    $qText,
+                    $q['type'] ?? 'multiple_choice',
                     $q['opt_a'] ?? null,
                     $q['opt_b'] ?? null,
                     $q['opt_c'] ?? null,
                     $q['opt_d'] ?? null,
-                    $q['correct']
+                    $q['correct'] ?? '',
+                    $q['formula_latex'] ?? null,
+                    isset($q['matching_pairs']) ? json_encode($q['matching_pairs']) : null,
+                    intval($q['points'] ?? 1)
                 ]);
+                $savedCount++;
             }
 
+            // Update total items count
+            $stmtUpdateTotal = $pdo->prepare("UPDATE exams SET total_items = ? WHERE id = ?");
+            $stmtUpdateTotal->execute([$savedCount, $exam_id]);
+
             $pdo->commit();
-            $success_msg = "AI-generated exam saved to Question Bank under '{$specialization}' successfully!";
+            logActivity("Saved AI-generated exam '{$title}' ({$savedCount} deduplicated questions, Difficulty: {$difficulty}).", $teacher_id);
+            $success_msg = "AI-generated exam '{$title}' saved to Question Bank successfully!";
             $generated_questions = null;
         } catch (PDOException $e) {
             $pdo->rollBack();
@@ -186,53 +252,118 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                             </div>
                         </div>
 
-                        
                         <div class="space-y-1">
-                            <label class="text-xs font-bold text-stone-700">Civil Engineering Specialization Branch</label>
-                            <div class="relative">
-                                <i class="fa-solid fa-compass-drafting absolute left-3.5 top-3 text-orange-500 text-xs"></i>
-                                <select name="specialization" required class="w-full bg-stone-50 border border-stone-200 rounded-xl pl-9 pr-4 py-2.5 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500 focus:bg-white transition-all">
-                                    <?php foreach (getCivilEngineeringSpecializations() as $key => $label): ?>
-                                        <option value="<?php echo htmlspecialchars($key); ?>" <?php echo (($_POST['specialization'] ?? '') === $key) ? 'selected' : ''; ?>>
-                                            <?php echo htmlspecialchars($label); ?>
-                                        </option>
+                            <label class="text-xs font-bold text-stone-700">Content Input Source</label>
+                            <div class="grid grid-cols-2 gap-2 bg-stone-100 p-1 rounded-xl">
+                                <label class="flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-bold cursor-pointer transition-all has-[:checked]:bg-white has-[:checked]:text-orange-600 has-[:checked]:shadow-sm text-stone-600">
+                                    <input type="radio" name="input_source" value="extracted" onclick="toggleInputSource('extracted')" <?php echo (($_POST['input_source'] ?? 'extracted') === 'extracted') ? 'checked' : ''; ?> class="hidden">
+                                    <i class="fa-solid fa-file-lines"></i> Extracted Lessons
+                                </label>
+                                <label class="flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-bold cursor-pointer transition-all has-[:checked]:bg-white has-[:checked]:text-orange-600 has-[:checked]:shadow-sm text-stone-600">
+                                    <input type="radio" name="input_source" value="manual" onclick="toggleInputSource('manual')" <?php echo (($_POST['input_source'] ?? '') === 'manual') ? 'checked' : ''; ?> class="hidden">
+                                    <i class="fa-solid fa-paste"></i> Manual Paste
+                                </label>
+                            </div>
+                        </div>
+
+                        <div id="extracted_lessons_block" class="space-y-2 <?php echo (($_POST['input_source'] ?? 'extracted') === 'manual') ? 'hidden' : ''; ?>">
+                            <label class="text-xs font-bold text-stone-700 flex justify-between items-center">
+                                <span>Select Extracted Lessons</span>
+                                <span class="text-[10px] text-orange-600 font-semibold"><?php echo count($completed_lessons); ?> Available</span>
+                            </label>
+                            <?php if (!empty($completed_lessons)): ?>
+                                <div class="max-h-40 overflow-y-auto border border-stone-200 rounded-xl bg-stone-50 p-2 space-y-1.5 text-xs">
+                                    <label class="flex items-center gap-2 p-1.5 rounded hover:bg-white cursor-pointer font-extrabold text-orange-700">
+                                        <input type="checkbox" name="selected_lessons[]" value="all" class="accent-orange-600 rounded">
+                                        <span>Select All Module Lessons</span>
+                                    </label>
+                                    <?php foreach ($completed_lessons as $cl): ?>
+                                        <label class="flex items-center justify-between p-1.5 rounded hover:bg-white cursor-pointer text-stone-800 font-medium">
+                                            <div class="flex items-center gap-2 truncate">
+                                                <input type="checkbox" name="selected_lessons[]" value="<?php echo $cl['id']; ?>" class="accent-orange-600 rounded">
+                                                <span class="truncate"><?php echo htmlspecialchars($cl['title']); ?></span>
+                                            </div>
+                                            <span class="text-[9px] font-bold text-stone-400 bg-white px-1.5 py-0.5 rounded border flex-shrink-0">
+                                                <?php echo number_format($cl['word_count']); ?> words
+                                            </span>
+                                        </label>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php else: ?>
+                                <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs font-semibold">
+                                    No extracted lessons found. Please upload lesson materials first under <a href="upload_lessons.php" class="underline font-bold">Upload Lessons</a> or use Manual Paste mode.
+                                </div>
+                            <?php endif; ?>
+                        </div>
+
+                        <div id="manual_text_block" class="space-y-1 <?php echo (($_POST['input_source'] ?? 'extracted') === 'extracted' || !isset($_POST['input_source'])) ? 'hidden' : ''; ?>">
+                            <label class="text-xs font-bold text-stone-700">Paste Lesson Content / Syllabi Notes</label>
+                            <textarea name="lesson_text" rows="5" placeholder="Paste Civil Engineering notes, formulas, or lecture content here..." class="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-xs font-medium text-stone-800 outline-none focus:border-orange-500 focus:bg-white resize-none transition-all"><?php echo htmlspecialchars($_POST['lesson_text'] ?? ''); ?></textarea>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="space-y-1">
+                                <label class="text-xs font-bold text-stone-700">Difficulty Level</label>
+                                <select name="difficulty" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500">
+                                    <option value="easy" <?php echo (($_POST['difficulty'] ?? '') === 'easy') ? 'selected' : ''; ?>>Easy</option>
+                                    <option value="medium" <?php echo (($_POST['difficulty'] ?? 'medium') === 'medium') ? 'selected' : ''; ?>>Medium</option>
+                                    <option value="hard" <?php echo (($_POST['difficulty'] ?? '') === 'hard') ? 'selected' : ''; ?>>Hard / Advanced</option>
+                                    <option value="mixed" <?php echo (($_POST['difficulty'] ?? '') === 'mixed') ? 'selected' : ''; ?>>Mixed Difficulty</option>
+                                </select>
+                            </div>
+
+                            <div class="space-y-1">
+                                <label class="text-xs font-bold text-stone-700">Number of Items</label>
+                                <select name="num_questions" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500">
+                                    <?php foreach ([5, 10, 15, 20, 25, 30, 50] as $n): ?>
+                                        <option value="<?php echo $n; ?>" <?php echo (intval($_POST['num_questions'] ?? 5) === $n) ? 'selected' : ''; ?>><?php echo $n; ?> Questions</option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>
                         </div>
 
                         <div class="space-y-1">
-                            <label class="text-xs font-bold text-stone-700">Target Question Format / Quiz Type</label>
-                            <div class="relative">
-                                <i class="fa-solid fa-list-ol absolute left-3.5 top-3 text-orange-500 text-xs"></i>
-                                <select name="question_type" required class="w-full bg-stone-50 border border-stone-200 rounded-xl pl-9 pr-4 py-2.5 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500 focus:bg-white transition-all">
-                                    <option value="multiple_choice" <?php echo (($_POST['question_type'] ?? '') === 'multiple_choice') ? 'selected' : ''; ?>>Multiple Choice (Options A-D)</option>
-                                    <option value="true_false" <?php echo (($_POST['question_type'] ?? '') === 'true_false') ? 'selected' : ''; ?>>True or False</option>
-                                    <option value="identification" <?php echo (($_POST['question_type'] ?? '') === 'identification') ? 'selected' : ''; ?>>Identification</option>
-                                    <option value="fill_in_the_blank" <?php echo (($_POST['question_type'] ?? '') === 'fill_in_the_blank') ? 'selected' : ''; ?>>Fill-in-the-Blank</option>
-                                    <option value="matching_type" <?php echo (($_POST['question_type'] ?? '') === 'matching_type') ? 'selected' : ''; ?>>Matching Type</option>
-                                    <option value="problem_solving" <?php echo (($_POST['question_type'] ?? '') === 'problem_solving') ? 'selected' : ''; ?>>Problem Solving / Math Formulas</option>
-                                </select>
-                            </div>
+                            <label class="text-xs font-bold text-stone-700">Civil Engineering Specialization</label>
+                            <select name="specialization" required class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500">
+                                <?php foreach (getCivilEngineeringSpecializations() as $key => $label): ?>
+                                    <option value="<?php echo htmlspecialchars($key); ?>" <?php echo (($_POST['specialization'] ?? '') === $key) ? 'selected' : ''; ?>>
+                                        <?php echo htmlspecialchars($label); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
                         </div>
 
                         <div class="space-y-1">
-                            <label class="text-xs font-bold text-stone-700">Number of Questions</label>
-                            <div class="relative">
-                                <i class="fa-solid fa-hashtag absolute left-3.5 top-3 text-stone-400 text-xs"></i>
-                                <input type="number" name="num_questions" value="<?php echo htmlspecialchars($_POST['num_questions'] ?? 5); ?>" min="1" max="20" required class="w-full bg-stone-50 border border-stone-200 rounded-xl pl-9 pr-4 py-2.5 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500 focus:bg-white transition-all">
-                            </div>
-                        </div>
-
-                        <div class="space-y-1">
-                            <label class="text-xs font-bold text-stone-700">Paste Lesson Content / Syllabi Notes</label>
-                            <textarea name="lesson_text" required rows="7" placeholder="Paste Civil Engineering notes, formulas, or lecture content here...&#10;&#10;Example:&#10;Stress is defined as internal resistance per unit area (sigma = P / A). Reinforced concrete beams must satisfy flexural capacity requirements under ultimate load design..." class="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-xs font-medium text-stone-800 outline-none focus:border-orange-500 focus:bg-white resize-none transition-all"><?php echo htmlspecialchars($_POST['lesson_text'] ?? ''); ?></textarea>
+                            <label class="text-xs font-bold text-stone-700">Question Format / Type</label>
+                            <select name="question_type" required class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500">
+                                <option value="multiple_choice" <?php echo (($_POST['question_type'] ?? '') === 'multiple_choice') ? 'selected' : ''; ?>>Multiple Choice (Options A-D)</option>
+                                <option value="true_false" <?php echo (($_POST['question_type'] ?? '') === 'true_false') ? 'selected' : ''; ?>>True or False</option>
+                                <option value="identification" <?php echo (($_POST['question_type'] ?? '') === 'identification') ? 'selected' : ''; ?>>Identification</option>
+                                <option value="fill_in_the_blank" <?php echo (($_POST['question_type'] ?? '') === 'fill_in_the_blank') ? 'selected' : ''; ?>>Fill-in-the-Blank</option>
+                                <option value="matching_type" <?php echo (($_POST['question_type'] ?? '') === 'matching_type') ? 'selected' : ''; ?>>Matching Type</option>
+                                <option value="problem_solving" <?php echo (($_POST['question_type'] ?? '') === 'problem_solving') ? 'selected' : ''; ?>>Problem Solving</option>
+                                <option value="math_formula" <?php echo (($_POST['question_type'] ?? '') === 'math_formula') ? 'selected' : ''; ?>>Math Formula (LaTeX)</option>
+                            </select>
                         </div>
 
                         <button type="submit" name="generate_questions" onclick="showLoadingState()" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-extrabold text-xs py-3.5 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2">
                             <i class="fa-solid fa-robot"></i> Generate AI Test Items
                         </button>
                     </form>
+
+                    <script>
+                        function toggleInputSource(type) {
+                            const ext = document.getElementById('extracted_lessons_block');
+                            const man = document.getElementById('manual_text_block');
+                            if (type === 'extracted') {
+                                ext.classList.remove('hidden');
+                                man.classList.add('hidden');
+                            } else {
+                                ext.classList.add('hidden');
+                                man.classList.remove('hidden');
+                            }
+                        }
+                    </script>
                 </div>
 
                 
@@ -260,6 +391,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                             <input type="hidden" name="save_title" value="<?php echo htmlspecialchars($_POST['exam_title']); ?>">
                             <input type="hidden" name="save_subject" value="<?php echo htmlspecialchars($_POST['subject']); ?>">
                             <input type="hidden" name="save_specialization" value="<?php echo htmlspecialchars($_POST['specialization']); ?>">
+                            <input type="hidden" name="save_difficulty" value="<?php echo htmlspecialchars($difficulty ?? 'medium'); ?>">
+                            <input type="hidden" name="save_ai_metadata" value="<?php echo htmlspecialchars(json_encode($ai_meta_output ?? [])); ?>">
+                            <input type="hidden" name="save_lesson_ids" value="<?php echo htmlspecialchars(implode(',', $ai_meta_output['lesson_ids'] ?? [])); ?>">
 
                             <div class="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
                                 <?php foreach ($generated_questions as $idx => $item): ?>

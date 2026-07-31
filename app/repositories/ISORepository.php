@@ -11,11 +11,11 @@ class ISORepository {
 
     public static function getCharacteristicAverages() {
         $pdo = getDBConnection();
-        $defaults = [
-            'functional_suitability' => 3.94, 'performance_efficiency' => 3.88,
-            'compatibility' => 3.92, 'interaction_capability' => 3.96,
-            'reliability' => 3.91, 'security' => 3.95,
-            'maintainability' => 3.90, 'flexibility' => 3.85, 'safety' => 3.96,
+        $keys = [
+            'functional_suitability', 'performance_efficiency',
+            'compatibility', 'interaction_capability',
+            'reliability', 'security',
+            'maintainability', 'flexibility', 'safety'
         ];
         $row = $pdo->query("
             SELECT
@@ -30,9 +30,10 @@ class ISORepository {
                 AVG(safety) AS safety
             FROM iso_evaluations
         ")->fetch(PDO::FETCH_ASSOC);
+
         $result = [];
-        foreach ($defaults as $key => $fallback) {
-            $result[$key] = $row && $row[$key] !== null ? floatval($row[$key]) : $fallback;
+        foreach ($keys as $key) {
+            $result[$key] = ($row && $row[$key] !== null) ? round(floatval($row[$key]), 2) : 0.0;
         }
         return $result;
     }

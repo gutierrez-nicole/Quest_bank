@@ -60,50 +60,10 @@ $submissions = $stmtList->fetchAll(PDO::FETCH_ASSOC);
 $total = intval($stats['total_students'] ?? 0);
 $pass = intval($stats['total_pass'] ?? 0);
 $fail = intval($stats['total_fail'] ?? 0);
-$avg = floatval($stats['avg_percentage'] ?? 0);
-$max = floatval($stats['max_percentage'] ?? 0);
 $pass_rate = $total > 0 ? round(($pass / $total) * 100, 1) : 0.0;
-
-if (empty($submissions)) {
-    $submissions = [
-        [
-            'student_name' => 'Ashley Nicole Gutierrez',
-            'exam_title' => 'Structural Theory 1 - Prelim Quiz',
-            'upload_type' => 'scanned',
-            'correct_count' => 9,
-            'total_items' => 10,
-            'percentage' => 90.0,
-            'status' => 'Pass',
-            'created_at' => date('Y-m-d H:i:s')
-        ],
-        [
-            'student_name' => 'Ashley Nicole Gutierrez',
-            'exam_title' => 'Geotechnical Mechanics - Midterm Exam',
-            'upload_type' => 'pdf',
-            'correct_count' => 8,
-            'total_items' => 10,
-            'percentage' => 80.0,
-            'status' => 'Pass',
-            'created_at' => date('Y-m-d H:i:s', strtotime('-2 days'))
-        ],
-        [
-            'student_name' => 'Ashley Nicole Gutierrez',
-            'exam_title' => 'Reinforced Concrete Design - Finals Exam',
-            'upload_type' => 'handwritten',
-            'correct_count' => 9,
-            'total_items' => 10,
-            'percentage' => 95.0,
-            'status' => 'Pass',
-            'created_at' => date('Y-m-d H:i:s', strtotime('-5 days'))
-        ]
-    ];
-    $total = 3;
-    $pass = 3;
-    $fail = 0;
-    $pass_rate = 100.0;
-    $avg = 88.3;
-    $max = 95.0;
-}
+$avg = round(floatval($stats['avg_percentage'] ?? 0), 1);
+$max = round(floatval($stats['max_percentage'] ?? 0), 1);
+$min = round(floatval($stats['min_percentage'] ?? 0), 1);
 
 if (!class_exists('FacultyReportPDF')) {
     class FacultyReportPDF extends FPDF {

@@ -19,25 +19,45 @@ $ai_analyzed_data = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ai_ocr'])) {
     validateCSRFToken();
-    $student_name = trim($_POST['student_name'] ?? '');
-    $exam_title = trim($_POST['exam_title'] ?? '');
+    $student_name = trim(sanitizeInput($_POST['student_name'] ?? ''));
+    $exam_title = trim(sanitizeInput($_POST['exam_title'] ?? ''));
     $upload_type = $_POST['upload_type'] ?? 'IMAGE';
-    $answer_key_input = trim($_POST['answer_key_input'] ?? '');
-    
+    $answer_key_input = trim(sanitizeInput($_POST['answer_key_input'] ?? ''));
+
     if (isset($_FILES['exam_file']) && $_FILES['exam_file']['error'] === UPLOAD_ERR_OK) {
         $file_name = $_FILES['exam_file']['name'];
-        $simulatedText = '1. Continuous Integration, 2. True, 3. Docker, 4. Jenkins, 5. Kubernetes.';
-        
-        $res = GroqService::evaluateAnswerSheet($student_name, $exam_title, $upload_type, $answer_key_input, $simulatedText);
-        if (isset($res['success'])) {
-            $ai_analyzed_data = $res['evaluation'];
-            $ai_analyzed_data['student_name'] = $student_name;
-            $ai_analyzed_data['exam_title'] = $exam_title;
-            $ai_analyzed_data['upload_type'] = $upload_type;
-            $ai_analyzed_data['file_name'] = $file_name;
-            $success_msg = "Groq AI processed and checked the exam paper successfully!";
+        $file_tmp = $_FILES['exam_file']['tmp_name'];
+        $file_ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
+
+        // Step 1: Run Real OCR Extraction
+        $ocrRes = OcrService::processAnswerSheet($file_tmp, $file_ext);
+
+        if (!$ocrRes['success']) {
+            $error_msg = "OCR Processing Failed: " . ($ocrRes['error'] ?? 'Unreadable document page.');
         } else {
-            $error_msg = $res['error'] ?? "Failed to process exam paper.";
+            $extractedOcrText = $ocrRes['ocr_text'];
+
+            // Step 2: Run Real AI Comparative Evaluation against Master Key
+            $evalRes = GroqService::evaluateAnswerSheetDetailed($student_name, $exam_title, $upload_type, $answer_key_input, $extractedOcrText);
+
+            if (isset($evalRes['success'])) {
+                $ai_analyzed_data = $evalRes['evaluation'];
+                $ai_analyzed_data['student_name'] = $student_name;
+                $ai_analyzed_data['exam_title'] = $exam_title;
+                $ai_analyzed_data['upload_type'] = $upload_type;
+                $ai_analyzed_data['file_name'] = $file_name;
+
+                // Attach OCR Metadata
+                $ai_analyzed_data['ocr_text'] = $extractedOcrText;
+                $ai_analyzed_data['ocr_confidence'] = $ocrRes['confidence'];
+                $ai_analyzed_data['ocr_status'] = $ocrRes['status'];
+                $ai_analyzed_data['page_count'] = $ocrRes['page_count'];
+
+                logActivity("Performed AI OCR & Comparative Evaluation for student '{$student_name}' on '{$exam_title}'.", $teacher_id);
+                $success_msg = "Real OCR extraction & AI evaluation completed successfully!";
+            } else {
+                $error_msg = $evalRes['error'] ?? "Failed to complete AI answer sheet evaluation.";
+            }
         }
     } else {
         $error_msg = "Please attach a valid document file/image to begin processing.";
@@ -47,20 +67,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ai_ocr'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_submission'])) {
     validateCSRFToken();
     try {
-        $stmt = $pdo->prepare("INSERT INTO exam_submissions (teacher_id, student_name, exam_title, upload_type, correct_count, wrong_count, total_score, total_items, percentage, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        $manual_override = isset($_POST['is_manual_override']) && $_POST['is_manual_override'] === '1';
+        $override_log = null;
+
+        if ($manual_override) {
+            $override_log = json_encode([
+                'overridden_by' => getCurrentUserId(),
+                'timestamp' => date('Y-m-d H:i:s'),
+                'original_correct' => intval($_POST['orig_correct'] ?? 0),
+                'new_correct' => intval($_POST['final_correct']),
+                'reason' => trim(sanitizeInput($_POST['override_reason'] ?? 'Manual teacher grade adjustment'))
+            ]);
+            logActivity("Teacher manually overridden grading results for student '{$_POST['final_student_name']}' on '{$_POST['final_exam_title']}'.", $teacher_id);
+        }
+
+        $initial_review_status = isset($_POST['direct_publish']) && $_POST['direct_publish'] === '1' ? 'published' : 'pending_review';
+        $published_at_val = ($initial_review_status === 'published') ? date('Y-m-d H:i:s') : null;
+
+        $stmt = $pdo->prepare("
+            INSERT INTO exam_submissions 
+            (teacher_id, student_name, exam_title, upload_type, correct_count, wrong_count, total_score, total_items, percentage, status, ocr_text, ocr_confidence, ocr_status, page_count, evaluation_result, teacher_override_log, review_status, teacher_remarks, published_at) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ");
         $stmt->execute([
-            $_SESSION['user_id'],
-            $_POST['final_student_name'],
-            $_POST['final_exam_title'],
+            $teacher_id,
+            trim(sanitizeInput($_POST['final_student_name'])),
+            trim(sanitizeInput($_POST['final_exam_title'])),
             $_POST['final_upload_type'],
-            $_POST['final_correct'],
-            $_POST['final_wrong'],
-            $_POST['final_correct'],
-            $_POST['final_total_items'],
-            $_POST['final_percentage'],
-            $_POST['final_status']
+            intval($_POST['final_correct']),
+            intval($_POST['final_wrong']),
+            intval($_POST['final_correct']),
+            intval($_POST['final_total_items']),
+            floatval($_POST['final_percentage']),
+            $_POST['final_status'],
+            $_POST['final_ocr_text'] ?? '',
+            floatval($_POST['final_ocr_confidence'] ?? 85.0),
+            $_POST['final_ocr_status'] ?? 'completed',
+            intval($_POST['final_page_count'] ?? 1),
+            $_POST['final_evaluation_result'] ?? '{}',
+            $override_log,
+            $initial_review_status,
+            trim(sanitizeInput($_POST['teacher_remarks'] ?? '')),
+            $published_at_val
         ]);
-        $success_msg = "Validated exam grading metrics safely stored to database!";
+
+        $inserted_id = $pdo->lastInsertId();
+        logActivity("Saved exam submission #{$inserted_id} with status '{$initial_review_status}' for student '{$_POST['final_student_name']}'.", $teacher_id);
+        $success_msg = "Exam grading results saved to Gradebook (Status: " . ucfirst(str_replace('_', ' ', $initial_review_status)) . ")!";
         $ai_analyzed_data = null;
     } catch (PDOException $e) {
         $error_msg = "Database logging error: " . $e->getMessage();

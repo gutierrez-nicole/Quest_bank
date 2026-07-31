@@ -1,9 +1,13 @@
-﻿# Configuration files with sensitive data
+# Configuration files with sensitive data
 app/config.php
 
 # Environment files
 .env
 .env.local
+
+# Dependency directories
+node_modules/
+vendor/
 
 # IDE files
 .vscode/

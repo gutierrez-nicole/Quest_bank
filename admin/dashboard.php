@@ -15,29 +15,42 @@ try {
             (SELECT COUNT(*) FROM users WHERE role = 'student') AS students_count,
             (SELECT COUNT(DISTINCT subject) FROM exams) AS subjects_count,
             (SELECT COUNT(*) FROM exams) AS exams_count,
-            (SELECT COUNT(*) FROM exam_submissions WHERE status = 'Pass' OR percentage >= 75) AS completed_exams,
-            (SELECT COUNT(*) FROM exam_submissions WHERE status = 'Fail' OR status = 'Pending' OR percentage < 75) AS pending_exams,
-            (SELECT COUNT(*) FROM exam_submissions) AS total_submissions,
-            (SELECT AVG(percentage) FROM exam_submissions) AS avg_score,
-            (SELECT COUNT(*) FROM exam_submissions WHERE status = 'Pending') AS pie_pending
+            (SELECT COUNT(*) FROM exam_submissions WHERE review_status = 'published' AND (status = 'Pass' OR percentage >= 75)) AS completed_exams,
+            (SELECT COUNT(*) FROM exam_submissions WHERE review_status = 'published' AND (status = 'Fail' OR percentage < 75)) AS pending_exams,
+            (SELECT COUNT(*) FROM exam_submissions WHERE review_status = 'published') AS total_submissions,
+            (SELECT AVG(percentage) FROM exam_submissions WHERE review_status = 'published') AS avg_score,
+            (SELECT COUNT(*) FROM exam_submissions WHERE review_status = 'pending_review') AS pie_pending
     ")->fetch(PDO::FETCH_ASSOC);
 
-    $teachers_count = intval($stats['teachers_count'] ?: 1);
-    $students_count = intval($stats['students_count'] ?: 1);
-    $subjects_count = intval($stats['subjects_count'] ?: 5);
-    $exams_count = intval($stats['exams_count'] ?: 2);
-    $completed_exams = intval($stats['completed_exams'] ?: 4);
-    $pending_exams = intval($stats['pending_exams'] ?: 0);
-    $total_submissions = intval($stats['total_submissions'] ?: 4);
-    $avg_score = $stats['avg_score'] !== null ? floatval($stats['avg_score']) : 86.3;
-    $pie_pending = intval($stats['pie_pending'] ?: 0);
+    $teachers_count = intval($stats['teachers_count'] ?? 0);
+    $students_count = intval($stats['students_count'] ?? 0);
+    $subjects_count = intval($stats['subjects_count'] ?? 0);
+    $exams_count = intval($stats['exams_count'] ?? 0);
+    $completed_exams = intval($stats['completed_exams'] ?? 0);
+    $pending_exams = intval($stats['pending_exams'] ?? 0);
+    $total_submissions = intval($stats['total_submissions'] ?? 0);
+    $avg_score = $stats['avg_score'] !== null ? floatval($stats['avg_score']) : 0.0;
+    $pie_pending = intval($stats['pie_pending'] ?? 0);
 
-    $pass_rate = $total_submissions > 0 ? ($completed_exams / $total_submissions) * 100 : 94.8;
-    $ai_prediction = number_format(min(98.5, max(85.0, $pass_rate)), 1) . '% Pass Rate';
+    $pass_rate = $total_submissions > 0 ? round(($completed_exams / $total_submissions) * 100, 1) : 0.0;
+    $ai_prediction = number_format($pass_rate, 1) . '% Pass Rate';
     $pie_passed = $completed_exams;
     $pie_failed = $pending_exams;
 
-    $ce_scores = [92, 86, 88, 85, 90];
+    // Real Civil Engineering specialization average scores from live database
+    $ce_stmt = $pdo->query("
+        SELECT COALESCE(e.specialization, 'General') AS spec, AVG(es.percentage) AS avg_pct 
+        FROM exam_submissions es 
+        LEFT JOIN exams e ON es.exam_id = e.id 
+        WHERE es.review_status = 'published'
+        GROUP BY spec 
+        LIMIT 5
+    ");
+    $ce_scores_raw = $ce_stmt->fetchAll(PDO::FETCH_ASSOC);
+    $ce_scores = array_map(function($r) { return round(floatval($r['avg_pct']), 1); }, $ce_scores_raw);
+    if (empty($ce_scores)) {
+        $ce_scores = [0, 0, 0, 0, 0];
+    }
 
     $latest_activities = [];
     try {

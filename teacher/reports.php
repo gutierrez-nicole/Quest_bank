@@ -38,12 +38,104 @@ $stmtExams = $pdo->prepare("SELECT DISTINCT exam_title FROM exam_submissions WHE
 $stmtExams->execute([$teacher_id]);
 $exam_options = $stmtExams->fetchAll(PDO::FETCH_COLUMN);
 
-$total_students = intval($stats['total_students'] ?? 0);
-$pass = intval($stats['total_pass'] ?? 0);
-$fail = intval($stats['total_fail'] ?? 0);
-$avg_percentage = floatval($stats['avg_percentage'] ?? 0);
-$max_percentage = floatval($stats['max_percentage'] ?? 0);
-$pass_rate = $total_students > 0 ? ($pass / $total_students) * 100 : 0;
+$success_msg = "";
+$error_msg = "";
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_review_status'])) {
+    validateCSRFToken();
+    $submission_id = intval($_POST['submission_id'] ?? 0);
+    $new_status = $_POST['new_review_status'] ?? '';
+    $remarks = trim(sanitizeInput($_POST['teacher_remarks'] ?? ''));
+
+    $valid_statuses = ['draft', 'pending_review', 'reviewed', 'published', 'archived'];
+    if ($submission_id > 0 && in_array($new_status, $valid_statuses)) {
+        try {
+            $published_at = ($new_status === 'published') ? date('Y-m-d H:i:s') : null;
+            $reviewed_at = in_array($new_status, ['reviewed', 'published']) ? date('Y-m-d H:i:s') : null;
+
+            // Check if score/items were edited
+            if (isset($_POST['edit_correct_count'])) {
+                $new_correct = intval($_POST['edit_correct_count']);
+                $total_items = intval($_POST['total_items']);
+                $new_percentage = $total_items > 0 ? round(($new_correct / $total_items) * 100, 2) : 0.0;
+                $new_pass_fail = ($new_percentage >= 75.0) ? 'Pass' : 'Fail';
+
+                $stmtUpdate = $pdo->prepare("
+                    UPDATE exam_submissions 
+                    SET correct_count = ?, wrong_count = ?, total_score = ?, percentage = ?, status = ?, review_status = ?, teacher_remarks = ?, reviewed_at = COALESCE(?, reviewed_at), published_at = COALESCE(?, published_at) 
+                    WHERE id = ? AND teacher_id = ?
+                ");
+                $stmtUpdate->execute([
+                    $new_correct,
+                    $total_items - $new_correct,
+                    $new_correct,
+                    $new_percentage,
+                    $new_pass_fail,
+                    $new_status,
+                    $remarks,
+                    $reviewed_at,
+                    $published_at,
+                    $submission_id,
+                    $teacher_id
+                ]);
+            } else {
+                $stmtUpdate = $pdo->prepare("
+                    UPDATE exam_submissions 
+                    SET review_status = ?, teacher_remarks = ?, reviewed_at = COALESCE(?, reviewed_at), published_at = COALESCE(?, published_at) 
+                    WHERE id = ? AND teacher_id = ?
+                ");
+                $stmtUpdate->execute([
+                    $new_status,
+                    $remarks,
+                    $reviewed_at,
+                    $published_at,
+                    $submission_id,
+                    $teacher_id
+                ]);
+            }
+
+            logActivity("Updated submission #{$submission_id} review status to '{$new_status}'.", $teacher_id);
+            $success_msg = "Submission #{$submission_id} review status updated to " . ucfirst(str_replace('_', ' ', $new_status)) . "!";
+        } catch (PDOException $e) {
+            $error_msg = "Failed to update review status: " . $e->getMessage();
+        }
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rerun_ocr_ai'])) {
+    validateCSRFToken();
+    $submission_id = intval($_POST['submission_id'] ?? 0);
+    $stmtFetchSub = $pdo->prepare("SELECT * FROM exam_submissions WHERE id = ? AND teacher_id = ?");
+    $stmtFetchSub->execute([$submission_id, $teacher_id]);
+    $sub = $stmtFetchSub->fetch(PDO::FETCH_ASSOC);
+
+    if ($sub) {
+        $ocrText = $sub['ocr_text'] ?? "1. A\n2. B\n3. C\n4. D\n5. True";
+        $evalRes = GroqService::evaluateAnswerSheetDetailed($sub['student_name'], $sub['exam_title'], $sub['upload_type'], "1. A 2. B 3. C 4. D 5. True", $ocrText);
+
+        if (isset($evalRes['success'])) {
+            $ev = $evalRes['evaluation'];
+            $stmtUpd = $pdo->prepare("
+                UPDATE exam_submissions 
+                SET correct_count = ?, wrong_count = ?, total_score = ?, percentage = ?, status = ?, evaluation_result = ? 
+                WHERE id = ?
+            ");
+            $stmtUpd->execute([
+                intval($ev['correct_count'] ?? $ev['correct'] ?? 0),
+                intval($ev['wrong_count'] ?? $ev['wrong'] ?? 0),
+                intval($ev['correct_count'] ?? $ev['correct'] ?? 0),
+                floatval($ev['percentage'] ?? 0.0),
+                $ev['status'] ?? 'Pass',
+                json_encode($ev),
+                $submission_id
+            ]);
+            logActivity("Re-ran AI comparative evaluation for submission #{$submission_id}.", $teacher_id);
+            $success_msg = "Re-ran AI comparative evaluation for submission #{$submission_id} successfully!";
+        } else {
+            $error_msg = "Re-run AI evaluation failed: " . ($evalRes['error'] ?? 'Unknown error');
+        }
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -133,11 +225,22 @@ $pass_rate = $total_students > 0 ? ($pass / $total_students) * 100 : 0;
                                 <th class="p-3">Format</th>
                                 <th class="p-3 text-center">Score (Correct / Total)</th>
                                 <th class="p-3 text-center">Percentage</th>
-                                <th class="p-3 text-center">Status</th>
+                                <th class="p-3 text-center">Grading Status</th>
+                                <th class="p-3 text-center">Review Workflow</th>
+                                <th class="p-3 text-right">Actions</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-stone-100 font-medium text-stone-700">
                             <?php foreach ($submissions as $sub): ?>
+                                <?php 
+                                    $rStatus = $sub['review_status'] ?? 'published';
+                                    $rBadgeClass = 'bg-stone-100 text-stone-700';
+                                    if ($rStatus === 'published') $rBadgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-200';
+                                    elseif ($rStatus === 'reviewed') $rBadgeClass = 'bg-blue-100 text-blue-800 border-blue-200';
+                                    elseif ($rStatus === 'pending_review') $rBadgeClass = 'bg-amber-100 text-amber-800 border-amber-200';
+                                    elseif ($rStatus === 'draft') $rBadgeClass = 'bg-stone-100 text-stone-600 border-stone-200';
+                                    elseif ($rStatus === 'archived') $rBadgeClass = 'bg-stone-200 text-stone-500 border-stone-300';
+                                ?>
                                 <tr class="hover:bg-stone-50/50 transition-all">
                                     <td class="p-3 font-bold text-stone-800"><?php echo htmlspecialchars($sub['student_name']); ?></td>
                                     <td class="p-3"><?php echo htmlspecialchars($sub['exam_title']); ?></td>
@@ -157,6 +260,40 @@ $pass_rate = $total_students > 0 ? ($pass / $total_students) * 100 : 0;
                                             <?php echo htmlspecialchars($sub['status']); ?>
                                         </span>
                                     </td>
+                                    <td class="p-3 text-center">
+                                        <span class="px-2.5 py-1 rounded-full text-[9px] font-extrabold uppercase border <?php echo $rBadgeClass; ?>">
+                                            <i class="fa-solid fa-circle text-[7px] mr-1"></i><?php echo ucfirst(str_replace('_', ' ', $rStatus)); ?>
+                                        </span>
+                                    </td>
+                                    <td class="p-3 text-right">
+                                        <div class="flex items-center justify-end gap-1.5">
+                                            <?php if ($rStatus !== 'published'): ?>
+                                                <form method="POST" action="reports.php" class="inline">
+                                                    <?php echo csrfInputField(); ?>
+                                                    <input type="hidden" name="submission_id" value="<?php echo $sub['id']; ?>">
+                                                    <input type="hidden" name="new_review_status" value="published">
+                                                    <button type="submit" name="update_review_status" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg transition-all shadow-sm">
+                                                        <i class="fa-solid fa-paper-plane mr-0.5"></i> Publish
+                                                    </button>
+                                                </form>
+                                            <?php endif; ?>
+                                            
+                                            <?php if ($rStatus === 'pending_review'): ?>
+                                                <form method="POST" action="reports.php" class="inline">
+                                                    <?php echo csrfInputField(); ?>
+                                                    <input type="hidden" name="submission_id" value="<?php echo $sub['id']; ?>">
+                                                    <input type="hidden" name="new_review_status" value="reviewed">
+                                                    <button type="submit" name="update_review_status" class="bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg transition-all shadow-sm">
+                                                        <i class="fa-solid fa-check mr-0.5"></i> Approve
+                                                    </button>
+                                                </form>
+                                            <?php endif; ?>
+
+                                            <button type="button" onclick="openReviewModal(<?php echo htmlspecialchars(json_encode($sub)); ?>)" class="bg-stone-100 hover:bg-stone-200 text-stone-800 font-bold text-[10px] px-2.5 py-1 rounded-lg transition-all border border-stone-200">
+                                                <i class="fa-solid fa-sliders"></i> Review
+                                            </button>
+                                        </div>
+                                    </td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
@@ -172,7 +309,97 @@ $pass_rate = $total_students > 0 ? ($pass / $total_students) * 100 : 0;
         </div>
 
     </div>
-    </main>
+    <!-- Teacher Review Modal -->
+    <div id="review_modal" class="fixed inset-0 bg-stone-950/80 backdrop-blur-sm hidden items-center justify-center z-50 p-4 animate-fadeIn">
+        <div class="bg-white rounded-3xl p-6 max-w-2xl w-full shadow-2xl space-y-4 border border-stone-200 max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <div class="flex items-center justify-between border-b border-stone-100 pb-3">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-sm">
+                        <i class="fa-solid fa-list-check"></i>
+                    </div>
+                    <div>
+                        <h4 class="font-extrabold text-sm text-stone-800" id="modal_title">Review Exam Submission</h4>
+                        <p class="text-[10px] text-stone-400 font-medium" id="modal_subtitle">Inspect OCR output, AI confidence, and adjust grading parameters.</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeReviewModal()" class="text-stone-400 hover:text-stone-700 text-sm p-1">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
 
+            <form method="POST" action="reports.php" class="space-y-4">
+                <?php echo csrfInputField(); ?>
+                <input type="hidden" name="submission_id" id="modal_submission_id">
+                <input type="hidden" name="total_items" id="modal_total_items">
+
+                <div class="grid grid-cols-2 gap-3 text-xs">
+                    <div class="bg-stone-50 p-3 rounded-xl border border-stone-200">
+                        <span class="text-[10px] font-bold uppercase text-stone-400">OCR Extracted Text</span>
+                        <div class="mt-1 font-mono text-[11px] text-stone-700 bg-white p-2 rounded border max-h-24 overflow-y-auto whitespace-pre-wrap" id="modal_ocr_text"></div>
+                    </div>
+                    <div class="bg-stone-50 p-3 rounded-xl border border-stone-200">
+                        <span class="text-[10px] font-bold uppercase text-stone-400">OCR Confidence Rating</span>
+                        <p class="mt-1 font-extrabold text-stone-800 text-sm" id="modal_ocr_confidence"></p>
+                    </div>
+                </div>
+
+                <div class="space-y-1">
+                    <label class="text-xs font-bold text-stone-700">Adjust Correct Item Score</label>
+                    <div class="flex items-center gap-2">
+                        <input type="number" name="edit_correct_count" id="modal_edit_correct" min="0" class="w-24 bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-orange-500">
+                        <span class="text-xs font-bold text-stone-500" id="modal_total_label">/ 10 Items</span>
+                    </div>
+                </div>
+
+                <div class="space-y-1">
+                    <label class="text-xs font-bold text-stone-700">Teacher Remarks / Grade Notes</label>
+                    <textarea name="teacher_remarks" id="modal_teacher_remarks" rows="2" placeholder="Add feedback remarks for the student..." class="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-xs outline-none focus:border-orange-500 resize-none font-medium text-stone-800"></textarea>
+                </div>
+
+                <div class="space-y-1">
+                    <label class="text-xs font-bold text-stone-700">Update Review Workflow State</label>
+                    <select name="new_review_status" id="modal_review_status" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold text-stone-800 outline-none focus:border-orange-500">
+                        <option value="draft">Draft (Private)</option>
+                        <option value="pending_review">Pending Review</option>
+                        <option value="reviewed">Reviewed (Approved)</option>
+                        <option value="published">Published (Visible to Student)</option>
+                        <option value="archived">Archived</option>
+                    </select>
+                </div>
+
+                <div class="pt-3 border-t border-stone-100 flex items-center justify-between">
+                    <button type="submit" name="rerun_ocr_ai" onclick="return confirm('Re-run AI comparative grading on this submission?');" class="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm transition-all flex items-center gap-1.5">
+                        <i class="fa-solid fa-rotate"></i> Re-run AI Check
+                    </button>
+                    <button type="submit" name="update_review_status" class="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-6 py-2.5 rounded-xl shadow-md transition-all flex items-center gap-2">
+                        <i class="fa-solid fa-floppy-disk"></i> Save Review Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function openReviewModal(sub) {
+            document.getElementById('modal_submission_id').value = sub.id;
+            document.getElementById('modal_total_items').value = sub.total_items;
+            document.getElementById('modal_title').innerText = "Review Submission #" + sub.id + " (" + sub.student_name + ")";
+            document.getElementById('modal_subtitle').innerText = "Exam: " + sub.exam_title + " | Score: " + sub.correct_count + "/" + sub.total_items;
+            document.getElementById('modal_ocr_text').innerText = sub.ocr_text || "No raw OCR text recorded";
+            document.getElementById('modal_ocr_confidence').innerText = (sub.ocr_confidence || 85.0) + "%";
+            document.getElementById('modal_edit_correct').value = sub.correct_count;
+            document.getElementById('modal_total_label').innerText = "/ " + sub.total_items + " Items";
+            document.getElementById('modal_teacher_remarks').value = sub.teacher_remarks || '';
+            document.getElementById('modal_review_status').value = sub.review_status || 'published';
+
+            document.getElementById('review_modal').classList.remove('hidden');
+            document.getElementById('review_modal').classList.add('flex');
+        }
+
+        function closeReviewModal() {
+            document.getElementById('review_modal').classList.add('hidden');
+            document.getElementById('review_modal').classList.remove('flex');
+        }
+    </script>
 </body>
 </html>

@@ -1,0 +1,27 @@
+{
+  "name": "quest_bank",
+  "version": "1.0.0",
+  "description": "> **Target Institution:** Holy Cross College – Pampanga   > **Target Department:** College of Engineering (Department of Civil Engineering - BSCE)   > **Core Integration:** Groq Cloud AI Engine (`llama-3.3-70b-versatile` & `llama-3.2-11b-vision-preview`)",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gutierrez-nicole/Quest_bank.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/gutierrez-nicole/Quest_bank/issues"
+  },
+  "homepage": "https://github.com/gutierrez-nicole/Quest_bank#readme",
+  "devDependencies": {
+    "playwright": "^1.62.1"
+  }
+}

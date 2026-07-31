@@ -26,18 +26,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_exam'])) {
             $exam_id = $pdo->lastInsertId();
 
             
-            $qStmt = $pdo->prepare("INSERT INTO exam_questions (exam_id, question_text, question_type, option_a, option_b, option_c, option_d, correct_answer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+            $qStmt = $pdo->prepare("
+                INSERT INTO exam_questions 
+                (exam_id, question_text, question_type, option_a, option_b, option_c, option_d, correct_answer, formula_latex, matching_pairs, points) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
             
             foreach ($questions as $q) {
                 $qStmt->execute([
                     $exam_id,
-                    $q['text'],
-                    $q['type'],
+                    trim(sanitizeInput($q['text'] ?? '')),
+                    $q['type'] ?? 'multiple_choice',
                     $q['opt_a'] ?? null,
                     $q['opt_b'] ?? null,
                     $q['opt_c'] ?? null,
                     $q['opt_d'] ?? null,
-                    $q['correct']
+                    trim(sanitizeInput($q['correct'] ?? '')),
+                    $q['formula_latex'] ?? null,
+                    isset($q['matching_pairs']) ? json_encode($q['matching_pairs']) : null,
+                    intval($q['points'] ?? 1)
                 ]);
             }
 

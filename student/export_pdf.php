@@ -19,16 +19,16 @@ try {
     $student = null;
 }
 
-$fullname = $student['fullname'] ?? 'Ashley Nicole Gutierrez';
-$student_no = !empty($student['student_number']) ? $student['student_number'] : '23-2149184';
-$course_section = ($student['course'] ?? 'BSCE') . ' - ' . ($student['section'] ?? '4A');
+$fullname = $student['fullname'] ?? 'Student User';
+$student_no = !empty($student['student_number']) ? $student['student_number'] : 'STUDENT-' . $student_id;
+$course_section = ($student['course'] ?? 'General') . ' - ' . ($student['section'] ?? 'A');
 $date_issued = date('F d, Y');
 
 $selected_term = trim($_GET['term'] ?? 'All');
 $single_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
 try {
-    $where = [];
+    $where = ["es.review_status = 'published'"];
     $params = [];
 
     if ($single_id > 0) {

@@ -15,7 +15,11 @@ class ISOService {
 
     public static function getOverallWeightedMean() {
         $means = self::getCharacteristicMeans();
-        return array_sum($means) / count($means);
+        $filtered = array_filter($means, function($v) { return $v > 0; });
+        if (empty($filtered)) {
+            return 0.0;
+        }
+        return round(array_sum($filtered) / count($filtered), 2);
     }
 
     public static function submitEvaluation($data) {

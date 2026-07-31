@@ -90,9 +90,9 @@ try {
         $stmt = $pdo->prepare("
             SELECT AVG(percentage) 
             FROM exam_submissions 
-            WHERE student_id = ?
+            WHERE (student_id = ? OR student_name LIKE ?) AND review_status = 'published'
         ");
-        $stmt->execute([$student_id]);
+        $stmt->execute([$student_id, "%{$student['fullname']}%"]);
         $avg = $stmt->fetchColumn();
         $average_score = $avg ? number_format((float)$avg, 1) : "0.0";
     } catch (PDOException $e) {
@@ -107,9 +107,9 @@ try {
                 COUNT(*) as total,
                 SUM(CASE WHEN percentage >= 75 THEN 1 ELSE 0 END) as passed
             FROM exam_submissions 
-            WHERE student_id = ?
+            WHERE (student_id = ? OR student_name LIKE ?) AND review_status = 'published'
         ");
-        $stmt->execute([$student_id]);
+        $stmt->execute([$student_id, "%{$student['fullname']}%"]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if ($row['total'] > 0) {
@@ -127,9 +127,9 @@ try {
         $stmt = $pdo->prepare("
             SELECT COUNT(*) 
             FROM exam_submissions 
-            WHERE student_id = ?
+            WHERE (student_id = ? OR student_name LIKE ?) AND review_status = 'published'
         ");
-        $stmt->execute([$student_id]);
+        $stmt->execute([$student_id, "%{$student['fullname']}%"]);
         $exams_completed = (int)$stmt->fetchColumn();
     } catch (PDOException $e) {
         $exams_completed = 0;
@@ -138,13 +138,12 @@ try {
     
     $class_average = 0.0;
     try {
-        
         $stmt = $pdo->prepare("
             SELECT AVG(es.percentage) 
             FROM exam_submissions es
             JOIN users u ON es.student_id = u.id
             JOIN student_details sd ON u.id = sd.user_id
-            WHERE sd.course = ? AND sd.year_level = ? AND sd.section = ?
+            WHERE sd.course = ? AND sd.year_level = ? AND sd.section = ? AND es.review_status = 'published'
         ");
         $stmt->execute([
             $student['course'] ?? 'BSIT',
@@ -162,55 +161,36 @@ try {
     try {
         $stmt = $pdo->prepare("
             SELECT 
-                e.title as subject,
+                es.exam_title as subject,
                 AVG(es.percentage) as avg_score
             FROM exam_submissions es
-            JOIN exams e ON es.exam_id = e.id
-            WHERE es.student_id = ?
-            GROUP BY e.id, e.title
+            WHERE (es.student_id = ? OR es.student_name LIKE ?) AND es.review_status = 'published'
+            GROUP BY es.exam_title
             ORDER BY avg_score DESC
             LIMIT 2
         ");
-        $stmt->execute([$student_id]);
+        $stmt->execute([$student_id, "%{$student['fullname']}%"]);
         $strong_subjects = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (PDOException $e) {
         $strong_subjects = [];
     }
 
-    
-    if (empty($strong_subjects)) {
-        $strong_subjects = [
-            ['subject' => 'Web Development & REST APIs', 'avg_score' => 94.5],
-            ['subject' => 'Database Systems & SQL Queries', 'avg_score' => 89.0]
-        ];
-    }
-
-    
     $weak_subjects = [];
     try {
         $stmt = $pdo->prepare("
             SELECT 
-                e.title as subject,
+                es.exam_title as subject,
                 AVG(es.percentage) as avg_score
             FROM exam_submissions es
-            JOIN exams e ON es.exam_id = e.id
-            WHERE es.student_id = ?
-            GROUP BY e.id, e.title
+            WHERE (es.student_id = ? OR es.student_name LIKE ?) AND es.review_status = 'published'
+            GROUP BY es.exam_title
             ORDER BY avg_score ASC
             LIMIT 2
         ");
-        $stmt->execute([$student_id]);
+        $stmt->execute([$student_id, "%{$student['fullname']}%"]);
         $weak_subjects = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (PDOException $e) {
         $weak_subjects = [];
-    }
-
-    
-    if (empty($weak_subjects)) {
-        $weak_subjects = [
-            ['subject' => 'Advanced System Architecture', 'avg_score' => 72.0],
-            ['subject' => 'Discrete Mathematics Logic', 'avg_score' => 75.5]
-        ];
     }
 
     

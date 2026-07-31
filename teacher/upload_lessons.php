@@ -1,9 +1,7 @@
 <?php
-require_once __DIR__ . '/../app/database.php';
-require_once __DIR__ . '/../app/session.php';
-require_once __DIR__ . '/../includes/security.php';
+require_once __DIR__ . '/../app/bootstrap.php';
 
-requireRole('teacher');
+AuthService::enforceRole('teacher');
 $pdo = getDBConnection();
 
 $success_msg = "";
@@ -11,8 +9,8 @@ $error_msg = "";
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_material'])) {
     validateCSRFToken();
-    $title = trim($_POST['title']);
-    $subject = trim($_POST['subject']);
+    $title = trim(sanitizeInput($_POST['title'] ?? ''));
+    $subject = trim(sanitizeInput($_POST['subject'] ?? ''));
 
     if (isset($_FILES['lesson_file']) && $_FILES['lesson_file']['error'] === UPLOAD_ERR_OK) {
         $file_tmp = $_FILES['lesson_file']['tmp_name'];
@@ -44,9 +42,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_material'])) {
 
             if (move_uploaded_file($file_tmp, $target_path)) {
                 try {
-                    $stmt = $pdo->prepare("INSERT INTO lesson_materials (teacher_id, subject, title, file_name, file_path, file_type, file_size) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                    $stmt = $pdo->prepare("
+                        INSERT INTO lesson_materials 
+                        (teacher_id, subject, title, file_name, file_path, file_type, file_size, processing_status) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
+                    ");
                     $stmt->execute([
-                        $_SESSION['user_id'],
+                        getCurrentUserId(),
                         $subject,
                         $title,
                         $file_name,
@@ -54,8 +56,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_material'])) {
                         strtoupper($file_ext),
                         $file_size
                     ]);
+                    $material_id = $pdo->lastInsertId();
                     logActivity("Uploaded new lesson material '{$title}' ({$file_name}) for subject '{$subject}'.");
-                    $success_msg = "Lesson material uploaded successfully!";
+
+                    // Trigger automatic text extraction
+                    $extractRes = LessonExtractionService::extractAndSave($material_id);
+                    if ($extractRes['success']) {
+                        $success_msg = "Lesson material uploaded and content extracted successfully! ({$extractRes['word_count']} words, {$extractRes['page_count']} pages)";
+                    } else {
+                        $error_msg = "Lesson uploaded, but text extraction encountered an issue: " . $extractRes['error'];
+                    }
                 } catch (PDOException $e) {
                     $error_msg = "Database record failed: " . $e->getMessage();
                 }
@@ -67,6 +77,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_material'])) {
         }
     } else {
         $error_msg = "Please select a valid file to upload.";
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['retry_extraction'])) {
+    validateCSRFToken();
+    $material_id = intval($_POST['material_id'] ?? 0);
+    $res = LessonExtractionService::extractAndSave($material_id);
+    if ($res['success']) {
+        $success_msg = "Extraction retried successfully! ({$res['word_count']} words extracted)";
+    } else {
+        $error_msg = "Extraction retry failed: " . $res['error'];
     }
 }
 
@@ -168,27 +189,84 @@ $materials = $stmtMaterials->fetchAll(PDO::FETCH_ASSOC);
                 <?php if (!empty($materials)): ?>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <?php foreach ($materials as $m): ?>
+                            <?php 
+                                $status = $m['processing_status'] ?? 'pending';
+                                $statusBadgeClass = 'bg-stone-100 text-stone-700';
+                                if ($status === 'completed') $statusBadgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-200';
+                                elseif ($status === 'failed') $statusBadgeClass = 'bg-rose-100 text-rose-800 border-rose-200';
+                                elseif ($status === 'processing') $statusBadgeClass = 'bg-amber-100 text-amber-800 border-amber-200';
+                            ?>
                             <div class="p-4 border border-stone-200 rounded-xl bg-stone-50/40 hover:border-orange-300 transition-all flex flex-col justify-between space-y-3">
                                 <div class="flex items-start gap-3">
                                     <div class="p-3 bg-orange-100 text-orange-700 rounded-lg flex-shrink-0">
                                         <i class="fa-solid fa-file-lines text-xl"></i>
                                     </div>
-                                    <div class="min-w-0">
-                                        <h4 class="font-bold text-xs text-stone-800 truncate"><?php echo htmlspecialchars($m['title']); ?></h4>
+                                    <div class="min-w-0 flex-1">
+                                        <div class="flex items-center justify-between gap-1">
+                                            <h4 class="font-bold text-xs text-stone-800 truncate"><?php echo htmlspecialchars($m['title']); ?></h4>
+                                            <span class="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border <?php echo $statusBadgeClass; ?>">
+                                                <i class="fa-solid fa-circle text-[7px] mr-1"></i><?php echo ucfirst($status); ?>
+                                            </span>
+                                        </div>
                                         <p class="text-[10px] text-stone-400 font-semibold mt-0.5"><?php echo htmlspecialchars($m['subject']); ?></p>
-                                        <span class="inline-block mt-1 text-[9px] font-extrabold uppercase bg-stone-200 text-stone-700 px-1.5 py-0.5 rounded">
-                                            <?php echo htmlspecialchars($m['file_type']); ?> • <?php echo number_format($m['file_size'] / 1024, 1); ?> KB
-                                        </span>
+                                        
+                                        <div class="flex flex-wrap items-center gap-1.5 mt-2">
+                                            <span class="text-[9px] font-extrabold uppercase bg-stone-200 text-stone-700 px-1.5 py-0.5 rounded">
+                                                <?php echo htmlspecialchars($m['file_type']); ?> • <?php echo number_format($m['file_size'] / 1024, 1); ?> KB
+                                            </span>
+                                            <?php if ($status === 'completed'): ?>
+                                                <span class="text-[9px] font-bold bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200">
+                                                    <i class="fa-solid fa-font mr-0.5"></i><?php echo number_format($m['word_count']); ?> words
+                                                </span>
+                                                <span class="text-[9px] font-bold bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-200">
+                                                    <i class="fa-solid fa-book-open mr-0.5"></i><?php echo $m['page_count']; ?> pages
+                                                </span>
+                                            <?php endif; ?>
+                                        </div>
+
+                                        <?php if ($status === 'failed' && !empty($m['processing_error'])): ?>
+                                            <p class="text-[10px] text-rose-600 font-bold mt-2 bg-rose-50 p-2 rounded-lg border border-rose-100">
+                                                <i class="fa-solid fa-circle-exclamation mr-1"></i><?php echo htmlspecialchars($m['processing_error']); ?>
+                                            </p>
+                                        <?php endif; ?>
                                     </div>
                                 </div>
 
+                                <?php if (!empty($m['lesson_text'])): ?>
+                                    <details class="text-xs text-stone-600 bg-white p-2.5 rounded-lg border border-stone-200">
+                                        <summary class="cursor-pointer font-bold text-[10px] uppercase text-orange-600 hover:underline flex items-center gap-1">
+                                            <i class="fa-solid fa-eye"></i> Preview Extracted Content
+                                        </summary>
+                                        <div class="mt-2 text-[11px] font-mono text-stone-700 max-h-36 overflow-y-auto whitespace-pre-wrap p-2 bg-stone-50 rounded border">
+                                            <?php echo htmlspecialchars(mb_substr($m['lesson_text'], 0, 1000)); ?>
+                                            <?php if (mb_strlen($m['lesson_text']) > 1000): ?>... [Truncated preview]<?php endif; ?>
+                                        </div>
+                                    </details>
+                                <?php endif; ?>
+
                                 <div class="flex items-center justify-between pt-2 border-t border-stone-100 text-xs font-bold">
-                                    <a href="<?php echo htmlspecialchars($m['file_path']); ?>" download class="text-orange-600 hover:underline flex items-center gap-1">
-                                        <i class="fa-solid fa-download"></i> Download
-                                    </a>
-                                    <a href="upload_lessons.php?delete_id=<?php echo $m['id']; ?>" onclick="return confirm('Sigurado ka bang gusto mong burahin ang file na ito?');" class="text-rose-500 hover:underline flex items-center gap-1">
-                                        <i class="fa-solid fa-trash"></i> Delete
-                                    </a>
+                                    <div class="flex items-center gap-2">
+                                        <a href="<?php echo htmlspecialchars($m['file_path']); ?>" download class="text-orange-600 hover:underline flex items-center gap-1">
+                                            <i class="fa-solid fa-download"></i> Download
+                                        </a>
+                                        <?php if ($status === 'failed' || $status === 'pending'): ?>
+                                            <form method="POST" action="upload_lessons.php" class="inline">
+                                                <?php echo csrfInputField(); ?>
+                                                <input type="hidden" name="material_id" value="<?php echo $m['id']; ?>">
+                                                <button type="submit" name="retry_extraction" class="text-amber-600 hover:underline text-[11px] font-bold flex items-center gap-1">
+                                                    <i class="fa-solid fa-rotate-right"></i> Retry Extract
+                                                </button>
+                                            </form>
+                                        <?php endif; ?>
+                                    </div>
+                                    
+                                    <form method="POST" action="upload_lessons.php" onsubmit="return confirm('Are you sure you want to delete this file?');">
+                                        <?php echo csrfInputField(); ?>
+                                        <input type="hidden" name="delete_id" value="<?php echo $m['id']; ?>">
+                                        <button type="submit" name="delete_material" class="text-rose-500 hover:underline flex items-center gap-1 text-xs">
+                                            <i class="fa-solid fa-trash"></i> Delete
+                                        </button>
+                                    </form>
                                 </div>
                             </div>
                         <?php endforeach; ?>

@@ -10,3 +10,5 @@ require_once __DIR__ . '/services/GroqService.php';
 require_once __DIR__ . '/services/ISOService.php';
 require_once __DIR__ . '/services/StudentService.php';
 require_once __DIR__ . '/services/ExamService.php';
+require_once __DIR__ . '/services/LessonExtractionService.php';
+require_once __DIR__ . '/services/OcrService.php';
