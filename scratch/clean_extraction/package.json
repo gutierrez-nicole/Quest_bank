@@ -1,0 +1,12 @@
+{
+  "name": "questbank-capstone",
+  "version": "2.0.0",
+  "description": "QuestBank AI Automated Examination System - Senior QA & Verification Suite",
+  "main": "index.php",
+  "scripts": {
+    "test": "php tests/strict_verification_audit.php && node tests/playwright_capstone_test.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
+  }
+}
