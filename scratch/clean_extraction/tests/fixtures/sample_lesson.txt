@@ -1,1 +1,0 @@
-Flexural resistance of reinforced concrete beams under Ultimate Limit State (ULS) flexural moment M_u = 250 kN-m. Shear capacity V_c = 0.17 * sqrt(f_c) * b_w * d. Steel ratio rho = A_s / (b * d). Yield strength f_y = 420 MPa.
