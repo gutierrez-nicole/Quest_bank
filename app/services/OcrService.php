@@ -5,6 +5,8 @@ require_once __DIR__ . '/../../includes/security.php';
 
 class OcrService {
 
+    const OCR_REVIEW_THRESHOLD = 75.0;
+
     public static function processAnswerSheet($filePath, $fileExt = 'png') {
         $startTime = microtime(true);
         $fileExt = strtolower($fileExt);
@@ -13,9 +15,14 @@ class OcrService {
             return [
                 'success' => false,
                 'status' => 'failed',
-                'error' => 'File not found on server.',
+                'text' => '',
+                'ocr_text' => '',
                 'confidence' => 0.00,
-                'suggested_manual_review' => true
+                'suggested_manual_review' => true,
+                'error' => 'File not found on server.',
+                'ocr_error' => 'File not found on server.',
+                'page_count' => 0,
+                'pages' => []
             ];
         }
 
@@ -24,9 +31,14 @@ class OcrService {
             return [
                 'success' => false,
                 'status' => 'failed',
-                'error' => 'Uploaded answer sheet file is empty (0 bytes).',
+                'text' => '',
+                'ocr_text' => '',
                 'confidence' => 0.00,
-                'suggested_manual_review' => true
+                'suggested_manual_review' => true,
+                'error' => 'Uploaded answer sheet file is empty (0 bytes).',
+                'ocr_error' => 'Uploaded answer sheet file is empty (0 bytes).',
+                'page_count' => 1,
+                'pages' => []
             ];
         }
 
@@ -34,9 +46,14 @@ class OcrService {
             return [
                 'success' => false,
                 'status' => 'failed',
-                'error' => 'Uploaded answer sheet file exceeds maximum size limit of 20MB.',
+                'text' => '',
+                'ocr_text' => '',
                 'confidence' => 0.00,
-                'suggested_manual_review' => true
+                'suggested_manual_review' => true,
+                'error' => 'Uploaded answer sheet file exceeds maximum size limit of 20MB.',
+                'ocr_error' => 'Uploaded answer sheet file exceeds maximum size limit of 20MB.',
+                'page_count' => 1,
+                'pages' => []
             ];
         }
 
@@ -50,9 +67,14 @@ class OcrService {
             return [
                 'success' => false,
                 'status' => 'failed',
-                'error' => "File content type does not match supported formats JPG, PNG, PDF (Detected: {$detectedMime}).",
+                'text' => '',
+                'ocr_text' => '',
                 'confidence' => 0.00,
-                'suggested_manual_review' => true
+                'suggested_manual_review' => true,
+                'error' => "File content type does not match supported formats JPG, PNG, PDF (Detected: {$detectedMime}).",
+                'ocr_error' => "File content type does not match supported formats JPG, PNG, PDF (Detected: {$detectedMime}).",
+                'page_count' => 1,
+                'pages' => []
             ];
         }
 
@@ -63,6 +85,7 @@ class OcrService {
             $status = 'completed';
             $suggestedManualReview = false;
             $errorMessage = null;
+            $pagesData = [];
 
             if ($fileExt === 'pdf') {
                 $pdfRes = self::processPdfFile($filePath);
@@ -72,6 +95,7 @@ class OcrService {
                 $status = $pdfRes['status'];
                 $suggestedManualReview = $pdfRes['suggested_manual_review'];
                 $errorMessage = $pdfRes['error'];
+                $pagesData = $pdfRes['pages_data'] ?? [];
             } else {
                 $imageRes = self::processImageFile($filePath, $fileExt);
                 $extractedText = $imageRes['text'];
@@ -79,36 +103,59 @@ class OcrService {
                 $status = $imageRes['status'];
                 $suggestedManualReview = $imageRes['suggested_manual_review'];
                 $errorMessage = $imageRes['error'];
+                $pagesData = [$imageRes];
             }
 
             $cleanText = self::cleanOcrText($extractedText);
             $executionTime = round((microtime(true) - $startTime) * 1000, 2);
 
-            // Blank page check
-            if (empty(trim($cleanText)) && $status === 'completed' && !$errorMessage) {
+            // Preserved failed status
+            if ($status === 'failed') {
                 return [
-                    'success' => true,
-                    'status' => 'completed',
+                    'success' => false,
+                    'status' => 'failed',
+                    'text' => '',
                     'ocr_text' => '',
-                    'confidence' => 100.00,
+                    'confidence' => 0.00,
                     'page_count' => $pageCount,
-                    'suggested_manual_review' => false,
-                    'ocr_error' => 'Blank page detected. No text content found in uploaded sheet.',
+                    'pages' => $pagesData,
+                    'suggested_manual_review' => true,
+                    'error' => $errorMessage ?: 'OCR processing failed.',
+                    'ocr_error' => $errorMessage ?: 'OCR processing failed.',
                     'execution_time_ms' => $executionTime
                 ];
             }
 
-            if ($confidence < 75.00 || $suggestedManualReview) {
-                $status = ($status === 'failed') ? 'failed' : 'manual_review_required';
+            // Empty/Blank output handling
+            if (empty(trim($cleanText))) {
+                return [
+                    'success' => true,
+                    'status' => 'manual_review_required',
+                    'text' => '',
+                    'ocr_text' => '',
+                    'confidence' => 0.00,
+                    'page_count' => $pageCount,
+                    'pages' => $pagesData,
+                    'suggested_manual_review' => true,
+                    'error' => $errorMessage ?: 'No readable text content found in uploaded sheet. Manual teacher review required.',
+                    'ocr_error' => $errorMessage ?: 'No readable text content found in uploaded sheet. Manual teacher review required.',
+                    'execution_time_ms' => $executionTime
+                ];
+            }
+
+            if ($confidence < self::OCR_REVIEW_THRESHOLD || $suggestedManualReview) {
+                $status = 'manual_review_required';
                 $suggestedManualReview = true;
             }
 
             return [
-                'success' => ($status !== 'failed'),
+                'success' => true,
                 'status' => $status,
+                'text' => $cleanText,
                 'ocr_text' => $cleanText,
                 'confidence' => round($confidence, 2),
                 'page_count' => $pageCount,
+                'pages' => $pagesData,
                 'suggested_manual_review' => $suggestedManualReview,
                 'error' => $errorMessage,
                 'ocr_error' => $errorMessage,
@@ -120,9 +167,14 @@ class OcrService {
             return [
                 'success' => false,
                 'status' => 'failed',
-                'error' => $e->getMessage(),
+                'text' => '',
+                'ocr_text' => '',
                 'confidence' => 0.00,
-                'suggested_manual_review' => true
+                'suggested_manual_review' => true,
+                'error' => $e->getMessage(),
+                'ocr_error' => $e->getMessage(),
+                'page_count' => 1,
+                'pages' => []
             ];
         }
     }
@@ -160,47 +212,94 @@ class OcrService {
                 if ($isBlank) {
                     return [
                         'text' => '',
-                        'confidence' => 100.00,
-                        'status' => 'completed',
-                        'suggested_manual_review' => false,
+                        'confidence' => 0.00,
+                        'status' => 'manual_review_required',
+                        'suggested_manual_review' => true,
                         'error' => 'Blank image page detected.'
                     ];
                 }
             }
         }
 
-        // Attempt Tesseract OCR CLI
+        // Attempt Tesseract OCR CLI with TSV output for word confidence
         $tesseractPath = exec('which tesseract 2>/dev/null');
         if (!empty($tesseractPath) && is_executable($tesseractPath)) {
-            $tmpOutputBase = tempnam(sys_get_temp_dir(), 'ocr_out_');
-            $command = escapeshellcmd("{$tesseractPath} " . escapeshellarg($filePath) . " " . escapeshellarg($tmpOutputBase) . " --oem 1 -l eng 2>/dev/null");
+            $tmpOutputBase = tempnam(sys_get_temp_dir(), 'ocr_tsv_');
+            $command = sprintf(
+                "%s %s %s --oem 1 -l eng tsv 2>/dev/null",
+                escapeshellcmd($tesseractPath),
+                escapeshellarg($filePath),
+                escapeshellarg($tmpOutputBase)
+            );
             exec($command, $output, $returnVar);
 
-            $tmpTextFile = $tmpOutputBase . '.txt';
-            if (file_exists($tmpTextFile)) {
-                $extractedText = file_get_contents($tmpTextFile);
-                @unlink($tmpTextFile);
+            $tmpTsvFile = $tmpOutputBase . '.tsv';
+            if (file_exists($tmpTsvFile)) {
+                $tsvContent = file_get_contents($tmpTsvFile);
+                @unlink($tmpTsvFile);
                 @unlink($tmpOutputBase);
 
-                if (trim($extractedText) !== '') {
+                $parsed = self::parseTesseractTsv($tsvContent);
+                if (!empty(trim($parsed['text']))) {
                     return [
-                        'text' => $extractedText,
-                        'confidence' => 92.50,
-                        'status' => 'completed',
-                        'suggested_manual_review' => false,
+                        'text' => $parsed['text'],
+                        'confidence' => $parsed['confidence'],
+                        'status' => ($parsed['confidence'] >= self::OCR_REVIEW_THRESHOLD) ? 'completed' : 'manual_review_required',
+                        'suggested_manual_review' => ($parsed['confidence'] < self::OCR_REVIEW_THRESHOLD),
                         'error' => null
                     ];
                 }
             }
         }
 
-        // If Tesseract is unavailable or image text couldn't be parsed automatically
+        // Default safe failure response when OCR engine unavailable or scan unreadable
         return [
             'text' => '',
-            'confidence' => 40.00,
+            'confidence' => 0.00,
             'status' => 'manual_review_required',
             'suggested_manual_review' => true,
             'error' => 'Unclear scan or OCR engine unavailable for automatic image parsing. Teacher manual review required.'
+        ];
+    }
+
+    private static function parseTesseractTsv($tsvContent) {
+        $lines = explode("\n", trim($tsvContent));
+        if (count($lines) <= 1) {
+            return ['text' => '', 'confidence' => 0.00];
+        }
+
+        $header = explode("\t", array_shift($lines));
+        $confIdx = array_search('conf', $header);
+        $textIdx = array_search('text', $header);
+
+        if ($confIdx === false || $textIdx === false) {
+            return ['text' => '', 'confidence' => 0.00];
+        }
+
+        $words = [];
+        $confidences = [];
+
+        foreach ($lines as $line) {
+            $cols = explode("\t", $line);
+            if (count($cols) <= max($confIdx, $textIdx)) continue;
+
+            $conf = floatval($cols[$confIdx]);
+            $word = trim($cols[$textIdx]);
+
+            if ($conf > 0 && !empty($word)) {
+                $words[] = $word;
+                $confidences[] = $conf;
+            }
+        }
+
+        if (empty($words)) {
+            return ['text' => '', 'confidence' => 0.00];
+        }
+
+        $avgConfidence = array_sum($confidences) / count($confidences);
+        return [
+            'text' => implode(' ', $words),
+            'confidence' => round($avgConfidence, 2)
         ];
     }
 
@@ -231,7 +330,7 @@ class OcrService {
         $pages = preg_match_all('/\/Type\s*\/Page[^s]/i', $content);
         if ($pages === 0) $pages = 1;
 
-        // Try extracting text stream objects
+        // Extract text stream objects
         preg_match_all('/stream[\r\n]+(.*?)[\r\n]+endstream/is', $content, $matches);
         $extractedText = '';
 
@@ -250,10 +349,12 @@ class OcrService {
         }
 
         if (trim($extractedText) !== '') {
+            $wordCount = count(explode(' ', trim($extractedText)));
+            $computedConf = min(98.00, max(75.00, 70.00 + ($wordCount * 1.5)));
             return [
                 'text' => trim($extractedText),
                 'pages' => max(1, $pages),
-                'confidence' => 90.00,
+                'confidence' => round($computedConf, 2),
                 'status' => 'completed',
                 'suggested_manual_review' => false,
                 'error' => null
@@ -264,7 +365,7 @@ class OcrService {
         return [
             'text' => '',
             'pages' => max(1, $pages),
-            'confidence' => 35.00,
+            'confidence' => 0.00,
             'status' => 'manual_review_required',
             'suggested_manual_review' => true,
             'error' => 'Scanned PDF does not contain a readable text layer. Teacher manual review required.'
@@ -291,7 +392,6 @@ class OcrService {
         }
         $stdDev = sqrt($variance / count($luminances));
 
-        // If standard deviation of brightness is near 0, the image is uniform/blank
         return ($stdDev < 4.0);
     }
 

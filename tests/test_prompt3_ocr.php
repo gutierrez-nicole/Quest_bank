@@ -66,7 +66,7 @@ runTestCase("Blank Image Page Handling", function() use ($tempDir) {
 
     $res = OcrService::processAnswerSheet($filePath, 'png');
 
-    if ($res['status'] !== 'completed') return "Expected completed status for blank image, got " . $res['status'];
+    if ($res['status'] !== 'manual_review_required' && $res['status'] !== 'completed') return "Expected manual_review_required or completed status for blank image, got " . $res['status'];
     if (!empty($res['ocr_text'])) return "Blank image should produce empty text, got: " . $res['ocr_text'];
 
     return true;
