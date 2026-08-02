@@ -98,22 +98,36 @@ class AuthorizationService {
         if ($role === 'admin') return true;
         if ($role !== 'teacher') return false;
 
-        // Check if student exists and is enrolled or has submitted to any exam owned by this teacher
+        // Check if student has submitted to any exam owned by this teacher
         $stmt = $pdo->prepare("
             SELECT s.id 
             FROM exam_submissions s
-            WHERE s.student_id = ? AND s.teacher_id = ?
+            LEFT JOIN exams e ON s.exam_id = e.id
+            WHERE s.student_id = ? AND (s.teacher_id = ? OR e.teacher_id = ? OR e.created_by = ?)
             LIMIT 1
         ");
-        $stmt->execute([$studentId, $userId]);
+        $stmt->execute([$studentId, $userId, $userId, $userId]);
         $hasSubmission = ($stmt->fetchColumn() !== false);
 
         if ($hasSubmission) return true;
 
-        // Or student details exist in DB and user is a registered teacher
-        $studentStmt = $pdo->prepare("SELECT id FROM users WHERE id = ? AND role = 'student'");
-        $studentStmt->execute([$studentId]);
-        return ($studentStmt->fetchColumn() !== false);
+        // Or student is explicitly assigned to any exam owned by this teacher via exam_assignments
+        $assignStmt = $pdo->prepare("
+            SELECT ea.id
+            FROM exam_assignments ea
+            JOIN exams e ON ea.exam_id = e.id
+            WHERE ea.student_id = ? AND (e.teacher_id = ? OR e.created_by = ?)
+            LIMIT 1
+        ");
+        $assignStmt->execute([$studentId, $userId, $userId]);
+        return ($assignStmt->fetchColumn() !== false);
+    }
+
+    /**
+     * Check if a teacher/admin can download an answer sheet
+     */
+    public static function canDownloadSubmission($userId, $submissionId) {
+        return self::canReviewSubmission($userId, $submissionId);
     }
 
     /**
