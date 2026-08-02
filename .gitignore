@@ -21,3 +21,10 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Uploads and temporary test fixtures
+teacher/uploads/*
+!teacher/uploads/.gitkeep
+tests/fixtures_p1/
+tests/fixtures/
+

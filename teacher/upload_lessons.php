@@ -31,7 +31,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_material'])) {
         $mime_type = finfo_file($finfo, $file_tmp);
         finfo_close($finfo);
 
-        if ($file_size <= 10485760 && in_array($file_ext, $allowed_exts) && in_array($mime_type, $allowed_mimes)) {
+        // Prevent double extension executable bypass (e.g. file.php.pdf)
+        $clean_original_filename = basename($file_name);
+        $file_parts = explode('.', $clean_original_filename);
+        $forbidden_exts = ['php', 'phtml', 'php3', 'php4', 'php5', 'phps', 'phar', 'exe', 'sh', 'bat', 'cmd', 'js', 'pl', 'py', 'cgi'];
+        $has_forbidden = false;
+        foreach ($file_parts as $part) {
+            if (in_array(strtolower($part), $forbidden_exts)) {
+                $has_forbidden = true;
+                break;
+            }
+        }
+
+        if (!$has_forbidden && $file_size > 0 && $file_size <= 10485760 && in_array($file_ext, $allowed_exts) && in_array($mime_type, $allowed_mimes)) {
             $upload_dir = __DIR__ . '/uploads/';
             if (!is_dir($upload_dir)) {
                 mkdir($upload_dir, 0755, true);
@@ -44,20 +56,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_material'])) {
                 try {
                     $stmt = $pdo->prepare("
                         INSERT INTO lesson_materials 
-                        (teacher_id, subject, title, file_name, file_path, file_type, file_size, processing_status) 
-                        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
+                        (teacher_id, subject, title, file_name, file_path, file_type, file_size, processing_status, original_filename, stored_filename, mime_type) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
                     ");
                     $stmt->execute([
                         getCurrentUserId(),
                         $subject,
                         $title,
-                        $file_name,
+                        $clean_original_filename,
                         'uploads/' . $new_file_name,
                         strtoupper($file_ext),
-                        $file_size
+                        $file_size,
+                        $clean_original_filename,
+                        $new_file_name,
+                        $mime_type
                     ]);
                     $material_id = $pdo->lastInsertId();
-                    logActivity("Uploaded new lesson material '{$title}' ({$file_name}) for subject '{$subject}'.");
+                    logActivity("Uploaded new lesson material '{$title}' ({$clean_original_filename}) for subject '{$subject}'.");
 
                     // Trigger automatic text extraction
                     $extractRes = LessonExtractionService::extractAndSave($material_id);

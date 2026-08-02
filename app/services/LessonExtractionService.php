@@ -23,15 +23,47 @@ class LessonExtractionService {
         }
 
         if (!file_exists($filePath)) {
-            self::markFailed($pdo, $materialId, "File not found on server at path: {$material['file_path']}");
+            self::markFailed($pdo, $materialId, "File not found on server.");
             return ['success' => false, 'error' => 'File not found on server.'];
+        }
+
+        $fileSize = filesize($filePath);
+        if ($fileSize === 0) {
+            self::markFailed($pdo, $materialId, "File is empty (0 bytes).");
+            return ['success' => false, 'error' => 'File is empty (0 bytes).'];
+        }
+
+        if ($fileSize > 10485760) { // 10MB
+            self::markFailed($pdo, $materialId, "File exceeds maximum size limit of 10MB.");
+            return ['success' => false, 'error' => 'File exceeds maximum size limit of 10MB.'];
         }
 
         $stmtUpdate = $pdo->prepare("UPDATE lesson_materials SET processing_status = 'processing' WHERE id = ?");
         $stmtUpdate->execute([$materialId]);
 
         $fileExt = strtolower(pathinfo($material['file_name'], PATHINFO_EXTENSION));
-        $fileSize = filesize($filePath);
+
+        // MIME validation
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $detectedMime = finfo_file($finfo, $filePath);
+        finfo_close($finfo);
+
+        $allowedMimes = [
+            'pdf' => ['application/pdf'],
+            'docx' => ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/zip'],
+            'pptx' => ['application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/zip'],
+            'txt' => ['text/plain', 'text/x-gettext-translation']
+        ];
+
+        if (!isset($allowedMimes[$fileExt])) {
+            self::markFailed($pdo, $materialId, "Unsupported file extension: .{$fileExt}");
+            return ['success' => false, 'error' => "Unsupported file extension: .{$fileExt}"];
+        }
+
+        if (!in_array($detectedMime, $allowedMimes[$fileExt]) && $detectedMime !== 'application/octet-stream') {
+            self::markFailed($pdo, $materialId, "File content type does not match extension .{$fileExt} (Detected: {$detectedMime}).");
+            return ['success' => false, 'error' => "File content type does not match extension .{$fileExt} (Detected: {$detectedMime})."];
+        }
 
         try {
             $extractedText = '';
@@ -40,12 +72,12 @@ class LessonExtractionService {
             switch ($fileExt) {
                 case 'txt':
                     $extractedText = file_get_contents($filePath);
-                    $pageCount = max(1, ceil(strlen($extractedText) / 3000));
+                    $pageCount = max(1, (int)ceil(strlen($extractedText) / 3000));
                     break;
 
                 case 'docx':
                     $extractedText = self::extractFromDocx($filePath);
-                    $pageCount = max(1, ceil(strlen($extractedText) / 2500));
+                    $pageCount = max(1, (int)ceil(strlen($extractedText) / 2500));
                     break;
 
                 case 'pptx':
@@ -67,7 +99,7 @@ class LessonExtractionService {
             $cleanText = self::cleanExtractedText($extractedText);
 
             if (empty(trim($cleanText))) {
-                throw new Exception("Extraction resulted in empty text. The file might contain scanned images without OCR layers or password protection.");
+                throw new Exception("Extraction resulted in empty text. The file might contain scanned images without text layers or password protection.");
             }
 
             $wordCount = str_word_count($cleanText);
@@ -80,12 +112,14 @@ class LessonExtractionService {
                     processing_error = NULL, 
                     word_count = ?, 
                     page_count = ?, 
+                    mime_type = ?,
+                    file_size = ?,
                     extracted_at = NOW() 
                 WHERE id = ?
             ");
-            $stmtSave->execute([$cleanText, $wordCount, $pageCount, $materialId]);
+            $stmtSave->execute([$cleanText, $wordCount, $pageCount, $detectedMime, $fileSize, $materialId]);
 
-            logActivity("Successfully extracted lesson content for '{$material['title']}' ({$wordCount} words, {$pageCount} pages, {$executionTime}ms).", $material['teacher_id']);
+            logActivity("Successfully extracted lesson content for '{$material['title']}' ({$wordCount} words, {$pageCount} pages, {$executionTime}ms).", $material['teacher_id'] ?? null);
 
             return [
                 'success' => true,
@@ -99,7 +133,7 @@ class LessonExtractionService {
             $errorMsg = $e->getMessage();
             self::markFailed($pdo, $materialId, $errorMsg);
             error_log("LessonExtraction Error [ID {$materialId}]: " . $errorMsg);
-            logActivity("Failed to extract lesson '{$material['title']}': {$errorMsg}", $material['teacher_id']);
+            logActivity("Failed to extract lesson '{$material['title']}': {$errorMsg}", $material['teacher_id'] ?? null);
             return ['success' => false, 'error' => $errorMsg];
         }
     }
@@ -117,14 +151,15 @@ class LessonExtractionService {
     private static function cleanExtractedText($text) {
         if (!is_string($text)) return '';
 
-        // Normalize UTF-8 characters and remove null bytes
+        // Remove null bytes and non-printable control characters (except newline \n and tab \t)
         $text = str_replace("\0", '', $text);
+        $text = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $text);
 
         // Convert carriage returns to newline
         $text = str_replace("\r\n", "\n", $text);
         $text = str_replace("\r", "\n", $text);
 
-        // Remove repetitive headers/footers patterns like "Page X of Y" or timestamps
+        // Remove repetitive headers/footers patterns like "Page X of Y" or isolated timestamps
         $text = preg_replace('/Page \d+ of \d+/i', '', $text);
         $text = preg_replace('/^\s*\d+\s*$/m', '', $text);
 
@@ -248,6 +283,10 @@ class LessonExtractionService {
         $content = file_get_contents($filePath);
         if (!$content) {
             throw new Exception("Unable to read PDF file.");
+        }
+
+        if (strpos($content, '%PDF-') !== 0) {
+            throw new Exception("File header does not match valid PDF format.");
         }
 
         if (strpos($content, '/Encrypt') !== false) {
