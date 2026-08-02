@@ -47,57 +47,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_review_status'
     $new_status = $_POST['new_review_status'] ?? '';
     $remarks = trim(sanitizeInput($_POST['teacher_remarks'] ?? ''));
 
-    $valid_statuses = ['draft', 'pending_review', 'reviewed', 'published', 'archived'];
-    if ($submission_id > 0 && in_array($new_status, $valid_statuses)) {
+    if ($submission_id > 0) {
         try {
-            $published_at = ($new_status === 'published') ? date('Y-m-d H:i:s') : null;
-            $reviewed_at = in_array($new_status, ['reviewed', 'published']) ? date('Y-m-d H:i:s') : null;
+            AuthorizationService::enforceSubmissionAccess($teacher_id, $submission_id);
+            $wfRes = ResultWorkflowService::transitionStatus($submission_id, $new_status, $teacher_id, $remarks);
 
-            // Check if score/items were edited
-            if (isset($_POST['edit_correct_count'])) {
-                $new_correct = intval($_POST['edit_correct_count']);
-                $total_items = intval($_POST['total_items']);
-                $new_percentage = $total_items > 0 ? round(($new_correct / $total_items) * 100, 2) : 0.0;
-                $new_pass_fail = ($new_percentage >= 75.0) ? 'Pass' : 'Fail';
-
-                $stmtUpdate = $pdo->prepare("
-                    UPDATE exam_submissions 
-                    SET correct_count = ?, wrong_count = ?, total_score = ?, percentage = ?, status = ?, review_status = ?, teacher_remarks = ?, reviewed_at = COALESCE(?, reviewed_at), published_at = COALESCE(?, published_at) 
-                    WHERE id = ? AND teacher_id = ?
-                ");
-                $stmtUpdate->execute([
-                    $new_correct,
-                    $total_items - $new_correct,
-                    $new_correct,
-                    $new_percentage,
-                    $new_pass_fail,
-                    $new_status,
-                    $remarks,
-                    $reviewed_at,
-                    $published_at,
-                    $submission_id,
-                    $teacher_id
-                ]);
-            } else {
-                $stmtUpdate = $pdo->prepare("
-                    UPDATE exam_submissions 
-                    SET review_status = ?, teacher_remarks = ?, reviewed_at = COALESCE(?, reviewed_at), published_at = COALESCE(?, published_at) 
-                    WHERE id = ? AND teacher_id = ?
-                ");
-                $stmtUpdate->execute([
-                    $new_status,
-                    $remarks,
-                    $reviewed_at,
-                    $published_at,
-                    $submission_id,
-                    $teacher_id
-                ]);
-            }
-
-            logActivity("Updated submission #{$submission_id} review status to '{$new_status}'.", $teacher_id);
-            $success_msg = "Submission #{$submission_id} review status updated to " . ucfirst(str_replace('_', ' ', $new_status)) . "!";
-        } catch (PDOException $e) {
-            $error_msg = "Failed to update review status: " . $e->getMessage();
+            $success_msg = "Submission #{$submission_id} review status updated to " . ucfirst(str_replace('_', ' ', $wfRes['new_status'])) . "!";
+        } catch (Exception $e) {
+            $error_msg = "Workflow Error: " . $e->getMessage();
         }
     }
 }

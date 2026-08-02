@@ -32,14 +32,12 @@ try {
     $params = [];
 
     if ($single_id > 0) {
-        $where[] = "es.id = ? AND (es.student_id = ? OR es.student_name LIKE ?)";
+        $where[] = "es.id = ? AND es.student_id = ?";
         $params[] = $single_id;
         $params[] = $student_id;
-        $params[] = "%{$fullname}%";
     } else {
-        $where[] = "(es.student_id = ? OR es.student_name LIKE ?)";
+        $where[] = "es.student_id = ?";
         $params[] = $student_id;
-        $params[] = "%{$fullname}%";
 
         if (!empty($selected_term) && $selected_term !== 'All') {
             $where[] = "(es.term = ? OR e.term = ?)";
@@ -53,9 +51,9 @@ try {
     $sql = "
         SELECT 
             es.id,
-            COALESCE(e.title, es.exam_title, 'Civil Engineering Quiz') as title,
-            COALESCE(e.subject, 'Civil Engineering') as subject,
-            COALESCE(es.term, 'Prelim') as term,
+            COALESCE(e.title, es.exam_title, 'Examination') as title,
+            COALESCE(e.subject, 'General Subject') as subject,
+            COALESCE(es.term, 'N/A') as term,
             COALESCE(es.correct_count, es.total_score, 0) as score,
             es.total_items,
             es.percentage,

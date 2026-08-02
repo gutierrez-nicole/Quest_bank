@@ -90,11 +90,14 @@ addColumn($pdo, 'exam_submissions', 'total_possible_score', "INT(11) DEFAULT 0")
 addColumn($pdo, 'exam_submissions', 'ocr_text', "TEXT DEFAULT NULL");
 addColumn($pdo, 'exam_submissions', 'original_ocr_text', "TEXT DEFAULT NULL");
 addColumn($pdo, 'exam_submissions', 'corrected_ocr_text', "TEXT DEFAULT NULL");
-addColumn($pdo, 'exam_submissions', 'ocr_confidence', "DECIMAL(5,2) DEFAULT 0.00");
+addColumn($pdo, 'exam_submissions', 'extraction_mode', "VARCHAR(50) DEFAULT 'image_ocr'");
+addColumn($pdo, 'exam_submissions', 'ocr_confidence', "DECIMAL(5,2) DEFAULT NULL");
 addColumn($pdo, 'exam_submissions', 'ocr_status', "VARCHAR(30) DEFAULT 'pending'");
 addColumn($pdo, 'exam_submissions', 'ocr_error', "TEXT DEFAULT NULL");
 addColumn($pdo, 'exam_submissions', 'suggested_manual_review', "TINYINT(1) DEFAULT 0");
 addColumn($pdo, 'exam_submissions', 'page_count', "INT(11) DEFAULT 1");
+addColumn($pdo, 'exam_submissions', 'per_page_ocr_metadata', "JSON DEFAULT NULL");
+addColumn($pdo, 'exam_submissions', 'processing_duration', "DECIMAL(8,2) DEFAULT 0.00");
 addColumn($pdo, 'exam_submissions', 'processed_at', "DATETIME DEFAULT NULL");
 addColumn($pdo, 'exam_submissions', 'evaluation_result', "JSON DEFAULT NULL");
 addColumn($pdo, 'exam_submissions', 'teacher_override_log', "JSON DEFAULT NULL");
@@ -106,6 +109,18 @@ addColumn($pdo, 'exam_submissions', 'published_at', "DATETIME DEFAULT NULL");
 addColumn($pdo, 'exam_submissions', 'file_path', "VARCHAR(500) DEFAULT NULL");
 addColumn($pdo, 'exam_submissions', 'original_filename', "VARCHAR(255) DEFAULT NULL");
 addColumn($pdo, 'exam_submissions', 'uploaded_file_hash', "VARCHAR(64) DEFAULT NULL");
+
+// ============================================
+// SUBJECTS & DEPARTMENTS TABLES
+// ============================================
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS `subjects` (
+        `id` INT(11) AUTO_INCREMENT PRIMARY KEY,
+        `code` VARCHAR(50) NOT NULL,
+        `title` VARCHAR(255) NOT NULL,
+        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+");
 
 // ============================================
 // NEW TABLES

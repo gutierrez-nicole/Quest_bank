@@ -6,7 +6,7 @@ require_once __DIR__ . '/../../includes/security.php';
 class ResultWorkflowService {
 
     const ALLOWED_TRANSITIONS = [
-        'pending_review' => ['reviewed', 'finalized'],
+        'pending_review' => ['reviewed'],
         'reviewed'       => ['finalized', 'pending_review'],
         'finalized'      => ['published', 'reviewed'],
         'published'      => ['archived', 'finalized'],
@@ -16,7 +16,7 @@ class ResultWorkflowService {
     /**
      * Validate and transition submission review status server-side
      */
-    public static function transitionStatus($submissionId, $targetStatus, $reviewerId, $remarks = '') {
+    public static function transitionStatus($submissionId, $targetStatus, $reviewerId, $remarks = '', $actorRole = 'teacher') {
         $pdo = getDBConnection();
 
         $stmt = $pdo->prepare("SELECT * FROM exam_submissions WHERE id = ?");
@@ -30,12 +30,13 @@ class ResultWorkflowService {
         $currentStatus = $sub['review_status'] ?? 'pending_review';
         $targetStatus = strtolower(trim($targetStatus));
 
+        // Check if transition is valid
         if (!isset(self::ALLOWED_TRANSITIONS[$currentStatus]) || !in_array($targetStatus, self::ALLOWED_TRANSITIONS[$currentStatus])) {
-            throw new InvalidArgumentException("Invalid transition from '{$currentStatus}' to '{$targetStatus}'.");
+            throw new InvalidArgumentException("Illegal status transition from '{$currentStatus}' to '{$targetStatus}'. Direct skipped transitions are strictly rejected.");
         }
 
-        // Check for unresolved review flags if attempting to publish or finalize directly
-        if (in_array($targetStatus, ['finalized', 'published'])) {
+        // Validate finalization blockers
+        if ($targetStatus === 'finalized') {
             $ocrConf = floatval($sub['ocr_confidence'] ?? 100.00);
             $manualRev = intval($sub['suggested_manual_review'] ?? 0);
 
@@ -45,31 +46,53 @@ class ResultWorkflowService {
             $unresolvedItems = intval($stmtAns->fetchColumn());
 
             if ($ocrConf < 75.00 || $manualRev === 1 || $unresolvedItems > 0) {
-                if ($currentStatus === 'pending_review' && $targetStatus === 'published') {
-                    throw new LogicException("Direct publication rejected: Submission contains unresolved low-confidence or item review flags.");
-                }
+                throw new LogicException("Cannot finalize submission: Contains unresolved low-confidence OCR flags or item review requirements.");
+            }
+        }
+
+        // Validate publication requirements
+        if ($targetStatus === 'published') {
+            if ($currentStatus !== 'finalized' && $currentStatus !== 'archived') {
+                throw new LogicException("Publication rejected: Submission must be in 'finalized' status before publishing.");
+            }
+
+            if (empty($reviewerId)) {
+                throw new LogicException("Publication rejected: Valid reviewer ID is required.");
             }
         }
 
         $publishedAt = ($targetStatus === 'published') ? date('Y-m-d H:i:s') : $sub['published_at'];
         $reviewedAt = date('Y-m-d H:i:s');
 
-        $stmtUpd = $pdo->prepare("
-            UPDATE exam_submissions 
-            SET review_status = ?, reviewed_by = ?, teacher_remarks = ?, reviewed_at = ?, published_at = ?
-            WHERE id = ?
-        ");
-        $stmtUpd->execute([$targetStatus, $reviewerId, $remarks, $reviewedAt, $publishedAt, $submissionId]);
+        $pdo->beginTransaction();
 
-        logActivity("Transitioned submission #{$submissionId} from '{$currentStatus}' to '{$targetStatus}'.", $reviewerId);
+        try {
+            $stmtUpd = $pdo->prepare("
+                UPDATE exam_submissions 
+                SET review_status = ?, reviewed_by = ?, teacher_remarks = ?, reviewed_at = ?, published_at = ?
+                WHERE id = ?
+            ");
+            $stmtUpd->execute([$targetStatus, $reviewerId, $remarks, $reviewedAt, $publishedAt, $submissionId]);
 
-        return [
-            'success' => true,
-            'submission_id' => $submissionId,
-            'previous_status' => $currentStatus,
-            'new_status' => $targetStatus,
-            'reviewed_by' => $reviewerId
-        ];
+            // Audit status transition in activity_logs or dedicated table
+            logActivity("Workflow Transition: Submission #{$submissionId} moved from '{$currentStatus}' to '{$targetStatus}' by User #{$reviewerId} ({$actorRole}). Remarks: '{$remarks}'", $reviewerId);
+
+            $pdo->commit();
+
+            return [
+                'success' => true,
+                'submission_id' => $submissionId,
+                'previous_status' => $currentStatus,
+                'new_status' => $targetStatus,
+                'reviewed_by' => $reviewerId,
+                'reviewed_at' => $reviewedAt,
+                'published_at' => $publishedAt
+            ];
+
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            throw $e;
+        }
     }
 
     /**

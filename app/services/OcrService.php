@@ -15,6 +15,7 @@ class OcrService {
             return [
                 'success' => false,
                 'status' => 'failed',
+                'extraction_mode' => 'image_ocr',
                 'text' => '',
                 'ocr_text' => '',
                 'confidence' => 0.00,
@@ -22,7 +23,8 @@ class OcrService {
                 'error' => 'File not found on server.',
                 'ocr_error' => 'File not found on server.',
                 'page_count' => 0,
-                'pages' => []
+                'pages' => [],
+                'execution_time_ms' => 0.00
             ];
         }
 
@@ -31,6 +33,7 @@ class OcrService {
             return [
                 'success' => false,
                 'status' => 'failed',
+                'extraction_mode' => 'image_ocr',
                 'text' => '',
                 'ocr_text' => '',
                 'confidence' => 0.00,
@@ -38,7 +41,8 @@ class OcrService {
                 'error' => 'Uploaded answer sheet file is empty (0 bytes).',
                 'ocr_error' => 'Uploaded answer sheet file is empty (0 bytes).',
                 'page_count' => 1,
-                'pages' => []
+                'pages' => [],
+                'execution_time_ms' => 0.00
             ];
         }
 
@@ -46,6 +50,7 @@ class OcrService {
             return [
                 'success' => false,
                 'status' => 'failed',
+                'extraction_mode' => 'image_ocr',
                 'text' => '',
                 'ocr_text' => '',
                 'confidence' => 0.00,
@@ -53,7 +58,8 @@ class OcrService {
                 'error' => 'Uploaded answer sheet file exceeds maximum size limit of 20MB.',
                 'ocr_error' => 'Uploaded answer sheet file exceeds maximum size limit of 20MB.',
                 'page_count' => 1,
-                'pages' => []
+                'pages' => [],
+                'execution_time_ms' => 0.00
             ];
         }
 
@@ -67,6 +73,7 @@ class OcrService {
             return [
                 'success' => false,
                 'status' => 'failed',
+                'extraction_mode' => 'image_ocr',
                 'text' => '',
                 'ocr_text' => '',
                 'confidence' => 0.00,
@@ -74,7 +81,8 @@ class OcrService {
                 'error' => "File content type does not match supported formats JPG, PNG, PDF (Detected: {$detectedMime}).",
                 'ocr_error' => "File content type does not match supported formats JPG, PNG, PDF (Detected: {$detectedMime}).",
                 'page_count' => 1,
-                'pages' => []
+                'pages' => [],
+                'execution_time_ms' => 0.00
             ];
         }
 
@@ -83,6 +91,7 @@ class OcrService {
             $confidence = 0.00;
             $pageCount = 1;
             $status = 'completed';
+            $extractionMode = ($fileExt === 'pdf') ? 'native_pdf_text' : 'image_ocr';
             $suggestedManualReview = false;
             $errorMessage = null;
             $pagesData = [];
@@ -93,6 +102,7 @@ class OcrService {
                 $pageCount = $pdfRes['pages'];
                 $confidence = $pdfRes['confidence'];
                 $status = $pdfRes['status'];
+                $extractionMode = $pdfRes['extraction_mode'];
                 $suggestedManualReview = $pdfRes['suggested_manual_review'];
                 $errorMessage = $pdfRes['error'];
                 $pagesData = $pdfRes['pages_data'] ?? [];
@@ -101,6 +111,7 @@ class OcrService {
                 $extractedText = $imageRes['text'];
                 $confidence = $imageRes['confidence'];
                 $status = $imageRes['status'];
+                $extractionMode = 'image_ocr';
                 $suggestedManualReview = $imageRes['suggested_manual_review'];
                 $errorMessage = $imageRes['error'];
                 $pagesData = [$imageRes];
@@ -114,6 +125,7 @@ class OcrService {
                 return [
                     'success' => false,
                     'status' => 'failed',
+                    'extraction_mode' => $extractionMode,
                     'text' => '',
                     'ocr_text' => '',
                     'confidence' => 0.00,
@@ -131,6 +143,7 @@ class OcrService {
                 return [
                     'success' => true,
                     'status' => 'manual_review_required',
+                    'extraction_mode' => $extractionMode,
                     'text' => '',
                     'ocr_text' => '',
                     'confidence' => 0.00,
@@ -143,7 +156,7 @@ class OcrService {
                 ];
             }
 
-            if ($confidence < self::OCR_REVIEW_THRESHOLD || $suggestedManualReview) {
+            if (($confidence !== null && $confidence < self::OCR_REVIEW_THRESHOLD) || $suggestedManualReview) {
                 $status = 'manual_review_required';
                 $suggestedManualReview = true;
             }
@@ -151,9 +164,10 @@ class OcrService {
             return [
                 'success' => true,
                 'status' => $status,
+                'extraction_mode' => $extractionMode,
                 'text' => $cleanText,
                 'ocr_text' => $cleanText,
-                'confidence' => round($confidence, 2),
+                'confidence' => ($confidence !== null) ? round($confidence, 2) : null,
                 'page_count' => $pageCount,
                 'pages' => $pagesData,
                 'suggested_manual_review' => $suggestedManualReview,
@@ -167,6 +181,7 @@ class OcrService {
             return [
                 'success' => false,
                 'status' => 'failed',
+                'extraction_mode' => 'image_ocr',
                 'text' => '',
                 'ocr_text' => '',
                 'confidence' => 0.00,
@@ -174,7 +189,8 @@ class OcrService {
                 'error' => $e->getMessage(),
                 'ocr_error' => $e->getMessage(),
                 'page_count' => 1,
-                'pages' => []
+                'pages' => [],
+                'execution_time_ms' => 0.00
             ];
         }
     }
@@ -213,8 +229,8 @@ class OcrService {
                     return [
                         'text' => '',
                         'confidence' => 0.00,
-                        'status' => 'manual_review_required',
-                        'suggested_manual_review' => true,
+                        'status' => 'completed',
+                        'suggested_manual_review' => false,
                         'error' => 'Blank image page detected.'
                     ];
                 }
@@ -311,6 +327,7 @@ class OcrService {
                 'pages' => 1,
                 'confidence' => 0.00,
                 'status' => 'failed',
+                'extraction_mode' => 'scanned_pdf_ocr',
                 'suggested_manual_review' => true,
                 'error' => 'File is not a valid PDF document.'
             ];
@@ -322,6 +339,7 @@ class OcrService {
                 'pages' => 1,
                 'confidence' => 0.00,
                 'status' => 'failed',
+                'extraction_mode' => 'scanned_pdf_ocr',
                 'suggested_manual_review' => true,
                 'error' => 'PDF document is encrypted or password-protected.'
             ];
@@ -349,26 +367,69 @@ class OcrService {
         }
 
         if (trim($extractedText) !== '') {
-            $wordCount = count(explode(' ', trim($extractedText)));
-            $computedConf = min(98.00, max(75.00, 70.00 + ($wordCount * 1.5)));
             return [
                 'text' => trim($extractedText),
                 'pages' => max(1, $pages),
-                'confidence' => round($computedConf, 2),
+                'confidence' => 100.00, // 100% extraction quality for native PDF text
                 'status' => 'completed',
+                'extraction_mode' => 'native_pdf_text',
                 'suggested_manual_review' => false,
                 'error' => null
             ];
         }
 
-        // Scanned PDF without text layer
+        // Scanned PDF without text layer: Attempt CLI tool conversion (pdftoppm / ImageMagick)
+        $pdftoppmPath = exec('which pdftoppm 2>/dev/null');
+        $tesseractPath = exec('which tesseract 2>/dev/null');
+
+        if (!empty($pdftoppmPath) && !empty($tesseractPath)) {
+            $tmpDir = sys_get_temp_dir() . '/pdf_pages_' . uniqid();
+            mkdir($tmpDir, 0777, true);
+            $cmdConvert = sprintf("%s -png %s %s/page", escapeshellcmd($pdftoppmPath), escapeshellarg($filePath), escapeshellarg($tmpDir));
+            exec($cmdConvert);
+
+            $pageImages = glob("{$tmpDir}/page-*.png");
+            sort($pageImages);
+
+            if (!empty($pageImages)) {
+                $combinedText = '';
+                $allConfidences = [];
+                $pagesData = [];
+
+                foreach ($pageImages as $idx => $imgFile) {
+                    $imgRes = self::processImageFile($imgFile, 'png');
+                    $combinedText .= "\n--- Page " . ($idx + 1) . " ---\n" . $imgRes['text'];
+                    if ($imgRes['confidence'] > 0) {
+                        $allConfidences[] = $imgRes['confidence'];
+                    }
+                    $pagesData[] = $imgRes;
+                    @unlink($imgFile);
+                }
+                @rmdir($tmpDir);
+
+                $avgConf = !empty($allConfidences) ? array_sum($allConfidences) / count($allConfidences) : 0.00;
+                return [
+                    'text' => trim($combinedText),
+                    'pages' => count($pageImages),
+                    'confidence' => round($avgConf, 2),
+                    'status' => ($avgConf >= self::OCR_REVIEW_THRESHOLD) ? 'completed' : 'manual_review_required',
+                    'extraction_mode' => 'scanned_pdf_ocr',
+                    'suggested_manual_review' => ($avgConf < self::OCR_REVIEW_THRESHOLD),
+                    'pages_data' => $pagesData,
+                    'error' => null
+                ];
+            }
+        }
+
+        // Scanned PDF without text layer & conversion tools unavailable
         return [
             'text' => '',
             'pages' => max(1, $pages),
             'confidence' => 0.00,
             'status' => 'manual_review_required',
+            'extraction_mode' => 'scanned_pdf_ocr',
             'suggested_manual_review' => true,
-            'error' => 'Scanned PDF does not contain a readable text layer. Teacher manual review required.'
+            'error' => 'Scanned PDF does not contain a readable text layer. Page conversion tools (pdftoppm/tesseract) unavailable. Manual teacher review required.'
         ];
     }
 

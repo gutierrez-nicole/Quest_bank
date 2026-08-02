@@ -43,30 +43,28 @@ try {
         $student = [
             'fullname' => $_SESSION['username'] ?? 'Student User',
             'username' => $_SESSION['username'] ?? 'student',
-            'email' => 'student@questbank.edu.ph',
-            'student_number' => '2026-STUDENT-001',
-            'course' => 'BSIT',
-            'year_level' => '3',
-            'section' => 'A'
+            'email' => $_SESSION['email'] ?? 'Not Set',
+            'student_number' => 'N/A',
+            'course' => 'N/A',
+            'year_level' => 'N/A',
+            'section' => 'N/A'
         ];
     }
 
-    
     $average_score = 0.0;
     try {
         $stmt = $pdo->prepare("
             SELECT AVG(percentage) 
             FROM exam_submissions 
-            WHERE (student_id = ? OR student_name LIKE ?) AND review_status = 'published'
+            WHERE student_id = ? AND review_status IN ('published', 'finalized')
         ");
-        $stmt->execute([$student_id, "%{$student['fullname']}%"]);
+        $stmt->execute([$student_id]);
         $avg = $stmt->fetchColumn();
         $average_score = $avg ? number_format((float)$avg, 1) : "0.0";
     } catch (PDOException $e) {
         $average_score = "0.0";
     }
 
-    
     $passing_rate = 0.0;
     try {
         $stmt = $pdo->prepare("
@@ -74,9 +72,9 @@ try {
                 COUNT(*) as total,
                 SUM(CASE WHEN percentage >= 75 THEN 1 ELSE 0 END) as passed
             FROM exam_submissions 
-            WHERE (student_id = ? OR student_name LIKE ?) AND review_status = 'published'
+            WHERE student_id = ? AND review_status IN ('published', 'finalized')
         ");
-        $stmt->execute([$student_id, "%{$student['fullname']}%"]);
+        $stmt->execute([$student_id]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if ($row['total'] > 0) {
@@ -88,15 +86,14 @@ try {
         $passing_rate = "0.0";
     }
 
-    
     $exams_completed = 0;
     try {
         $stmt = $pdo->prepare("
             SELECT COUNT(*) 
             FROM exam_submissions 
-            WHERE (student_id = ? OR student_name LIKE ?) AND review_status = 'published'
+            WHERE student_id = ? AND review_status IN ('published', 'finalized')
         ");
-        $stmt->execute([$student_id, "%{$student['fullname']}%"]);
+        $stmt->execute([$student_id]);
         $exams_completed = (int)$stmt->fetchColumn();
     } catch (PDOException $e) {
         $exams_completed = 0;
