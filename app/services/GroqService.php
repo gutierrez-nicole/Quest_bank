@@ -40,17 +40,25 @@ class GroqService {
     public static function generateQuestions($lessonText, $numQuestions, $subject, $examTitle, $specialization = 'Structural Engineering', $questionType = 'multiple_choice', $difficulty = 'medium', $apiKey = null) {
         $startTime = microtime(true);
 
+        if (empty(trim($lessonText)) || strlen(trim($lessonText)) < 20) {
+            return ['error' => 'Selected lesson text is too short or empty for AI question generation.'];
+        }
+
+        if ($numQuestions <= 0) {
+            return ['error' => 'Question count must be at least 1.'];
+        }
+
         $prompt = "You are an expert Civil Engineering professor specializing in {$specialization} and academic assessment creation. "
                 . "Generate exactly {$numQuestions} high-quality Civil Engineering examination questions for the subject '{$subject}' (Specialization: {$specialization}) titled '{$examTitle}'. "
                 . "Target Difficulty Level: '{$difficulty}'. "
-                . "Target Question Type Format: '{$questionType}' (Supported types: multiple_choice, true_false, identification, fill_in_the_blank, matching_type, problem_solving, math_formula). "
-                . "based on the following lesson content: \"{$lessonText}\". "
-                . "Include a mix of theoretical concepts, formula applications, and engineering scenario items. "
+                . "Target Question Type Format: '{$questionType}' (Supported types: multiple_choice, true_false, identification). "
+                . "based strictly on the following lesson content: \"{$lessonText}\". "
+                . "Do NOT invent facts outside the lesson content. "
                 . "Format response strictly as a JSON array of objects without markdown fences or code blocks. "
                 . "Each object MUST have: \"question\" (string), \"type\" (string), "
                 . "\"opt_a\" (string or null), \"opt_b\" (string or null), \"opt_c\" (string or null), \"opt_d\" (string or null), "
                 . "\"correct_answer\" (string), \"formula_latex\" (string or null), \"matching_pairs\" (object or null), "
-                . "and \"explanation\" (string containing detailed step-by-step Civil Engineering formula/concept solution).";
+                . "and \"explanation\" (string containing detailed solution/concept explanation).";
 
         $payload = [
             'model' => GROQ_DEFAULT_MODEL,
@@ -72,50 +80,58 @@ class GroqService {
         $cleanContent = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', trim($content));
         $cleanJson = json_decode(trim($cleanContent), true);
 
-        if (json_last_error() === JSON_ERROR_NONE && is_array($cleanJson)) {
-            return [
-                'success' => true,
-                'questions' => $cleanJson,
-                'metadata' => [
-                    'model' => GROQ_DEFAULT_MODEL,
-                    'generation_time_ms' => $executionTime,
-                    'token_usage' => $usage['total_tokens'] ?? 0,
-                    'prompt' => mb_substr($prompt, 0, 500),
-                    'difficulty' => $difficulty
-                ]
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($cleanJson)) {
+            return ['error' => 'Failed to parse AI response as JSON: ' . json_last_error_msg()];
+        }
+
+        // Validate and deduplicate generated questions
+        $validQuestions = [];
+        $seen = [];
+
+        foreach ($cleanJson as $q) {
+            if (!is_array($q)) continue;
+            $qText = trim($q['question'] ?? '');
+            $qCorrect = trim($q['correct_answer'] ?? '');
+            $qType = trim($q['type'] ?? $questionType);
+
+            if (empty($qText) || empty($qCorrect)) {
+                continue; // Reject incomplete questions
+            }
+
+            $dedupKey = mb_strtolower(preg_replace('/\s+/', ' ', $qText));
+            if (isset($seen[$dedupKey])) {
+                continue; // Skip duplicate question
+            }
+            $seen[$dedupKey] = true;
+
+            $validQuestions[] = [
+                'question' => $qText,
+                'type' => $qType,
+                'opt_a' => $q['opt_a'] ?? null,
+                'opt_b' => $q['opt_b'] ?? null,
+                'opt_c' => $q['opt_c'] ?? null,
+                'opt_d' => $q['opt_d'] ?? null,
+                'correct_answer' => $qCorrect,
+                'formula_latex' => $q['formula_latex'] ?? null,
+                'matching_pairs' => $q['matching_pairs'] ?? null,
+                'explanation' => $q['explanation'] ?? '',
+                'points' => intval($q['points'] ?? 1),
+                'difficulty' => $difficulty,
+                'topic' => $subject
             ];
         }
 
-        // Grounded generator fallback derived directly from lesson text
-        $sentences = array_values(array_filter(array_map('trim', explode('.', $lessonText))));
-        if (empty($sentences)) {
-            $sentences = [$lessonText];
-        }
-        
-        $generated = [];
-        for ($i = 0; $i < $numQuestions; $i++) {
-            $snippet = $sentences[$i % count($sentences)];
-            $generated[] = [
-                'question' => "What is the principle regarding: {$snippet}?",
-                'type' => 'multiple_choice',
-                'opt_a' => 'Option A',
-                'opt_b' => 'Option B',
-                'opt_c' => 'Option C',
-                'opt_d' => 'Option D',
-                'correct_answer' => 'A',
-                'formula_latex' => null,
-                'matching_pairs' => null,
-                'explanation' => "Derived directly from lesson material: {$snippet}"
-            ];
+        if (empty($validQuestions)) {
+            return ['error' => 'AI generation produced no valid questions after schema validation.'];
         }
 
         return [
             'success' => true,
-            'questions' => $generated,
+            'questions' => $validQuestions,
             'metadata' => [
                 'model' => GROQ_DEFAULT_MODEL,
-                'generation_time_ms' => round((microtime(true) - $startTime) * 1000, 2),
-                'token_usage' => 120,
+                'generation_time_ms' => $executionTime,
+                'token_usage' => $usage['total_tokens'] ?? 0,
                 'prompt' => mb_substr($prompt, 0, 500),
                 'difficulty' => $difficulty
             ]

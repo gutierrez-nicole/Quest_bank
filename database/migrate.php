@@ -62,13 +62,19 @@ addColumn($pdo, 'exam_questions', 'topic', "VARCHAR(150) DEFAULT NULL");
 addColumn($pdo, 'exam_questions', 'lesson_id', "INT(11) DEFAULT NULL");
 
 // ============================================
-// EXAMS — Status, Passing Score, Difficulty
+// EXAMS — Status, Passing Score, Difficulty, AI Metadata
 // ============================================
 echo "\n--- exams ---\n";
 addColumn($pdo, 'exams', 'status', "VARCHAR(20) NOT NULL DEFAULT 'active'");
 addColumn($pdo, 'exams', 'passing_percentage', "DECIMAL(5,2) NOT NULL DEFAULT 75.00");
 addColumn($pdo, 'exams', 'difficulty', "VARCHAR(20) DEFAULT 'medium'");
 addColumn($pdo, 'exams', 'updated_at', "TIMESTAMP NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP");
+addColumn($pdo, 'exams', 'ai_metadata', "TEXT DEFAULT NULL");
+addColumn($pdo, 'exams', 'lesson_ids', "VARCHAR(255) DEFAULT NULL");
+addColumn($pdo, 'exams', 'generation_status', "VARCHAR(30) DEFAULT 'completed'");
+addColumn($pdo, 'exams', 'generation_error', "TEXT DEFAULT NULL");
+addColumn($pdo, 'exams', 'prompt_version', "VARCHAR(20) DEFAULT 'v1.0'");
+addColumn($pdo, 'exams', 'ai_model', "VARCHAR(100) DEFAULT NULL");
 
 // ============================================
 // EXAM_SUBMISSIONS — OCR, Review, File Storage

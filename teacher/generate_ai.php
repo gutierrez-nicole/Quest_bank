@@ -100,15 +100,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
 
             $qStmt = $pdo->prepare("
                 INSERT INTO exam_questions 
-                (exam_id, question_text, question_type, option_a, option_b, option_c, option_d, correct_answer, formula_latex, matching_pairs, points) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (exam_id, question_text, question_type, option_a, option_b, option_c, option_d, correct_answer, formula_latex, matching_pairs, points, explanation, difficulty, topic, lesson_id) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             
             $seenQuestions = [];
             $savedCount = 0;
+            $primaryLessonId = !empty($associated_lesson_ids[0]) ? intval($associated_lesson_ids[0]) : null;
 
             foreach ($questions as $q) {
-                $qText = trim($q['text'] ?? '');
+                $qText = trim($q['text'] ?? $q['question'] ?? '');
                 if (empty($qText) || in_array(mb_strtolower($qText), $seenQuestions)) {
                     continue; // Skip duplicate question text
                 }
@@ -122,10 +123,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                     $q['opt_b'] ?? null,
                     $q['opt_c'] ?? null,
                     $q['opt_d'] ?? null,
-                    $q['correct'] ?? '',
+                    $q['correct'] ?? $q['correct_answer'] ?? '',
                     $q['formula_latex'] ?? null,
-                    isset($q['matching_pairs']) ? json_encode($q['matching_pairs']) : null,
-                    intval($q['points'] ?? 1)
+                    isset($q['matching_pairs']) ? (is_string($q['matching_pairs']) ? $q['matching_pairs'] : json_encode($q['matching_pairs'])) : null,
+                    intval($q['points'] ?? 1),
+                    $q['explanation'] ?? null,
+                    $difficulty,
+                    $subject,
+                    $q['lesson_id'] ?? $primaryLessonId
                 ]);
                 $savedCount++;
             }
