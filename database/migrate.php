@@ -233,6 +233,24 @@ if (!tableExists($pdo, 'exam_assignments')) {
 // ============================================
 $defaultPassHash = password_hash('Password123!', PASSWORD_DEFAULT);
 
+// Seed QA Accounts for automated test suites
+$qaUsers = [
+    [1, 'qa_admin', 'QA Test Administrator', 'qa_admin@questbank.test', 'admin'],
+    [2, 'qa_teacher_a', 'QA Test Professor Alpha', 'qa_teacher_a@questbank.test', 'teacher'],
+    [3, 'qa_teacher_b', 'QA Test Professor Beta', 'qa_teacher_b@questbank.test', 'teacher'],
+    [4, 'qa_student_a', 'QA Test Student Alpha', 'qa_student_a@questbank.test', 'student'],
+    [5, 'qa_student_b', 'QA Test Student Beta', 'qa_student_b@questbank.test', 'student']
+];
+
+foreach ($qaUsers as $u) {
+    $stmtUsr = $pdo->prepare("
+        INSERT INTO users (id, username, fullname, email, password, role) 
+        VALUES (?, ?, ?, ?, ?, ?) 
+        ON DUPLICATE KEY UPDATE password = ?, fullname = VALUES(fullname), email = VALUES(email), role = VALUES(role)
+    ");
+    $stmtUsr->execute([$u[0], $u[1], $u[2], $u[3], $defaultPassHash, $u[4], $defaultPassHash]);
+}
+
 // Seed Admin: Russel
 $stmtUsr = $pdo->prepare("
     INSERT INTO users (id, username, fullname, email, password, role) 
@@ -260,7 +278,7 @@ $stmtSd->execute();
 // Seed Teacher: lasjo (jolas)
 $stmtUsr = $pdo->prepare("
     INSERT INTO users (id, username, fullname, email, password, role) 
-    VALUES (2, 'lasjo', 'jolas', 'lasjo@gmail.com', ?, 'teacher') 
+    VALUES (12, 'lasjo', 'jolas', 'lasjo@gmail.com', ?, 'teacher') 
     ON DUPLICATE KEY UPDATE password = ?, fullname = 'jolas', email = 'lasjo@gmail.com'
 ");
 $stmtUsr->execute([$defaultPassHash, $defaultPassHash]);
