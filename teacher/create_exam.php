@@ -236,11 +236,6 @@ unset($ex);
         </div>
     </div>
 
-            </div>
-        </div>
-    </main>
-
-    
     <script>
         let questionCount = 0;
 
