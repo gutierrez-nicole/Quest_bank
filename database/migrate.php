@@ -75,6 +75,7 @@ addColumn($pdo, 'exams', 'generation_status', "VARCHAR(30) DEFAULT 'completed'")
 addColumn($pdo, 'exams', 'generation_error', "TEXT DEFAULT NULL");
 addColumn($pdo, 'exams', 'prompt_version', "VARCHAR(20) DEFAULT 'v1.0'");
 addColumn($pdo, 'exams', 'ai_model', "VARCHAR(100) DEFAULT NULL");
+addColumn($pdo, 'exams', 'created_by', "INT(11) DEFAULT NULL");
 
 // ============================================
 // EXAM_SUBMISSIONS — OCR, Review, File Storage, Upload Type
