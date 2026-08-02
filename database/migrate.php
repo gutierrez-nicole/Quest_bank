@@ -257,4 +257,12 @@ $stmtSd = $pdo->prepare("
 ");
 $stmtSd->execute();
 
+// Seed Teacher: lasjo (jolas)
+$stmtUsr = $pdo->prepare("
+    INSERT INTO users (id, username, fullname, email, password, role) 
+    VALUES (2, 'lasjo', 'jolas', 'lasjo@gmail.com', ?, 'teacher') 
+    ON DUPLICATE KEY UPDATE password = ?, fullname = 'jolas', email = 'lasjo@gmail.com'
+");
+$stmtUsr->execute([$defaultPassHash, $defaultPassHash]);
+
 echo "\n=== Migration Complete ===\n";
