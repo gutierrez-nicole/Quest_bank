@@ -228,5 +228,33 @@ if (!tableExists($pdo, 'exam_assignments')) {
 } else {
     echo "  [=] Table exam_assignments already exists\n";
 }
+// ============================================
+// SEED DEFAULT CREDENTIALS (Russel & Nicole)
+// ============================================
+$defaultPassHash = password_hash('Password123!', PASSWORD_DEFAULT);
+
+// Seed Admin: Russel
+$stmtUsr = $pdo->prepare("
+    INSERT INTO users (id, username, fullname, email, password, role) 
+    VALUES (10, 'Russel', 'Russel Gregorio', 'russel@gmail.com', ?, 'admin') 
+    ON DUPLICATE KEY UPDATE password = ?, fullname = 'Russel Gregorio', email = 'russel@gmail.com'
+");
+$stmtUsr->execute([$defaultPassHash, $defaultPassHash]);
+
+// Seed Student: Nicole
+$stmtUsr = $pdo->prepare("
+    INSERT INTO users (id, username, fullname, email, password, role) 
+    VALUES (11, 'Nicole', 'Ashley Nicole Gutierrez', 'nikol@gmail.com', ?, 'student') 
+    ON DUPLICATE KEY UPDATE password = ?, fullname = 'Ashley Nicole Gutierrez', email = 'nikol@gmail.com'
+");
+$stmtUsr->execute([$defaultPassHash, $defaultPassHash]);
+
+// Seed Student details for Nicole
+$stmtSd = $pdo->prepare("
+    INSERT INTO student_details (user_id, student_number, course, year_level, section) 
+    VALUES (11, '23-2149184', 'BSCE', 4, 'A') 
+    ON DUPLICATE KEY UPDATE course = 'BSCE', year_level = 4, section = 'A'
+");
+$stmtSd->execute();
 
 echo "\n=== Migration Complete ===\n";
