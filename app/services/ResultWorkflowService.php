@@ -117,13 +117,9 @@ class ResultWorkflowService {
             throw new Exception("Submission #{$submissionId} not found.");
         }
 
-        // Authorization check: Verify teacher is authorized
-        $teacherStmt = $pdo->prepare("SELECT role FROM users WHERE id = ?");
-        $teacherStmt->execute([$teacherId]);
-        $teacherRole = $teacherStmt->fetchColumn();
-
-        if ($teacherRole !== 'teacher' && $teacherRole !== 'admin') {
-            throw new SecurityException("Unauthorized: Only faculty teachers or administrators may override scores.");
+        // Authorization check: Verify ownership via AuthorizationService
+        if (!AuthorizationService::canOverrideScore($teacherId, $submissionId)) {
+            throw new SecurityException("Unauthorized: You do not have ownership permission to override scores for submission #{$submissionId}.");
         }
 
         // Fetch original answer record
