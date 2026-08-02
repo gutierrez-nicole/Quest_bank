@@ -111,10 +111,10 @@ unset($ex);
                 <div class="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl text-xs font-semibold text-red-700"><?php echo $error_msg; ?></div>
             <?php endif; ?>
 
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
                 
                 
-                <div class="lg:col-span-2 bg-white border border-stone-200 rounded-2xl p-6 shadow-sm space-y-6">
+                <div class="lg:col-span-2 bg-white border border-stone-200 rounded-2xl p-6 shadow-sm space-y-6 h-fit">
                     <form action="create_exam.php" method="POST" id="examForm" class="space-y-6">
                         <?php echo csrfInputField(); ?>
 
@@ -174,7 +174,7 @@ unset($ex);
                     <h3 class="text-sm font-bold uppercase tracking-wider text-stone-700 border-b pb-3"><i class="fa-solid fa-database text-orange-500 mr-1"></i> Saved Question Bank</h3>
                     
                     <?php if (!empty($existing_exams)): ?>
-                        <div class="space-y-3">
+                        <div class="space-y-3 max-h-[650px] overflow-y-auto pr-1 custom-scrollbar">
                             <?php foreach ($existing_exams as $ex): ?>
                                 <div onclick="openExamPreviewModal(<?php echo htmlspecialchars(json_encode($ex), ENT_QUOTES, 'UTF-8'); ?>)" class="p-3.5 border border-stone-200 rounded-xl bg-stone-50/50 hover:border-orange-500 hover:bg-orange-50/30 hover:shadow-md cursor-pointer transition-all space-y-1.5 group">
                                     <div class="flex items-center justify-between">
