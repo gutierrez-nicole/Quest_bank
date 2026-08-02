@@ -13,49 +13,16 @@ try {
         $answers = json_decode($_POST['answers'] ?? '{}', true);
 
         try {
-            $stmt = $pdo->prepare("SELECT * FROM exams WHERE id = ?");
-            $stmt->execute([$exam_id]);
-            $exam = $stmt->fetch(PDO::FETCH_ASSOC);
+            require_once __DIR__ . '/../app/services/EvaluationService.php';
+            $evalRes = EvaluationService::evaluateAndSaveSubmission($exam_id, $student_id, is_array($answers) ? $answers : [], 'online');
 
-            $exam_title = $exam['title'] ?? 'Civil Engineering Examination';
-            $term = $exam['term'] ?? 'Prelim';
-            $total_items = (int)($exam['total_items'] ?? 5);
-
-            $answered_count = is_array($answers) ? count($answers) : 0;
-            $correct_count = min($total_items, max(4, $answered_count));
-            $percentage = round(($correct_count / $total_items) * 100, 2);
-            $status = $percentage >= 75 ? 'Pass' : 'Fail';
-
-            $uStmt = $pdo->prepare("SELECT fullname FROM users WHERE id = ?");
-            $uStmt->execute([$student_id]);
-            $sUser = $uStmt->fetch(PDO::FETCH_ASSOC);
-            $sName = $sUser['fullname'] ?? 'Student User';
-
-            $insert = $pdo->prepare("
-                INSERT INTO exam_submissions 
-                (teacher_id, student_id, exam_id, student_name, exam_title, upload_type, correct_count, wrong_count, total_score, total_items, percentage, status, term)
-                VALUES (?, ?, ?, ?, ?, 'scanned', ?, ?, ?, ?, ?, ?, ?)
-            ");
-            $insert->execute([
-                $exam['teacher_id'] ?? 2,
-                $student_id,
-                $exam_id > 0 ? $exam_id : null,
-                $sName,
-                $exam_title,
-                $correct_count,
-                $total_items - $correct_count,
-                $correct_count,
-                $total_items,
-                $percentage,
-                $status,
-                $term
-            ]);
-
-            logActivity("Submitted online examination '{$exam_title}' (Score: {$percentage}%, Status: {$status}).", $student_id);
-
-            echo json_encode(['success' => true]);
+            if ($evalRes['success']) {
+                echo json_encode(['success' => true, 'submission_id' => $evalRes['submission_id'], 'percentage' => $evalRes['percentage'], 'status' => $evalRes['status']]);
+            } else {
+                echo json_encode(['success' => false, 'error' => $evalRes['error'] ?? 'Evaluation failed']);
+            }
             exit;
-        } catch (PDOException $e) {
+        } catch (Exception $e) {
             echo json_encode(['success' => false, 'error' => $e->getMessage()]);
             exit;
         }

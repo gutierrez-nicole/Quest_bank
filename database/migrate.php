@@ -77,9 +77,14 @@ addColumn($pdo, 'exams', 'prompt_version', "VARCHAR(20) DEFAULT 'v1.0'");
 addColumn($pdo, 'exams', 'ai_model', "VARCHAR(100) DEFAULT NULL");
 
 // ============================================
-// EXAM_SUBMISSIONS — OCR, Review, File Storage
+// EXAM_SUBMISSIONS — OCR, Review, File Storage, Upload Type
 // ============================================
 echo "\n--- exam_submissions ---\n";
+$pdo->exec("ALTER TABLE `exam_submissions` MODIFY COLUMN `upload_type` VARCHAR(30) NOT NULL DEFAULT 'scanned'");
+$pdo->exec("ALTER TABLE `exam_submissions` MODIFY COLUMN `review_status` VARCHAR(30) NOT NULL DEFAULT 'draft'");
+echo "  [*] Updated exam_submissions.upload_type and review_status column types to VARCHAR(30)\n";
+addColumn($pdo, 'exam_submissions', 'exam_id', "INT(11) DEFAULT NULL");
+addColumn($pdo, 'exam_submissions', 'student_id', "INT(11) DEFAULT NULL");
 addColumn($pdo, 'exam_submissions', 'total_possible_score', "INT(11) DEFAULT 0");
 addColumn($pdo, 'exam_submissions', 'ocr_text', "TEXT DEFAULT NULL");
 addColumn($pdo, 'exam_submissions', 'ocr_confidence', "DECIMAL(5,2) DEFAULT 0.00");
@@ -127,7 +132,16 @@ if (!tableExists($pdo, 'submission_answers')) {
     ");
     echo "  [+] Created table submission_answers\n";
 } else {
-    echo "  [=] Table submission_answers already exists\n";
+    echo "  [=] Table submission_answers already exists, verifying columns...\n";
+    addColumn($pdo, 'submission_answers', 'exam_id', "INT(11) DEFAULT NULL");
+    addColumn($pdo, 'submission_answers', 'student_id', "INT(11) DEFAULT NULL");
+    addColumn($pdo, 'submission_answers', 'correct_answer', "VARCHAR(255) DEFAULT NULL");
+    addColumn($pdo, 'submission_answers', 'awarded_points', "DECIMAL(5,2) DEFAULT 0.00");
+    addColumn($pdo, 'submission_answers', 'max_points', "DECIMAL(5,2) DEFAULT 1.00");
+    addColumn($pdo, 'submission_answers', 'evaluation_status', "VARCHAR(20) NOT NULL DEFAULT 'unanswered'");
+    addColumn($pdo, 'submission_answers', 'evaluation_reason', "TEXT DEFAULT NULL");
+    addColumn($pdo, 'submission_answers', 'confidence', "DECIMAL(5,2) DEFAULT 100.00");
+    addColumn($pdo, 'submission_answers', 'requires_review', "TINYINT(1) DEFAULT 0");
 }
 
 if (!tableExists($pdo, 'submission_score_overrides')) {
