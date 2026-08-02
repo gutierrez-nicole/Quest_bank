@@ -26,5 +26,6 @@ Thumbs.db
 teacher/uploads/*
 !teacher/uploads/.gitkeep
 tests/fixtures_p1/
+tests/fixtures_p3/
 tests/fixtures/
 
