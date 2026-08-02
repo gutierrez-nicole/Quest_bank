@@ -108,6 +108,29 @@ addColumn($pdo, 'exam_submissions', 'uploaded_file_hash', "VARCHAR(64) DEFAULT N
 // ============================================
 echo "\n--- New tables ---\n";
 
+if (!tableExists($pdo, 'student_details')) {
+    $pdo->exec("
+        CREATE TABLE `student_details` (
+            `id` INT(11) NOT NULL AUTO_INCREMENT,
+            `user_id` INT(11) NOT NULL,
+            `student_number` VARCHAR(50) DEFAULT NULL,
+            `course` VARCHAR(100) DEFAULT 'BSCE',
+            `year_level` VARCHAR(20) DEFAULT '3rd Year',
+            `section` VARCHAR(20) DEFAULT 'A',
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `user_id` (`user_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+    ");
+    echo "  [+] Created table student_details\n";
+} else {
+    echo "  [=] Table student_details already exists, verifying columns...\n";
+    addColumn($pdo, 'student_details', 'student_number', "VARCHAR(50) DEFAULT NULL");
+    addColumn($pdo, 'student_details', 'course', "VARCHAR(100) DEFAULT 'BSCE'");
+    addColumn($pdo, 'student_details', 'year_level', "VARCHAR(20) DEFAULT '3rd Year'");
+    addColumn($pdo, 'student_details', 'section', "VARCHAR(20) DEFAULT 'A'");
+}
+
 if (!tableExists($pdo, 'submission_answers')) {
     $pdo->exec("
         CREATE TABLE `submission_answers` (

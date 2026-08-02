@@ -14,6 +14,32 @@
 
 ## ✨ Key Features
 
+## 🚀 Database Setup & Test Execution
+
+### 1. Database Schema Migration
+Run the idempotent schema migration script:
+```bash
+php database/migrate.php
+```
+
+### 2. Run Automated Unit Test Suites
+Execute all Priority 1 capability unit test suites:
+```bash
+php tests/test_prompt1_extraction.php
+php tests/test_prompt2_ai_generation.php
+php tests/test_prompt3_ocr.php
+php tests/test_prompt4_evaluation.php
+php tests/test_prompt5_results_review.php
+```
+
+### 3. Run Playwright End-to-End Tests
+Install Playwright dependencies and execute end-to-end tests:
+```bash
+npm install
+npx playwright install chromium
+npx playwright test
+```
+
 ### 👨‍🏫 Faculty / Teacher Portal
 * 📄 **Instructional Material Processing:** Upload lesson materials in PDF, DOCX, PPTX, or TXT format.
 * 🤖 **AI Question Generator:** Automatically create Multiple Choice, True/False, Fill-in-the-Blank, Identification, Matching Type, and **Civil Engineering Problem Solving / Math Formulas**.

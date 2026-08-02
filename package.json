@@ -1,0 +1,13 @@
+{
+  "name": "questbank-capstone-tests",
+  "version": "1.0.0",
+  "description": "QuestBank Capstone Automated & E2E Integration Test Suite",
+  "main": "index.js",
+  "scripts": {
+    "test:unit": "php tests/test_prompt1_extraction.php && php tests/test_prompt2_ai_generation.php && php tests/test_prompt3_ocr.php && php tests/test_prompt4_evaluation.php && php tests/test_prompt5_results_review.php",
+    "test:e2e": "npx playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0"
+  }
+}
