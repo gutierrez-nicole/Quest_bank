@@ -28,7 +28,7 @@ $selected_term = trim($_GET['term'] ?? 'All');
 $single_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
 try {
-    $where = ["es.review_status IN ('published', 'finalized')"];
+    $where = ["es.review_status = 'published'"];
     $params = [];
 
     if ($single_id > 0) {

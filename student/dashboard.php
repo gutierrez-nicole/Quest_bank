@@ -56,7 +56,7 @@ try {
         $stmt = $pdo->prepare("
             SELECT AVG(percentage) 
             FROM exam_submissions 
-            WHERE student_id = ? AND review_status IN ('published', 'finalized')
+            WHERE student_id = ? AND review_status = 'published'
         ");
         $stmt->execute([$student_id]);
         $avg = $stmt->fetchColumn();
@@ -72,7 +72,7 @@ try {
                 COUNT(*) as total,
                 SUM(CASE WHEN percentage >= 75 THEN 1 ELSE 0 END) as passed
             FROM exam_submissions 
-            WHERE student_id = ? AND review_status IN ('published', 'finalized')
+            WHERE student_id = ? AND review_status = 'published'
         ");
         $stmt->execute([$student_id]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -91,7 +91,7 @@ try {
         $stmt = $pdo->prepare("
             SELECT COUNT(*) 
             FROM exam_submissions 
-            WHERE student_id = ? AND review_status IN ('published', 'finalized')
+            WHERE student_id = ? AND review_status = 'published'
         ");
         $stmt->execute([$student_id]);
         $exams_completed = (int)$stmt->fetchColumn();

@@ -30,6 +30,14 @@ class ResultWorkflowService {
         $currentStatus = $sub['review_status'] ?? 'pending_review';
         $targetStatus = strtolower(trim($targetStatus));
 
+        // Backward transition check: Only administrators may reopen results
+        $backwardTransitions = ['reviewed' => 'pending_review', 'finalized' => 'reviewed', 'published' => 'finalized'];
+        if (isset($backwardTransitions[$currentStatus]) && $backwardTransitions[$currentStatus] === $targetStatus) {
+            if ($actorRole !== 'admin') {
+                throw new SecurityException("Unauthorized: Only administrators may reopen or perform backward transitions on finalized or published results.");
+            }
+        }
+
         // Check if transition is valid
         if (!isset(self::ALLOWED_TRANSITIONS[$currentStatus]) || !in_array($targetStatus, self::ALLOWED_TRANSITIONS[$currentStatus])) {
             throw new InvalidArgumentException("Illegal status transition from '{$currentStatus}' to '{$targetStatus}'. Direct skipped transitions are strictly rejected.");

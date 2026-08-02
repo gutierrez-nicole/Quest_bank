@@ -305,7 +305,7 @@ try {
                     <div class="space-y-1">
                         <span class="bg-orange-600 text-white text-[10px] font-black px-2.5 py-0.5 rounded-md uppercase tracking-wider">AI Predictive Insights Model</span>
                         <h3 class="text-lg font-black text-white">Academic Performance Forecast (S.Y. 2026-2027)</h3>
-                        <p class="text-xs text-stone-400 max-w-2xl">Based on historical Groq OCR scan evaluations and student submission velocity, overall passing probabilities are projected to increase by 4.2% across technical subjects.</p>
+                        <p class="text-xs text-stone-400 max-w-2xl">Based on historical OCR scan evaluations and student submission velocity, overall student performance reflects an active pass rate of <?php echo $pass_rate; ?>% across evaluation submissions.</p>
                     </div>
                     <button onclick="openAiMatrixModal()" class="bg-orange-600 hover:bg-orange-700 text-white text-xs font-extrabold px-5 py-3 rounded-xl shadow-lg transition-all flex-shrink-0 flex items-center gap-2">
                         View Detailed AI Prediction Matrix <i class="fa-solid fa-wand-magic-sparkles"></i>

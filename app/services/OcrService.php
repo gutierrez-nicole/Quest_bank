@@ -63,13 +63,20 @@ class OcrService {
             ];
         }
 
-        // MIME Inspection
+        // MIME & Magic Byte Inspection
         $finfo = finfo_open(FILEINFO_MIME_TYPE);
         $detectedMime = finfo_file($finfo, $filePath);
         finfo_close($finfo);
 
-        $allowedMimes = ['image/jpeg', 'image/png', 'image/jpg', 'application/pdf'];
-        if (!in_array($detectedMime, $allowedMimes) && $detectedMime !== 'application/octet-stream') {
+        // Header magic bytes check
+        $headerBytes = @file_get_contents($filePath, false, null, 0, 16);
+        $isPdfBytes = (strpos($headerBytes, '%PDF-') === 0);
+        $isPngBytes = (substr($headerBytes, 0, 4) === "\x89PNG");
+        $isJpegBytes = (substr($headerBytes, 0, 3) === "\xFF\xD8\xFF");
+
+        $isValidMagicBytes = ($isPdfBytes || $isPngBytes || $isJpegBytes);
+
+        if (!$isValidMagicBytes) {
             return [
                 'success' => false,
                 'status' => 'failed',
@@ -78,8 +85,8 @@ class OcrService {
                 'ocr_text' => '',
                 'confidence' => 0.00,
                 'suggested_manual_review' => true,
-                'error' => "File content type does not match supported formats JPG, PNG, PDF (Detected: {$detectedMime}).",
-                'ocr_error' => "File content type does not match supported formats JPG, PNG, PDF (Detected: {$detectedMime}).",
+                'error' => "Security check failed: File header magic bytes do not match valid PDF, PNG, or JPEG format.",
+                'ocr_error' => "Security check failed: File header magic bytes do not match valid PDF, PNG, or JPEG format.",
                 'page_count' => 1,
                 'pages' => [],
                 'execution_time_ms' => 0.00
