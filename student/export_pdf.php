@@ -28,7 +28,7 @@ $selected_term = trim($_GET['term'] ?? 'All');
 $single_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
 try {
-    $where = ["es.review_status = 'published'"];
+    $where = ["es.review_status IN ('published', 'finalized')"];
     $params = [];
 
     if ($single_id > 0) {
@@ -70,53 +70,8 @@ try {
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
     $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
-} catch (PDOException $e) {
+}catch (PDOException $e) {
     $results = [];
-}
-
-if (empty($results)) {
-    $allFallbacks = [
-        [
-            'title' => 'Structural Theory 1 - Prelim Quiz',
-            'subject' => 'CE 401 - Structural Engineering',
-            'term' => 'Prelim',
-            'score' => 9,
-            'total_items' => 10,
-            'percentage' => 90.0,
-            'status' => 'Pass',
-            'created_at' => date('Y-m-d H:i:s')
-        ],
-        [
-            'title' => 'Geotechnical Mechanics - Midterm Exam',
-            'subject' => 'CE 402 - Geotechnical',
-            'term' => 'Midterm',
-            'score' => 8,
-            'total_items' => 10,
-            'percentage' => 80.0,
-            'status' => 'Pass',
-            'created_at' => date('Y-m-d H:i:s', strtotime('-2 days'))
-        ],
-        [
-            'title' => 'Reinforced Concrete Design - Finals Exam',
-            'subject' => 'CE 403 - Structural Engineering',
-            'term' => 'Finals',
-            'score' => 9,
-            'total_items' => 10,
-            'percentage' => 95.0,
-            'status' => 'Pass',
-            'created_at' => date('Y-m-d H:i:s', strtotime('-5 days'))
-        ]
-    ];
-
-    if ($single_id > 0) {
-        $results = [$allFallbacks[0]];
-    } else if (!empty($selected_term) && $selected_term !== 'All') {
-        $results = array_values(array_filter($allFallbacks, function($item) use ($selected_term) {
-            return strtolower($item['term']) === strtolower($selected_term);
-        }));
-    } else {
-        $results = $allFallbacks;
-    }
 }
 
 $total_exams = count($results);
