@@ -38,7 +38,7 @@ $created_exam_ids = [];
 
 try {
     // --- TEST 1: HMAC Signed Partial Token Verification ---
-    $validToken = generatePartialToken($teacher_id, [10, 11], [99], $secretKey);
+    $validToken = generatePartialToken($teacher_id, [10, 11], [10, 11], [99], 'Soil Mechanics', 'BSCE', '4th Year', '1st Semester', '2025-2026', ['prelim'], [], $secretKey);
     $ver1 = verifyPartialToken($validToken, $teacher_id, $secretKey);
     logTest("TEST 1: Valid HMAC Partial Confirmation Token Verification", !empty($ver1) && $ver1['valid_ids'] === [10, 11], "Token verified for teacher {$teacher_id}");
 
@@ -55,7 +55,7 @@ try {
     logTest("TEST 3: Expired HMAC Token Rejection", $ver3 === false, "Expired token (>15m) rejected");
 
     // --- TEST 4: Tampered Teacher ID Token Rejection ---
-    $wrongTeacherToken = generatePartialToken($teacher_id, [10], [], $secretKey);
+    $wrongTeacherToken = generatePartialToken($teacher_id, [10], [10], [], 'Soil Mechanics', 'BSCE', '4th Year', '1st Semester', '2025-2026', ['prelim'], [], $secretKey);
     $ver4 = verifyPartialToken($wrongTeacherToken, 99999, $secretKey);
     logTest("TEST 4: Tampered Teacher ID Token Rejection", $ver4 === false, "Token for teacher {$teacher_id} rejected for teacher 99999");
 

@@ -59,13 +59,21 @@ function logActivity($action_description, $user_id = null) {
 
 class SecurityException extends Exception {}
 
-function generatePartialToken($teacherId, array $validLessonIds, array $invalidLessonIds, $secretKey) {
+function generatePartialToken($teacherId, array $originalLessonIds, array $validLessonIds, array $invalidLessonIds, $subject, $program, $yearLevel, $semester, $schoolYear, array $academicPeriods, array $warnings, $secretKey) {
     $timestamp = time();
-    $nonce = bin2hex(random_bytes(8));
+    $nonce = bin2hex(random_bytes(16));
     $payloadData = [
         'teacher_id' => (int)$teacherId,
+        'original_lesson_ids' => array_values(array_map('intval', $originalLessonIds)),
         'valid_ids' => array_values(array_map('intval', $validLessonIds)),
         'invalid_ids' => array_values(array_map('intval', $invalidLessonIds)),
+        'subject' => (string)$subject,
+        'program' => (string)$program,
+        'year_level' => (string)$yearLevel,
+        'semester' => (string)$semester,
+        'school_year' => (string)$schoolYear,
+        'academic_periods' => array_values($academicPeriods),
+        'warnings' => array_values($warnings),
         'timestamp' => $timestamp,
         'nonce' => $nonce
     ];
@@ -74,7 +82,7 @@ function generatePartialToken($teacherId, array $validLessonIds, array $invalidL
     return base64_encode(json_encode(['payload' => $payloadData, 'sig' => $signature]));
 }
 
-function verifyPartialToken($tokenString, $expectedTeacherId, $secretKey, $maxAgeSeconds = 900) {
+function verifyPartialToken($tokenString, $expectedTeacherId, $secretKey, $contextVerification = [], $maxAgeSeconds = 900) {
     if (empty($tokenString)) return false;
     $decoded = json_decode(base64_decode($tokenString), true);
     if (!is_array($decoded) || empty($decoded['payload']) || empty($decoded['sig'])) {
@@ -83,17 +91,46 @@ function verifyPartialToken($tokenString, $expectedTeacherId, $secretKey, $maxAg
     $payload = $decoded['payload'];
     $sig = $decoded['sig'];
     
+    // HMAC signature verification
     $expectedSig = hash_hmac('sha256', json_encode($payload), $secretKey);
     if (!hash_equals($expectedSig, $sig)) {
         return false;
     }
 
+    // Teacher ID verification
     if (intval($payload['teacher_id']) !== intval($expectedTeacherId)) {
         return false;
     }
 
+    // Expiry check (15 minutes)
     if (time() - intval($payload['timestamp']) > $maxAgeSeconds) {
         return false;
+    }
+
+    // Context binding verification if provided
+    if (!empty($contextVerification)) {
+        foreach (['subject', 'program', 'year_level', 'semester', 'school_year'] as $ctxKey) {
+            if (isset($contextVerification[$ctxKey]) && strcasecmp(trim((string)$contextVerification[$ctxKey]), trim((string)($payload[$ctxKey] ?? ''))) !== 0) {
+                return false; // Modified context!
+            }
+        }
+    }
+
+    // Replay prevention check via used_confirmation_tokens DB
+    try {
+        $pdo = getDBConnection();
+        $tokenHash = hash('sha256', $tokenString);
+        $stmtCheck = $pdo->prepare("SELECT COUNT(*) FROM used_confirmation_tokens WHERE token_hash = ?");
+        $stmtCheck->execute([$tokenHash]);
+        if ($stmtCheck->fetchColumn() > 0) {
+            return false; // Token already used/replayed!
+        }
+
+        // Record token usage to prevent replay
+        $stmtMark = $pdo->prepare("INSERT INTO used_confirmation_tokens (token_hash, teacher_id, used_at, expires_at) VALUES (?, ?, NOW(), FROM_UNIXTIME(?))");
+        $stmtMark->execute([$tokenHash, $expectedTeacherId, intval($payload['timestamp']) + $maxAgeSeconds]);
+    } catch (Exception $e) {
+        // Fallback: If DB check fails, signature & expiry are still enforced
     }
 
     return $payload;

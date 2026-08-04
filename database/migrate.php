@@ -338,6 +338,28 @@ if (!tableExists($pdo, 'generated_question_sources')) {
 }
 addColumn($pdo, 'generated_question_sources', 'source_topic', "VARCHAR(150) DEFAULT NULL");
 addColumn($pdo, 'generated_question_sources', 'source_confidence', "VARCHAR(50) DEFAULT 'high'");
+addColumn($pdo, 'generated_question_sources', 'source_review_required', "TINYINT(1) DEFAULT 0");
+addColumn($pdo, 'generated_question_sources', 'source_verified_by', "INT(11) DEFAULT NULL");
+addColumn($pdo, 'generated_question_sources', 'source_verified_at', "TIMESTAMP NULL DEFAULT NULL");
+addColumn($pdo, 'generated_question_sources', 'source_verification_note', "TEXT DEFAULT NULL");
+
+addColumn($pdo, 'exam_questions', 'source_review_required', "TINYINT(1) DEFAULT 0");
+
+if (!tableExists($pdo, 'used_confirmation_tokens')) {
+    $pdo->exec("
+        CREATE TABLE `used_confirmation_tokens` (
+            `token_hash` VARCHAR(64) NOT NULL,
+            `teacher_id` INT(11) NOT NULL,
+            `used_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `expires_at` TIMESTAMP NOT NULL,
+            PRIMARY KEY (`token_hash`),
+            KEY `teacher_id` (`teacher_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+    ");
+    echo "  [+] Created table used_confirmation_tokens\n";
+} else {
+    echo "  [=] Table used_confirmation_tokens already exists\n";
+}
 
 if (!tableExists($pdo, 'ai_generation_batches')) {
     $pdo->exec("
@@ -361,6 +383,12 @@ if (!tableExists($pdo, 'ai_generation_batches')) {
             `generated_question_count` INT(11) DEFAULT 0,
             `failed_question_count` INT(11) DEFAULT 0,
             `warnings` TEXT DEFAULT NULL,
+            `batch_status` VARCHAR(30) DEFAULT 'completed',
+            `failed_chunk_count` INT(11) DEFAULT 0,
+            `affected_lesson_ids` TEXT DEFAULT NULL,
+            `failure_messages` TEXT DEFAULT NULL,
+            `teacher_acknowledged_at` TIMESTAMP NULL DEFAULT NULL,
+            `teacher_acknowledged_by` INT(11) DEFAULT NULL,
             `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (`id`),
             UNIQUE KEY `uq_batch_id` (`generation_batch_id`),
@@ -375,6 +403,12 @@ addColumn($pdo, 'ai_generation_batches', 'semester', "VARCHAR(50) DEFAULT NULL")
 addColumn($pdo, 'ai_generation_batches', 'school_year', "VARCHAR(50) DEFAULT NULL");
 addColumn($pdo, 'ai_generation_batches', 'year_level', "VARCHAR(50) DEFAULT NULL");
 addColumn($pdo, 'ai_generation_batches', 'program', "VARCHAR(100) DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'batch_status', "VARCHAR(30) DEFAULT 'completed'");
+addColumn($pdo, 'ai_generation_batches', 'failed_chunk_count', "INT(11) DEFAULT 0");
+addColumn($pdo, 'ai_generation_batches', 'affected_lesson_ids', "TEXT DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'failure_messages', "TEXT DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'teacher_acknowledged_at', "TIMESTAMP NULL DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'teacher_acknowledged_by', "INT(11) DEFAULT NULL");
 
 $defaultPassHash = password_hash('Password123!', PASSWORD_DEFAULT);
 

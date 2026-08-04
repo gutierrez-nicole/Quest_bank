@@ -70,12 +70,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
 
     $secretKey = (defined('DB_PASS') ? DB_PASS : '') . '_questbank_secret_salt_2026';
 
-    // Repair Prompt 2: Process HMAC signed confirmation submission
+    // Repair Prompt 2 & Final Repair 4: Process HMAC signed confirmation submission with full context verification
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_partial_token'])) {
         $tokenInput = $_POST['partial_token'] ?? '';
-        $tokenData = verifyPartialToken($tokenInput, $teacher_id, $secretKey);
+        $contextCheck = [
+            'subject' => $subject,
+            'program' => $_POST['program'] ?? '',
+            'year_level' => $_POST['year_level'] ?? '',
+            'semester' => $_POST['semester'] ?? '',
+            'school_year' => $_POST['school_year'] ?? ''
+        ];
+        $tokenData = verifyPartialToken($tokenInput, $teacher_id, $secretKey, $contextCheck);
         if (!$tokenData) {
-            $error_msg = "Invalid, expired, or tampered partial generation confirmation token.";
+            $error_msg = "Invalid, expired, replayed, or tampered partial generation confirmation token.";
         } else {
             $selected_lesson_ids = $tokenData['valid_ids'];
             $input_source = 'extracted';
@@ -83,10 +90,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
     }
 
     if ($input_source === 'extracted' && !empty($selected_lesson_ids)) {
-        $selected_lesson_ids = array_filter($selected_lesson_ids, function($id) { return $id !== 'all'; });
-        $selected_lesson_ids = array_unique(array_map('intval', $selected_lesson_ids));
+        $selected_lesson_ids = array_values(array_unique(array_map('intval', array_filter($selected_lesson_ids, function($id) { return $id !== 'all'; }))));
+        $selectedCount = count($selected_lesson_ids);
+        $maxAllowedLessons = defined('AI_MAX_SELECTED_LESSONS') ? AI_MAX_SELECTED_LESSONS : 20;
 
-        if (!empty($selected_lesson_ids)) {
+        // Final Repair 3: Enforce Server-Side Max Lesson Selection
+        if ($selectedCount > $maxAllowedLessons) {
+            $error_msg = "Maximum lesson selection exceeded: You selected {$selectedCount} unique lessons, but the maximum allowed per generation pool is {$maxAllowedLessons}. Please reduce your selection pool.";
+        } elseif (!empty($selected_lesson_ids)) {
             $placeholders = implode(',', array_fill(0, count($selected_lesson_ids), '?'));
             $stmtFetchSel = $pdo->prepare("
                 SELECT id, title, subject, lesson_text, COALESCE(academic_period,'general') AS academic_period,
@@ -200,7 +211,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
             if (!empty($structured_conflicts) || (!empty($validation_errors) && !isset($_POST['confirm_partial_token']))) {
                 $error_msg = "Academic Context Conflict / Validation Error Detected. Please resolve before generating.";
                 if (!empty($associated_lesson_ids) && !empty($validation_errors)) {
-                    $signed_confirmation_token = generatePartialToken($teacher_id, $associated_lesson_ids, $unauthorizedIds, $secretKey);
+                    $signed_confirmation_token = generatePartialToken(
+                        $teacher_id,
+                        $selected_lesson_ids,
+                        $associated_lesson_ids,
+                        $unauthorizedIds,
+                        $subject,
+                        $firstLesson['program'] ?? '',
+                        $firstLesson['year_level'] ?? '',
+                        $firstLesson['semester'] ?? '',
+                        $firstLesson['school_year'] ?? '',
+                        $associated_periods,
+                        $validation_errors,
+                        $secretKey
+                    );
                 }
             } else {
                 $associated_periods = array_unique($associated_periods);
@@ -242,12 +266,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
                 'program' => $selProg
             ]);
 
-            // Repair Prompt 5: Persist generation audit record with full runtime metadata
+            $batchStatus = $result['metadata']['batch_status'] ?? ($failedQuestionCount > 0 ? 'incomplete' : 'completed');
+            $failedChunkCount = intval($result['metadata']['failed_chunk_count'] ?? 0);
+            $affectedLessonIdsStr = json_encode($result['metadata']['affected_lesson_ids'] ?? []);
+            $failureMessagesStr = json_encode($result['metadata']['generation_warnings'] ?? []);
+
+            // Final Repair 6: Persist generation audit record with failed chunk metadata & batch_status
             try {
                 $stmtBatch = $pdo->prepare("
                     INSERT INTO ai_generation_batches 
-                    (generation_batch_id, teacher_id, selected_lesson_ids, selected_lesson_titles, selected_periods, selected_subject, semester, school_year, year_level, program, total_selected_words, estimated_tokens, ai_model, generation_duration, requested_question_count, generated_question_count, failed_question_count, warnings)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (generation_batch_id, teacher_id, selected_lesson_ids, selected_lesson_titles, selected_periods, selected_subject, semester, school_year, year_level, program, total_selected_words, estimated_tokens, ai_model, generation_duration, requested_question_count, generated_question_count, failed_question_count, warnings, batch_status, failed_chunk_count, affected_lesson_ids, failure_messages, teacher_acknowledged_at, teacher_acknowledged_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)
                 ");
                 $stmtBatch->execute([
                     $generation_batch_id,
@@ -267,7 +296,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
                     $num_questions,
                     count($generated_questions),
                     $failedQuestionCount,
-                    json_encode($ai_meta_output['generation_warnings'])
+                    $failureMessagesStr,
+                    $batchStatus,
+                    $failedChunkCount,
+                    $affectedLessonIdsStr,
+                    $failureMessagesStr,
+                    $teacher_id
                 ]);
             } catch (PDOException $e) {
                 // Keep generation working even if batch audit logging encounters non-fatal error
@@ -375,23 +409,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
             
             $seenQuestions = [];
             $savedCount = 0;
-            $primaryLessonId = !empty($saveLessonIds[0]) ? $saveLessonIds[0] : null;
+            $questionIndex = 0;
 
             foreach ($questions as $q) {
+                $questionIndex++;
                 $qText = trim($q['text'] ?? $q['question'] ?? '');
                 if (empty($qText) || in_array(mb_strtolower($qText), $seenQuestions)) {
                     continue; 
                 }
-                $seenQuestions[] = mb_strtolower($qText);
 
-                // Repair Prompt 3: Extract question-specific source lesson IDs
-                $rawQSources = $q['source_lesson_ids'] ?? [];
-                if (is_string($rawQSources)) {
-                    $rawQSources = array_filter(array_map('intval', explode(',', $rawQSources)));
+                // Final Repair 2: Extract, validate, and normalize source lesson IDs against selected pool
+                $rawQSources = [];
+                if (!empty($q['manual_source_id'])) {
+                    $rawQSources[] = intval($q['manual_source_id']);
                 }
-                $validQSources = array_intersect($rawQSources, $saveLessonIds);
+                if (!empty($q['source_lesson_ids'])) {
+                    $rawSources = is_array($q['source_lesson_ids']) ? $q['source_lesson_ids'] : explode(',', (string)$q['source_lesson_ids']);
+                    foreach ($rawSources as $rs) {
+                        $rawQSources[] = intval($rs);
+                    }
+                }
 
-                $qLessonId = !empty($validQSources) ? reset($validQSources) : (intval($q['lesson_id'] ?? 0) ?: $primaryLessonId);
+                // Strictly intersect with authorized/selected lesson pool
+                $validQSources = array_values(array_unique(array_intersect($rawQSources, $saveLessonIds)));
+                $isReviewRequired = empty($validQSources) ? 1 : 0;
+
+                // Final Repair 2: Prevent final save if unverified source questions remain without teacher assignment
+                if ($isReviewRequired === 1) {
+                    $pdo->rollBack();
+                    $error_msg = "Cannot save exam: Question #{$questionIndex} (\"" . htmlspecialchars(substr($qText, 0, 40)) . "...\") has no verified lesson source. Please assign a valid lesson source for every item before saving.";
+                    break;
+                }
+
+                $seenQuestions[] = mb_strtolower($qText);
+                $qLessonId = $validQSources[0];
 
                 $qStmt->execute([
                     $exam_id,
@@ -413,24 +464,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
                 $questionId = $pdo->lastInsertId();
                 $savedCount++;
 
-                // Repair Prompt 3: Link question ONLY to its specific valid source lesson(s)
-                $targetSourceIds = !empty($validQSources) ? $validQSources : ($qLessonId ? [$qLessonId] : $saveLessonIds);
-                foreach ($targetSourceIds as $srcLid) {
+                // Persist verified source relations with teacher audit timestamp
+                foreach ($validQSources as $srcLid) {
                     $srcPeriod = $lessonPeriodMap[$srcLid] ?? 'general';
                     $srcTopic = $q['source_topic'] ?? $subject;
-                    $srcConf = $q['source_confidence'] ?? (!empty($validQSources) ? 'high' : 'review_required');
-                    $srcStmt->execute([$questionId, $srcLid, $srcPeriod, $srcTopic, $srcConf]);
+                    $srcConf = 'high';
+                    
+                    $srcStmt2 = $pdo->prepare("
+                        INSERT IGNORE INTO generated_question_sources 
+                        (question_id, lesson_id, academic_period, source_topic, source_confidence, source_review_required, source_verified_by, source_verified_at) 
+                        VALUES (?, ?, ?, ?, ?, 0, ?, NOW())
+                    ");
+                    $srcStmt2->execute([$questionId, $srcLid, $srcPeriod, $srcTopic, $srcConf, $teacher_id]);
                 }
             }
 
-            $stmtUpdateTotal = $pdo->prepare("UPDATE exams SET total_items = ? WHERE id = ?");
-            $stmtUpdateTotal->execute([$savedCount, $exam_id]);
+            if (!empty($error_msg)) {
+                // Exam save was aborted due to unverified sources
+            } else {
+                $stmtUpdateTotal = $pdo->prepare("UPDATE exams SET total_items = ? WHERE id = ?");
+                $stmtUpdateTotal->execute([$savedCount, $exam_id]);
 
-            $pdo->commit();
-            $sourceLabel = $save_generation_source_type === 'cross_period_lessons' ? ", Cross-Period" : "";
-            logActivity("Saved AI-generated exam '{$title}' ({$savedCount} deduplicated questions, Difficulty: {$difficulty}{$sourceLabel}).", $teacher_id);
-            $success_msg = "AI-generated exam '{$title}' saved to Question Bank successfully!";
-            $generated_questions = null;
+                $pdo->commit();
+                $sourceLabel = $save_generation_source_type === 'cross_period_lessons' ? ", Cross-Period" : "";
+                logActivity("Saved AI-generated exam '{$title}' ({$savedCount} deduplicated questions, Difficulty: {$difficulty}{$sourceLabel}).", $teacher_id);
+                $success_msg = "Exam '{$title}' successfully created and saved to Question Bank with {$savedCount} verified questions!";
+                $generated_questions = null;
+            }
         } catch (PDOException $e) {
             $pdo->rollBack();
             $error_msg = "Failed to save exam: " . $e->getMessage();

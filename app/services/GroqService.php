@@ -198,9 +198,38 @@ class GroqService {
         $rawChunkResponses = [];
 
         if ($charLength > $chunkLimit) {
-            // Paragraph-level and section-aware chunking for large/oversized lessons
+            // Final Repair 5: Second-level hierarchical splitting for single oversized lessons
+            // Preferred boundaries: 1. Source lesson boundaries 2. Headings 3. Paragraphs 4. Sentences
             preg_match_all('/(SOURCE LESSON \d+[\s\S]*?)(?=(?:SOURCE LESSON \d+|\z))/i', $lessonText, $matches);
-            $lessonBlocks = !empty($matches[1]) ? $matches[1] : preg_split('/\n{2,}/', $lessonText);
+            $initialBlocks = !empty($matches[1]) ? $matches[1] : preg_split('/\n{2,}/', $lessonText);
+
+            $lessonBlocks = [];
+            foreach ($initialBlocks as $blk) {
+                if (strlen($blk) > $chunkLimit) {
+                    // Subsplit oversized block by headings/sections or paragraphs
+                    $subBlocks = preg_split('/(?:\n(?=#+|\=+\s|-{3,}))|(?:\n{2,})/', $blk);
+                    foreach ($subBlocks as $sblk) {
+                        if (strlen($sblk) > $chunkLimit) {
+                            // Subsplit by sentences if paragraph is still oversized
+                            $sentences = preg_split('/(?<=[.!?])\s+/', $sblk);
+                            $tempSub = "";
+                            foreach ($sentences as $st) {
+                                if (strlen($tempSub) + strlen($st) > $chunkLimit && !empty($tempSub)) {
+                                    $lessonBlocks[] = $tempSub;
+                                    $tempSub = $st;
+                                } else {
+                                    $tempSub .= ($tempSub ? " " : "") . $st;
+                                }
+                            }
+                            if (!empty($tempSub)) $lessonBlocks[] = $tempSub;
+                        } else {
+                            $lessonBlocks[] = $sblk;
+                        }
+                    }
+                } else {
+                    $lessonBlocks[] = $blk;
+                }
+            }
 
             $chunks = [];
             $currentChunk = "";
@@ -219,6 +248,8 @@ class GroqService {
             $validQuestions = [];
             $seen = [];
             $totalChunks = count($chunks);
+            $failedChunkCount = 0;
+            $affectedLessonIds = [];
 
             // Repair Prompt 4: Calculate exact integer question allocation per chunk
             $baseAlloc = (int)floor($numQuestions / $totalChunks);
@@ -230,6 +261,11 @@ class GroqService {
 
             foreach ($chunks as $chunkIdx => $chunkContent) {
                 $chunkShare = $chunkAllocations[$chunkIdx] ?? max(1, (int)round($numQuestions / $totalChunks));
+                
+                // Extract lesson IDs in current chunk for failure tracking
+                preg_match_all('/Lesson ID:\s*(\d+)/i', $chunkContent, $lIdMatches);
+                $chunkLessonIds = !empty($lIdMatches[1]) ? array_map('intval', $lIdMatches[1]) : [];
+
                 $chunkPrompt = "You are an expert Civil Engineering professor specializing in {$specialization} and academic assessment creation. "
                              . "Generate exactly {$chunkShare} high-quality Civil Engineering examination questions for the subject '{$subject}' (Specialization: {$specialization}) titled '{$examTitle}'. "
                              . "Target Difficulty Level: '{$difficulty}'. "
@@ -248,8 +284,11 @@ class GroqService {
                 ];
 
                 $res = self::sendRequest($payload, $apiKey);
-                if (isset($res['error'])) {
-                    $generationWarnings[] = "Chunk " . ($chunkIdx + 1) . " failed to generate questions: " . $res['error'];
+                if (isset($res['error']) || (isset($res['success']) && $res['success'] === false)) {
+                    $failedChunkCount++;
+                    $affectedLessonIds = array_merge($affectedLessonIds, $chunkLessonIds);
+                    $errMsg = $res['user_message'] ?? $res['error'] ?? 'Chunk generation failed';
+                    $generationWarnings[] = "Chunk " . ($chunkIdx + 1) . " of {$totalChunks} failed: " . $errMsg;
                     continue;
                 }
 
@@ -313,6 +352,9 @@ class GroqService {
                     'estimated_tokens' => $estimatedTokens,
                     'chunked' => true,
                     'chunk_count' => count($chunks),
+                    'batch_status' => $failedChunkCount > 0 ? 'incomplete' : 'completed',
+                    'failed_chunk_count' => $failedChunkCount,
+                    'affected_lesson_ids' => array_values(array_unique($affectedLessonIds)),
                     'generation_warnings' => $generationWarnings,
                     'difficulty' => $difficulty
                 ]
