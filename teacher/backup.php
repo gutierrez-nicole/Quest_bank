@@ -1,7 +1,7 @@
 <?php
 require_once __DIR__ . '/../app/bootstrap.php';
 
-AuthService::enforceRole('admin');
+AuthService::enforceRole('teacher');
 $pdo = getDBConnection();
 
 $success_msg = "";
