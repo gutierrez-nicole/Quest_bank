@@ -103,6 +103,13 @@ class ResultWorkflowService {
             ");
             $stmtUpd->execute([$targetStatus, $reviewerId, $remarks, $reviewedAt, $publishedAt, $submissionId]);
 
+            // Log transition history
+            $stmtHist = $pdo->prepare("
+                INSERT INTO submission_status_history (submission_id, previous_status, new_status, actor_id, remarks, created_at)
+                VALUES (?, ?, ?, ?, ?, NOW())
+            ");
+            $stmtHist->execute([$submissionId, $currentStatus, $targetStatus, $reviewerId, $remarks]);
+
             logActivity("Workflow Transition: Submission #{$submissionId} moved from '{$currentStatus}' to '{$targetStatus}' by User #{$reviewerId} ({$actorRole}). Remarks: '{$remarks}'", $reviewerId);
 
             $pdo->commit();

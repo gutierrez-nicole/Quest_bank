@@ -78,7 +78,7 @@ $stmtQ2->execute();
 $stmtSub100 = $pdo->prepare("
     INSERT INTO exam_submissions (id, exam_id, student_id, teacher_id, student_name, exam_title, upload_type, correct_count, wrong_count, total_score, total_possible_score, total_items, percentage, status, review_status, created_at, published_at)
     VALUES (100, 1, 4, 2, 'QA Test Student Alpha', 'QA Civil Engineering Fundamentals Exam', 'online', 2, 0, 2.00, 2.00, 2, 100.00, 'Pass', 'published', NOW(), NOW())
-    ON DUPLICATE KEY UPDATE student_id = 4, student_name = 'QA Test Student Alpha', review_status = 'published', percentage = 100.00, correct_count = 2, total_score = 2.00, status = 'Pass'
+    ON DUPLICATE KEY UPDATE student_id = 4, student_name = 'QA Test Student Alpha', exam_title = 'QA Civil Engineering Fundamentals Exam', exam_id = 1, teacher_id = 2, review_status = 'published', percentage = 100.00, correct_count = 2, total_score = 2.00, total_possible_score = 2.00, status = 'Pass', published_at = NOW()
 ");
 $stmtSub100->execute();
 
@@ -86,7 +86,7 @@ $stmtSub100->execute();
 $stmtSub101 = $pdo->prepare("
     INSERT INTO exam_submissions (id, exam_id, student_id, teacher_id, student_name, exam_title, upload_type, correct_count, wrong_count, total_score, total_possible_score, total_items, percentage, status, review_status, created_at, published_at)
     VALUES (101, 1, 5, 2, 'QA Test Student Beta', 'QA Civil Engineering Fundamentals Exam', 'online', 1, 1, 1.00, 2.00, 2, 50.00, 'Fail', 'published', NOW(), NOW())
-    ON DUPLICATE KEY UPDATE student_id = 5, student_name = 'QA Test Student Beta', review_status = 'published', percentage = 50.00, correct_count = 1, total_score = 1.00, status = 'Fail'
+    ON DUPLICATE KEY UPDATE student_id = 5, student_name = 'QA Test Student Beta', exam_title = 'QA Civil Engineering Fundamentals Exam', exam_id = 1, teacher_id = 2, review_status = 'published', percentage = 50.00, correct_count = 1, total_score = 1.00, total_possible_score = 2.00, status = 'Fail', published_at = NOW()
 ");
 $stmtSub101->execute();
 
@@ -94,11 +94,12 @@ $stmtSub101->execute();
 $stmtSub102 = $pdo->prepare("
     INSERT INTO exam_submissions (id, exam_id, student_id, teacher_id, student_name, exam_title, upload_type, correct_count, wrong_count, total_score, total_possible_score, total_items, percentage, status, review_status, created_at)
     VALUES (102, 1, 4, 2, 'QA Test Student Alpha', 'QA Civil Engineering Fundamentals Exam', 'online', 1, 1, 1.00, 2.00, 2, 50.00, 'Fail', 'pending_review', NOW())
-    ON DUPLICATE KEY UPDATE review_status = 'pending_review', percentage = 50.00, correct_count = 1, total_score = 1.00, status = 'Fail'
+    ON DUPLICATE KEY UPDATE student_id = 4, student_name = 'QA Test Student Alpha', exam_title = 'QA Civil Engineering Fundamentals Exam', exam_id = 1, teacher_id = 2, review_status = 'pending_review', percentage = 50.00, correct_count = 1, wrong_count = 1, total_score = 1.00, total_possible_score = 2.00, status = 'Fail', published_at = NULL
 ");
 $stmtSub102->execute();
 
-// Answers for Submissions #100, #101, #102
+// Answers for Submissions #100, #101, #102 — DELETE stale rows first to avoid contamination
+$pdo->exec("DELETE FROM submission_answers WHERE submission_id IN (100, 101, 102)");
 $pdo->exec("
     INSERT INTO submission_answers (submission_id, exam_id, student_id, question_id, student_answer, correct_answer, awarded_points, max_points, evaluation_status)
     VALUES 

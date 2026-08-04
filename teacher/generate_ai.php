@@ -402,17 +402,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
 
                             <div class="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
                                 <?php foreach ($generated_questions as $idx => $item): ?>
-                                    <div class="p-4 border border-stone-200 rounded-2xl bg-stone-50/40 space-y-3 hover:border-orange-300 transition-all">
+                                    <div class="p-4 border border-stone-200 rounded-2xl bg-stone-50/40 space-y-3 hover:border-orange-300 transition-all" data-testid="generated-question-item" data-lesson-id="<?php echo htmlspecialchars($ai_meta_output['lesson_ids'][0] ?? ''); ?>">
                                         <div class="flex items-center justify-between">
                                             <span class="font-black text-xs text-stone-800 bg-white px-2.5 py-1 rounded-lg border border-stone-200">Item #<?php echo $idx + 1; ?></span>
-                                            <span class="text-[10px] font-bold uppercase text-stone-400 bg-white px-2 py-0.5 rounded-md"><?php echo htmlspecialchars($item['type']); ?></span>
+                                            <span class="text-[10px] font-bold uppercase text-stone-400 bg-white px-2 py-0.5 rounded-md" data-testid="question-type"><?php echo htmlspecialchars($item['type']); ?></span>
                                         </div>
 
-                                        <textarea name="questions[<?php echo $idx; ?>][text]" rows="2" class="w-full bg-white border border-stone-200 rounded-lg p-2.5 text-xs outline-none focus:border-orange-500 resize-none font-medium text-stone-800"><?php echo htmlspecialchars($item['question']); ?></textarea>
+                                        <textarea name="questions[<?php echo $idx; ?>][text]" data-testid="question-text" rows="2" class="w-full bg-white border border-stone-200 rounded-lg p-2.5 text-xs outline-none focus:border-orange-500 resize-none font-medium text-stone-800"><?php echo htmlspecialchars($item['question']); ?></textarea>
                                         <input type="hidden" name="questions[<?php echo $idx; ?>][type]" value="<?php echo htmlspecialchars($item['type']); ?>">
+                                        <input type="hidden" name="questions[<?php echo $idx; ?>][points]" value="<?php echo htmlspecialchars($item['points'] ?? 1); ?>" data-testid="question-points">
 
                                         <?php if ($item['type'] === 'multiple_choice'): ?>
-                                            <div class="grid grid-cols-2 gap-2 text-xs">
+                                            <div class="grid grid-cols-2 gap-2 text-xs" data-testid="mcq-options">
                                                 <div class="relative">
                                                     <span class="absolute left-2 top-2 text-[10px] font-bold text-stone-400">A.</span>
                                                     <input type="text" name="questions[<?php echo $idx; ?>][opt_a]" value="<?php echo htmlspecialchars($item['opt_a'] ?? ''); ?>" placeholder="Option A" class="w-full bg-white border border-stone-200 rounded-lg pl-6 pr-2 py-1.5 outline-none focus:border-orange-500 text-xs">
@@ -436,7 +437,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
                                             <label class="text-[10px] font-bold text-stone-500 uppercase flex items-center gap-1">
                                                 <i class="fa-solid fa-key text-emerald-600"></i> Correct Answer Key:
                                             </label>
-                                            <input type="text" name="questions[<?php echo $idx; ?>][correct]" value="<?php echo htmlspecialchars($item['correct_answer']); ?>" class="w-full bg-emerald-50 border border-emerald-200 rounded-lg p-2 text-xs font-bold text-emerald-700 outline-none focus:border-emerald-500 mt-1">
+                                            <input type="text" name="questions[<?php echo $idx; ?>][correct]" data-testid="answer-key" value="<?php echo htmlspecialchars($item['correct_answer']); ?>" class="w-full bg-emerald-50 border border-emerald-200 rounded-lg p-2 text-xs font-bold text-emerald-700 outline-none focus:border-emerald-500 mt-1">
                                         </div>
                                     </div>
                                 <?php endforeach; ?>

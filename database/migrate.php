@@ -300,6 +300,25 @@ if (!tableExists($pdo, 'submission_snapshots')) {
     echo "  [=] Table submission_snapshots already exists\n";
 }
 
+if (!tableExists($pdo, 'submission_status_history')) {
+    $pdo->exec("
+        CREATE TABLE `submission_status_history` (
+            `id` INT(11) NOT NULL AUTO_INCREMENT,
+            `submission_id` INT(11) NOT NULL,
+            `previous_status` VARCHAR(30) DEFAULT NULL,
+            `new_status` VARCHAR(30) NOT NULL,
+            `actor_id` INT(11) NOT NULL,
+            `remarks` TEXT DEFAULT NULL,
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `submission_id` (`submission_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+    ");
+    echo "  [+] Created table submission_status_history\n";
+} else {
+    echo "  [=] Table submission_status_history already exists\n";
+}
+
 // ============================================
 // SEED DEFAULT CREDENTIALS (Russel & Nicole)
 // ============================================

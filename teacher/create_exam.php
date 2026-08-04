@@ -176,7 +176,7 @@ unset($ex);
                     <?php if (!empty($existing_exams)): ?>
                         <div class="space-y-3 max-h-[650px] overflow-y-auto pr-1 custom-scrollbar">
                             <?php foreach ($existing_exams as $ex): ?>
-                                <div onclick="openExamPreviewModal(<?php echo htmlspecialchars(json_encode($ex), ENT_QUOTES, 'UTF-8'); ?>)" class="p-3.5 border border-stone-200 rounded-xl bg-stone-50/50 hover:border-orange-500 hover:bg-orange-50/30 hover:shadow-md cursor-pointer transition-all space-y-1.5 group">
+                                <div onclick="openExamPreviewModal(<?php echo htmlspecialchars(json_encode($ex), ENT_QUOTES, 'UTF-8'); ?>)" data-testid="saved-exam-item" data-exam-title="<?php echo htmlspecialchars($ex['title']); ?>" class="p-3.5 border border-stone-200 rounded-xl bg-stone-50/50 hover:border-orange-500 hover:bg-orange-50/30 hover:shadow-md cursor-pointer transition-all space-y-1.5 group">
                                     <div class="flex items-center justify-between">
                                         <h4 class="font-extrabold text-xs text-stone-800 group-hover:text-orange-600 transition-colors flex items-center gap-1.5">
                                             <i class="fa-solid fa-folder-open text-orange-500"></i>
