@@ -602,8 +602,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
             }
         }
     }
-} else {
-    $error_msg = "Exam parameters or question items are missing.";
 }
 ?>
 
