@@ -53,7 +53,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
     $specialization = trim(sanitizeInput($_POST['specialization'] ?? 'Structural Engineering'));
     $question_type = trim($_POST['question_type'] ?? 'multiple_choice');
     $difficulty = trim($_POST['difficulty'] ?? 'medium');
-    $allow_partial = isset($_POST['allow_partial']) && $_POST['allow_partial'] == '1';
 
     $final_lesson_content = "";
     $associated_lesson_ids = [];
