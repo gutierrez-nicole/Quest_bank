@@ -13,25 +13,34 @@ $ai_meta_output = null;
 $stmtMaterials = $pdo->prepare("
     SELECT id, title, subject, lesson_text, word_count, page_count,
            COALESCE(academic_period, 'general') AS academic_period,
-           semester, school_year, year_level, program
+           semester, school_year, year_level, program, processing_status
     FROM lesson_materials 
-    WHERE teacher_id = ? AND processing_status = 'completed' 
-    ORDER BY FIELD(COALESCE(academic_period,'general'), 'prelim','midterm','finals','general'), id DESC
+    WHERE teacher_id = ? 
+    ORDER BY FIELD(COALESCE(academic_period,'general'), 'general','prelim','midterm','finals'), id DESC
 ");
 $stmtMaterials->execute([$teacher_id]);
-$completed_lessons = $stmtMaterials->fetchAll(PDO::FETCH_ASSOC);
+$all_teacher_lessons = $stmtMaterials->fetchAll(PDO::FETCH_ASSOC);
 
-$lessons_by_period = [];
-foreach ($completed_lessons as $cl) {
-    $period = $cl['academic_period'] ?? 'general';
+$lessons_by_period = [
+    'general' => [],
+    'prelim' => [],
+    'midterm' => [],
+    'finals' => []
+];
+
+foreach ($all_teacher_lessons as $cl) {
+    $period = strtolower($cl['academic_period'] ?? 'general');
+    if (!isset($lessons_by_period[$period])) {
+        $period = 'general';
+    }
     $lessons_by_period[$period][] = $cl;
 }
 
-$filter_subjects = array_unique(array_filter(array_column($completed_lessons, 'subject')));
-$filter_semesters = array_unique(array_filter(array_column($completed_lessons, 'semester')));
-$filter_school_years = array_unique(array_filter(array_column($completed_lessons, 'school_year')));
-$filter_year_levels = array_unique(array_filter(array_column($completed_lessons, 'year_level')));
-$filter_programs = array_unique(array_filter(array_column($completed_lessons, 'program')));
+$filter_subjects = array_values(array_unique(array_filter(array_column($all_teacher_lessons, 'subject'))));
+$filter_semesters = array_values(array_unique(array_filter(array_column($all_teacher_lessons, 'semester'))));
+$filter_school_years = array_values(array_unique(array_filter(array_column($all_teacher_lessons, 'school_year'))));
+$filter_year_levels = array_values(array_unique(array_filter(array_column($all_teacher_lessons, 'year_level'))));
+$filter_programs = array_values(array_unique(array_filter(array_column($all_teacher_lessons, 'program'))));
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']) || isset($_POST['selected_lessons']) || !empty($_POST['lesson_text']))) {
     validateCSRFToken();
@@ -400,27 +409,200 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
                             </div>
                         </div>
 
-                        <div id="extracted_lessons_block" class="space-y-2 <?php echo (($_POST['input_source'] ?? 'extracted') === 'manual') ? 'hidden' : ''; ?>">
+                        <div id="extracted_lessons_block" class="space-y-3 <?php echo (($_POST['input_source'] ?? 'extracted') === 'manual') ? 'hidden' : ''; ?>">
                             <label class="text-xs font-bold text-stone-700 flex justify-between items-center">
-                                <span>Select Extracted Lessons</span>
-                                <span class="text-[10px] text-orange-600 font-semibold"><?php echo count($completed_lessons); ?> Available</span>
+                                <span>Select Extracted Lessons (Cross-Period Pool)</span>
+                                <span class="text-[10px] text-orange-600 font-semibold"><?php echo count($all_teacher_lessons); ?> Total</span>
                             </label>
-                            <?php if (!empty($completed_lessons)): ?>
-                                <div class="max-h-40 overflow-y-auto border border-stone-200 rounded-xl bg-stone-50 p-2 space-y-1.5 text-xs">
-                                    <label class="flex items-center gap-2 p-1.5 rounded hover:bg-white cursor-pointer font-extrabold text-orange-700">
-                                        <input type="checkbox" name="selected_lessons[]" value="all" class="accent-orange-600 rounded">
-                                        <span>Select All Module Lessons</span>
-                                    </label>
-                                    <?php foreach ($completed_lessons as $cl): ?>
-                                        <label class="flex items-center justify-between p-1.5 rounded hover:bg-white cursor-pointer text-stone-800 font-medium">
-                                            <div class="flex items-center gap-2 truncate">
-                                                <input type="checkbox" name="selected_lessons[]" value="<?php echo $cl['id']; ?>" class="accent-orange-600 rounded">
-                                                <span class="truncate"><?php echo htmlspecialchars($cl['title']); ?></span>
+
+                            <div class="bg-stone-50 border border-stone-200 rounded-xl p-2.5 space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-[10px] font-extrabold text-stone-700 uppercase tracking-wider">
+                                        <i class="fa-solid fa-filter text-orange-500 mr-1"></i> Filter Lessons
+                                    </span>
+                                    <button type="button" onclick="resetLessonFilters()" class="text-[10px] text-orange-600 hover:text-orange-800 font-bold">Reset Filters</button>
+                                </div>
+                                <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                    <div>
+                                        <label class="text-[9px] font-bold text-stone-500">Subject</label>
+                                        <select id="filter_subject" data-testid="filter-subject" onchange="applyLessonFilters()" class="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-[11px] font-semibold text-stone-800 outline-none focus:border-orange-500">
+                                            <option value="">All Subjects</option>
+                                            <?php foreach ($filter_subjects as $s): ?>
+                                                <option value="<?php echo htmlspecialchars($s); ?>"><?php echo htmlspecialchars($s); ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="text-[9px] font-bold text-stone-500">Year Level</label>
+                                        <select id="filter_year_level" data-testid="filter-year-level" onchange="applyLessonFilters()" class="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-[11px] font-semibold text-stone-800 outline-none focus:border-orange-500">
+                                            <option value="">All Year Levels</option>
+                                            <?php foreach ($filter_year_levels as $yl): ?>
+                                                <option value="<?php echo htmlspecialchars($yl); ?>"><?php echo htmlspecialchars($yl); ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="text-[9px] font-bold text-stone-500">Program</label>
+                                        <select id="filter_program" data-testid="filter-program" onchange="applyLessonFilters()" class="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-[11px] font-semibold text-stone-800 outline-none focus:border-orange-500">
+                                            <option value="">All Programs</option>
+                                            <?php foreach ($filter_programs as $p): ?>
+                                                <option value="<?php echo htmlspecialchars($p); ?>"><?php echo htmlspecialchars($p); ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="text-[9px] font-bold text-stone-500">Semester</label>
+                                        <select id="filter_semester" data-testid="filter-semester" onchange="applyLessonFilters()" class="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-[11px] font-semibold text-stone-800 outline-none focus:border-orange-500">
+                                            <option value="">All Semesters</option>
+                                            <?php foreach ($filter_semesters as $sem): ?>
+                                                <option value="<?php echo htmlspecialchars($sem); ?>"><?php echo htmlspecialchars($sem); ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="text-[9px] font-bold text-stone-500">School Year</label>
+                                        <select id="filter_school_year" data-testid="filter-school-year" onchange="applyLessonFilters()" class="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-[11px] font-semibold text-stone-800 outline-none focus:border-orange-500">
+                                            <option value="">All School Years</option>
+                                            <?php foreach ($filter_school_years as $sy): ?>
+                                                <option value="<?php echo htmlspecialchars($sy); ?>"><?php echo htmlspecialchars($sy); ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="text-[9px] font-bold text-stone-500">Academic Period</label>
+                                        <select id="filter_academic_period" data-testid="filter-academic-period" onchange="applyLessonFilters()" class="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-[11px] font-semibold text-stone-800 outline-none focus:border-orange-500">
+                                            <option value="">All Periods</option>
+                                            <option value="general">General</option>
+                                            <option value="prelim">Prelim</option>
+                                            <option value="midterm">Midterm</option>
+                                            <option value="finals">Finals</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="space-y-1">
+                                <label class="text-[10px] font-bold text-stone-500 uppercase tracking-wider">Quick Select Controls</label>
+                                <div class="flex flex-wrap gap-1.5">
+                                    <button type="button" onclick="quickSelect('general')" data-testid="select-all-general" class="px-2 py-1 bg-stone-200 hover:bg-stone-300 text-stone-800 rounded-md text-[10px] font-bold transition-all shadow-xs">
+                                        Select All General
+                                    </button>
+                                    <button type="button" onclick="quickSelect('prelim')" data-testid="select-all-prelim" class="px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-md text-[10px] font-bold transition-all shadow-xs">
+                                        Select All Prelim
+                                    </button>
+                                    <button type="button" onclick="quickSelect('midterm')" data-testid="select-all-midterm" class="px-2 py-1 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-md text-[10px] font-bold transition-all shadow-xs">
+                                        Select All Midterm
+                                    </button>
+                                    <button type="button" onclick="quickSelect('finals')" data-testid="select-all-finals" class="px-2 py-1 bg-purple-100 hover:bg-purple-200 text-purple-800 rounded-md text-[10px] font-bold transition-all shadow-xs">
+                                        Select All Finals
+                                    </button>
+                                    <button type="button" onclick="quickSelect('visible')" data-testid="select-all-visible" class="px-2 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded-md text-[10px] font-bold transition-all shadow-xs">
+                                        Select All Visible
+                                    </button>
+                                    <button type="button" onclick="clearSelection()" data-testid="clear-selection" class="px-2 py-1 bg-rose-100 hover:bg-rose-200 text-rose-800 rounded-md text-[10px] font-bold transition-all shadow-xs">
+                                        Clear Selection
+                                    </button>
+                                </div>
+                            </div>
+
+                            <?php if (!empty($all_teacher_lessons)): ?>
+                                <div class="max-h-60 overflow-y-auto border border-stone-200 rounded-xl bg-stone-50 p-2.5 space-y-4 text-xs custom-scrollbar">
+                                    <?php foreach (['general' => 'General', 'prelim' => 'Prelim', 'midterm' => 'Midterm', 'finals' => 'Finals'] as $periodKey => $periodTitle): ?>
+                                        <div class="period-group-block space-y-2" data-period="<?php echo $periodKey; ?>" data-testid="period-group-<?php echo $periodKey; ?>">
+                                            <div class="flex items-center justify-between border-b border-stone-200 pb-1">
+                                                <h4 class="text-xs font-black uppercase tracking-wider text-stone-700 flex items-center gap-1.5">
+                                                    <?php
+                                                    $badgeClass = match($periodKey) {
+                                                        'prelim' => 'bg-blue-600 text-white',
+                                                        'midterm' => 'bg-amber-600 text-white',
+                                                        'finals' => 'bg-purple-600 text-white',
+                                                        default => 'bg-stone-600 text-white'
+                                                    };
+                                                    ?>
+                                                    <span class="px-1.5 py-0.5 rounded text-[9px] font-black <?php echo $badgeClass; ?>"><?php echo strtoupper($periodKey); ?></span>
+                                                    <span><?php echo $periodTitle; ?></span>
+                                                </h4>
+                                                <span class="text-[10px] font-bold text-stone-400 period-count"><?php echo count($lessons_by_period[$periodKey]); ?> items</span>
                                             </div>
-                                            <span class="text-[9px] font-bold text-stone-400 bg-white px-1.5 py-0.5 rounded border flex-shrink-0">
-                                                <?php echo number_format($cl['word_count']); ?> words
-                                            </span>
-                                        </label>
+
+                                            <?php if (!empty($lessons_by_period[$periodKey])): ?>
+                                                <div class="space-y-1.5">
+                                                    <?php foreach ($lessons_by_period[$periodKey] as $cl): 
+                                                        $isCompleted = ($cl['processing_status'] ?? '') === 'completed';
+                                                        $hasContent = !empty(trim($cl['lesson_text'] ?? ''));
+                                                        $canSelect = $isCompleted && $hasContent;
+                                                    ?>
+                                                        <div class="lesson-card p-2 bg-white border border-stone-200 rounded-lg space-y-1 transition-all" 
+                                                             data-testid="lesson-card-<?php echo $cl['id']; ?>"
+                                                             data-id="<?php echo $cl['id']; ?>"
+                                                             data-subject="<?php echo htmlspecialchars($cl['subject'] ?? ''); ?>"
+                                                             data-year-level="<?php echo htmlspecialchars($cl['year_level'] ?? ''); ?>"
+                                                             data-program="<?php echo htmlspecialchars($cl['program'] ?? ''); ?>"
+                                                             data-semester="<?php echo htmlspecialchars($cl['semester'] ?? ''); ?>"
+                                                             data-school-year="<?php echo htmlspecialchars($cl['school_year'] ?? ''); ?>"
+                                                             data-academic-period="<?php echo htmlspecialchars($cl['academic_period'] ?? 'general'); ?>">
+
+                                                            <div class="flex items-start justify-between gap-2">
+                                                                <label class="flex items-start gap-2 cursor-pointer font-bold text-stone-800 text-xs truncate flex-grow">
+                                                                    <input type="checkbox" 
+                                                                           name="selected_lessons[]" 
+                                                                           value="<?php echo $cl['id']; ?>" 
+                                                                           data-testid="lesson-checkbox-<?php echo $cl['id']; ?>"
+                                                                           data-period="<?php echo $periodKey; ?>"
+                                                                           <?php echo $canSelect ? '' : 'disabled'; ?>
+                                                                           class="lesson-checkbox accent-orange-600 rounded mt-0.5">
+                                                                    <span data-testid="lesson-title-<?php echo $cl['id']; ?>" class="truncate leading-tight <?php echo $canSelect ? '' : 'text-stone-400 line-through'; ?>">
+                                                                        <?php echo htmlspecialchars($cl['title']); ?>
+                                                                    </span>
+                                                                </label>
+
+                                                                <?php if ($isCompleted && $hasContent): ?>
+                                                                    <span data-testid="lesson-status-<?php echo $cl['id']; ?>" class="text-[9px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded flex-shrink-0">
+                                                                        Completed
+                                                                    </span>
+                                                                <?php elseif (!$isCompleted): ?>
+                                                                    <span data-testid="lesson-status-<?php echo $cl['id']; ?>" class="text-[9px] font-extrabold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded flex-shrink-0">
+                                                                        <?php echo ucfirst($cl['processing_status'] ?? 'Processing'); ?>
+                                                                    </span>
+                                                                <?php else: ?>
+                                                                    <span data-testid="lesson-status-<?php echo $cl['id']; ?>" class="text-[9px] font-extrabold text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded flex-shrink-0">
+                                                                        Empty
+                                                                    </span>
+                                                                <?php endif; ?>
+                                                            </div>
+
+                                                            <div class="flex flex-wrap items-center gap-1.5 text-[10px] text-stone-500 font-medium">
+                                                                <span class="bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200" data-testid="lesson-subject-<?php echo $cl['id']; ?>">
+                                                                    <i class="fa-solid fa-book text-stone-400 mr-0.5"></i><?php echo htmlspecialchars($cl['subject'] ?? 'General'); ?>
+                                                                </span>
+                                                                <?php if (!empty($cl['semester'])): ?>
+                                                                    <span class="bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200" data-testid="lesson-semester-<?php echo $cl['id']; ?>">
+                                                                        <?php echo htmlspecialchars($cl['semester']); ?>
+                                                                    </span>
+                                                                <?php endif; ?>
+                                                                <?php if (!empty($cl['school_year'])): ?>
+                                                                    <span class="bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200" data-testid="lesson-school-year-<?php echo $cl['id']; ?>">
+                                                                        <?php echo htmlspecialchars($cl['school_year']); ?>
+                                                                    </span>
+                                                                <?php endif; ?>
+                                                                <?php if (!empty($cl['year_level'])): ?>
+                                                                    <span class="bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200" data-testid="lesson-year-level-<?php echo $cl['id']; ?>">
+                                                                        <?php echo htmlspecialchars($cl['year_level']); ?>
+                                                                    </span>
+                                                                <?php endif; ?>
+                                                                <?php if (!empty($cl['program'])): ?>
+                                                                    <span class="bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200" data-testid="lesson-program-<?php echo $cl['id']; ?>">
+                                                                        <?php echo htmlspecialchars($cl['program']); ?>
+                                                                    </span>
+                                                                <?php endif; ?>
+                                                            </div>
+                                                        </div>
+                                                    <?php endforeach; ?>
+                                                </div>
+                                            <?php else: ?>
+                                                <p class="text-[11px] text-stone-400 italic px-2">No materials uploaded for this period.</p>
+                                            <?php endif; ?>
+                                        </div>
                                     <?php endforeach; ?>
                                 </div>
                             <?php else: ?>
@@ -496,6 +678,83 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
                                 ext.classList.add('hidden');
                                 man.classList.remove('hidden');
                             }
+                        }
+
+                        function applyLessonFilters() {
+                            const subj = document.getElementById('filter_subject').value.toLowerCase();
+                            const yl = document.getElementById('filter_year_level').value.toLowerCase();
+                            const prog = document.getElementById('filter_program').value.toLowerCase();
+                            const sem = document.getElementById('filter_semester').value.toLowerCase();
+                            const sy = document.getElementById('filter_school_year').value.toLowerCase();
+                            const period = document.getElementById('filter_academic_period').value.toLowerCase();
+
+                            document.querySelectorAll('.lesson-card').forEach(card => {
+                                const cSubj = (card.getAttribute('data-subject') || '').toLowerCase();
+                                const cYl = (card.getAttribute('data-year-level') || '').toLowerCase();
+                                const cProg = (card.getAttribute('data-program') || '').toLowerCase();
+                                const cSem = (card.getAttribute('data-semester') || '').toLowerCase();
+                                const cSy = (card.getAttribute('data-school-year') || '').toLowerCase();
+                                const cPeriod = (card.getAttribute('data-academic-period') || 'general').toLowerCase();
+
+                                let match = true;
+                                if (subj && cSubj !== subj) match = false;
+                                if (yl && cYl !== yl) match = false;
+                                if (prog && cProg !== prog) match = false;
+                                if (sem && cSem !== sem) match = false;
+                                if (sy && cSy !== sy) match = false;
+                                if (period && cPeriod !== period) match = false;
+
+                                if (match) {
+                                    card.classList.remove('hidden');
+                                } else {
+                                    card.classList.add('hidden');
+                                }
+                            });
+
+                            document.querySelectorAll('.period-group-block').forEach(group => {
+                                const visibleCards = group.querySelectorAll('.lesson-card:not(.hidden)');
+                                const gPeriod = group.getAttribute('data-period');
+                                if (period && gPeriod !== period) {
+                                    group.classList.add('hidden');
+                                } else if (visibleCards.length === 0 && (subj || yl || prog || sem || sy || period)) {
+                                    group.classList.add('hidden');
+                                } else {
+                                    group.classList.remove('hidden');
+                                }
+                            });
+                        }
+
+                        function resetLessonFilters() {
+                            if (document.getElementById('filter_subject')) document.getElementById('filter_subject').value = '';
+                            if (document.getElementById('filter_year_level')) document.getElementById('filter_year_level').value = '';
+                            if (document.getElementById('filter_program')) document.getElementById('filter_program').value = '';
+                            if (document.getElementById('filter_semester')) document.getElementById('filter_semester').value = '';
+                            if (document.getElementById('filter_school_year')) document.getElementById('filter_school_year').value = '';
+                            if (document.getElementById('filter_academic_period')) document.getElementById('filter_academic_period').value = '';
+                            applyLessonFilters();
+                        }
+
+                        function quickSelect(target) {
+                            document.querySelectorAll('.lesson-card').forEach(card => {
+                                if (card.classList.contains('hidden')) return;
+
+                                const checkbox = card.querySelector('.lesson-checkbox');
+                                if (!checkbox || checkbox.disabled) return;
+
+                                const cPeriod = (card.getAttribute('data-academic-period') || 'general').toLowerCase();
+
+                                if (target === 'visible') {
+                                    checkbox.checked = true;
+                                } else if (target === cPeriod) {
+                                    checkbox.checked = true;
+                                }
+                            });
+                        }
+
+                        function clearSelection() {
+                            document.querySelectorAll('.lesson-checkbox').forEach(cb => {
+                                cb.checked = false;
+                            });
                         }
                     </script>
                 </div>
