@@ -37,7 +37,7 @@ try {
     $pie_passed = $completed_exams;
     $pie_failed = $pending_exams;
 
-    // Real Civil Engineering specialization average scores from live database
+    
     $ce_stmt = $pdo->query("
         SELECT COALESCE(e.specialization, 'General') AS spec, AVG(es.percentage) AS avg_pct 
         FROM exam_submissions es 

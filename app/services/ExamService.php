@@ -78,12 +78,12 @@ class ExamService {
             return ['eligible' => false, 'reason' => 'This examination is currently inactive.'];
         }
 
-        // Count student attempts
+        
         $stmtAtt = $pdo->prepare("SELECT COUNT(*) FROM exam_submissions WHERE student_id = ? AND exam_id = ?");
         $stmtAtt->execute([$studentId, $examId]);
         $attemptCount = intval($stmtAtt->fetchColumn());
 
-        // Check if qualifying exam
+        
         $category = $exam['exam_category'] ?? 'regular';
         if ($category === 'qualifying') {
             $maxAttempts = intval($exam['qualifying_max_attempts'] ?? 1);
@@ -97,7 +97,7 @@ class ExamService {
                 ];
             }
 
-            // Check student program & year level from student_details
+            
             $stmtDetails = $pdo->prepare("SELECT course, year_level FROM student_details WHERE user_id = ?");
             $stmtDetails->execute([$studentId]);
             $details = $stmtDetails->fetch(PDO::FETCH_ASSOC) ?: ['course' => 'BSCE', 'year_level' => '4th Year'];
@@ -114,7 +114,7 @@ class ExamService {
 
             $eligibleYear = $exam['qualifying_year_level'] ?? 'All Year Levels';
             if ($eligibleYear !== 'All Year Levels' && $eligibleYear !== 'all') {
-                // Standardize string comparison
+                
                 $stuYearStr = (string)$details['year_level'];
                 if (stripos($stuYearStr, (string)$eligibleYear) === false && stripos((string)$eligibleYear, $stuYearStr) === false) {
                     return [
@@ -124,7 +124,7 @@ class ExamService {
                 }
             }
 
-            // Check unlock date
+            
             if (!empty($exam['qualifying_unlock_date'])) {
                 if (time() < strtotime($exam['qualifying_unlock_date'])) {
                     return [
@@ -134,7 +134,7 @@ class ExamService {
                 }
             }
 
-            // Check deadline
+            
             if (!empty($exam['qualifying_deadline'])) {
                 if (time() > strtotime($exam['qualifying_deadline'])) {
                     return [

@@ -6,9 +6,8 @@ require_once __DIR__ . '/ExamScoringService.php';
 
 class EvaluationService {
 
-    /**
-     * Evaluate student submission server-side against stored answer keys and persist detailed item results.
-     */
+    
+
     public static function evaluateAndSaveSubmission($examId, $studentId, array $submittedAnswers, $uploadType = 'online', $ocrResult = null, $fileInfo = []) {
         $fileMeta = [
             'ocr_text' => $ocrResult['text'] ?? ($ocrResult['ocr_text'] ?? null),
@@ -37,9 +36,8 @@ class EvaluationService {
         }
     }
 
-    /**
-     * Evaluate a single answer against a question model
-     */
+    
+
     public static function evaluateSingleAnswer($question, $studentAnswer) {
         return ExamScoringService::evaluateSingleAnswer($question, $studentAnswer);
     }

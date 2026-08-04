@@ -11,6 +11,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_material'])) {
     validateCSRFToken();
     $title = trim(sanitizeInput($_POST['title'] ?? ''));
     $subject = trim(sanitizeInput($_POST['subject'] ?? ''));
+    
+    $academic_period = trim(sanitizeInput($_POST['academic_period'] ?? 'general'));
+    if (!in_array($academic_period, ['general', 'prelim', 'midterm', 'finals'])) {
+        $academic_period = 'general';
+    }
+    $semester = trim(sanitizeInput($_POST['semester'] ?? ''));
+    $school_year = trim(sanitizeInput($_POST['school_year'] ?? ''));
+    $year_level_input = trim(sanitizeInput($_POST['year_level'] ?? ''));
+    $program_input = trim(sanitizeInput($_POST['program'] ?? ''));
 
     if (isset($_FILES['lesson_file']) && $_FILES['lesson_file']['error'] === UPLOAD_ERR_OK) {
         $file_tmp = $_FILES['lesson_file']['tmp_name'];
@@ -30,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_material'])) {
         $mime_type = finfo_file($finfo, $file_tmp);
         finfo_close($finfo);
 
-        // Prevent double extension executable bypass (e.g. file.php.pdf)
+        
         $clean_original_filename = basename($file_name);
         $file_parts = explode('.', $clean_original_filename);
         $forbidden_exts = ['php', 'phtml', 'php3', 'php4', 'php5', 'phps', 'phar', 'exe', 'sh', 'bat', 'cmd', 'js', 'pl', 'py', 'cgi'];
@@ -61,13 +70,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_material'])) {
                     try {
                         $stmt = $pdo->prepare("
                             INSERT INTO lesson_materials 
-                            (teacher_id, subject, title, file_name, file_path, file_type, file_size, processing_status, original_filename, stored_filename, mime_type) 
-                            VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
+                            (teacher_id, subject, title, academic_period, semester, school_year, year_level, program, file_name, file_path, file_type, file_size, processing_status, original_filename, stored_filename, mime_type) 
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
                         ");
                         $stmt->execute([
                             getCurrentUserId(),
                             $subject,
                             $title,
+                            $academic_period,
+                            $semester,
+                            $school_year,
+                            $year_level_input,
+                            $program_input,
                             $clean_original_filename,
                             'uploads/' . $new_file_name,
                             strtoupper($file_ext),
@@ -79,7 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_material'])) {
                         $material_id = $pdo->lastInsertId();
                         logActivity("Uploaded new lesson material '{$title}' ({$clean_original_filename}) for subject '{$subject}'.");
 
-                        // Trigger automatic text extraction
+                        
                         $extractRes = LessonExtractionService::extractAndSave($material_id);
                         if ($extractRes['success']) {
                             $success_msg = "Lesson material uploaded and content extracted successfully! ({$extractRes['word_count']} words, {$extractRes['page_count']} pages)";
@@ -185,6 +199,58 @@ $materials = $stmtMaterials->fetchAll(PDO::FETCH_ASSOC);
                     </div>
 
                     <div class="space-y-1">
+                        <label class="text-xs font-bold text-stone-600">Academic Period</label>
+                        <select name="academic_period" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs outline-none focus:border-orange-500">
+                            <option value="general">General</option>
+                            <option value="prelim">Prelim</option>
+                            <option value="midterm">Midterm</option>
+                            <option value="finals">Finals</option>
+                        </select>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="space-y-1">
+                            <label class="text-xs font-bold text-stone-600">Semester</label>
+                            <select name="semester" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs outline-none focus:border-orange-500">
+                                <option value="">Select Semester</option>
+                                <option value="1st Semester">1st Semester</option>
+                                <option value="2nd Semester">2nd Semester</option>
+                                <option value="Summer">Summer</option>
+                            </select>
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-xs font-bold text-stone-600">School Year</label>
+                            <input type="text" name="school_year" placeholder="e.g. 2025-2026" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs outline-none focus:border-orange-500">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="space-y-1">
+                            <label class="text-xs font-bold text-stone-600">Year Level</label>
+                            <select name="year_level" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs outline-none focus:border-orange-500">
+                                <option value="All Year Levels">All Year Levels</option>
+                                <option value="1st Year">1st Year</option>
+                                <option value="2nd Year">2nd Year</option>
+                                <option value="3rd Year">3rd Year</option>
+                                <option value="4th Year">4th Year</option>
+                            </select>
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-xs font-bold text-stone-600">Program</label>
+                            <select name="program" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs outline-none focus:border-orange-500">
+                                <option value="All Programs">All Programs</option>
+                                <option value="BSCE">BSCE</option>
+                                <option value="BSCS">BSCS</option>
+                                <option value="BSIT">BSIT</option>
+                                <option value="BSEE">BSEE</option>
+                                <option value="BSME">BSME</option>
+                                <option value="BSA">BSA</option>
+                                <option value="BSN">BSN</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="space-y-1">
                         <label class="text-xs font-bold text-stone-600">Select File Document</label>
                         <div onclick="triggerFileSelect()" class="border-2 border-dashed border-stone-300 hover:border-orange-400 rounded-xl p-5 bg-stone-50 text-center cursor-pointer transition-all" id="drop_zone">
                             <i class="fa-solid fa-file-pdf text-2xl text-stone-400 mb-1" id="upload_icon"></i>
@@ -210,26 +276,42 @@ $materials = $stmtMaterials->fetchAll(PDO::FETCH_ASSOC);
                 <?php if (!empty($materials)): ?>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <?php foreach ($materials as $m): ?>
-                            <?php 
-                                $status = $m['processing_status'] ?? 'pending';
-                                $statusBadgeClass = 'bg-stone-100 text-stone-700';
-                                if ($status === 'completed') $statusBadgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-200';
-                                elseif ($status === 'failed') $statusBadgeClass = 'bg-rose-100 text-rose-800 border-rose-200';
-                                elseif ($status === 'processing') $statusBadgeClass = 'bg-amber-100 text-amber-800 border-amber-200';
-                            ?>
-                            <div class="p-4 border border-stone-200 rounded-xl bg-stone-50/40 hover:border-orange-300 transition-all flex flex-col justify-between space-y-3">
-                                <div class="flex items-start gap-3">
-                                    <div class="p-3 bg-orange-100 text-orange-700 rounded-lg flex-shrink-0">
-                                        <i class="fa-solid fa-file-lines text-xl"></i>
-                                    </div>
-                                    <div class="min-w-0 flex-1">
-                                        <div class="flex items-center justify-between gap-1">
-                                            <h4 class="font-bold text-xs text-stone-800 truncate"><?php echo htmlspecialchars($m['title']); ?></h4>
-                                            <span class="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border <?php echo $statusBadgeClass; ?>">
-                                                <i class="fa-solid fa-circle text-[7px] mr-1"></i><?php echo ucfirst($status); ?>
-                                            </span>
+                                <?php 
+                                    $status = $m['processing_status'] ?? 'pending';
+                                    $statusBadgeClass = 'bg-stone-100 text-stone-700';
+                                    if ($status === 'completed') $statusBadgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-200';
+                                    elseif ($status === 'failed') $statusBadgeClass = 'bg-rose-100 text-rose-800 border-rose-200';
+                                    elseif ($status === 'processing') $statusBadgeClass = 'bg-amber-100 text-amber-800 border-amber-200';
+                                    
+                                    $period = $m['academic_period'] ?? 'general';
+                                    $periodClass = 'bg-stone-100 text-stone-600 border-stone-200';
+                                    if ($period === 'prelim') $periodClass = 'bg-blue-100 text-blue-700 border-blue-200';
+                                    elseif ($period === 'midterm') $periodClass = 'bg-amber-100 text-amber-700 border-amber-200';
+                                    elseif ($period === 'finals') $periodClass = 'bg-purple-100 text-purple-700 border-purple-200';
+                                ?>
+                                <div class="p-4 border border-stone-200 rounded-xl bg-stone-50/40 hover:border-orange-300 transition-all flex flex-col justify-between space-y-3">
+                                    <div class="flex items-start gap-3">
+                                        <div class="p-3 bg-orange-100 text-orange-700 rounded-lg flex-shrink-0">
+                                            <i class="fa-solid fa-file-lines text-xl"></i>
                                         </div>
-                                        <p class="text-[10px] text-stone-400 font-semibold mt-0.5"><?php echo htmlspecialchars($m['subject']); ?></p>
+                                        <div class="min-w-0 flex-1">
+                                            <div class="flex items-center justify-between gap-1">
+                                                <h4 class="font-bold text-xs text-stone-800 truncate"><?php echo htmlspecialchars($m['title']); ?></h4>
+                                                <div class="flex gap-1">
+                                                    <span class="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border <?php echo $periodClass; ?>">
+                                                        <?php echo ucfirst($period); ?>
+                                                    </span>
+                                                    <span class="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full border <?php echo $statusBadgeClass; ?>">
+                                                        <i class="fa-solid fa-circle text-[7px] mr-1"></i><?php echo ucfirst($status); ?>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div class="text-[10px] text-stone-400 font-semibold mt-0.5 flex gap-2">
+                                                <span><?php echo htmlspecialchars($m['subject']); ?></span>
+                                                <?php if (!empty($m['semester']) || !empty($m['school_year'])): ?>
+                                                    <span>• <?php echo htmlspecialchars(trim(($m['semester'] ?? '') . ' ' . ($m['school_year'] ?? ''))); ?></span>
+                                                <?php endif; ?>
+                                            </div>
                                         
                                         <div class="flex flex-wrap items-center gap-1.5 mt-2">
                                             <span class="text-[9px] font-extrabold uppercase bg-stone-200 text-stone-700 px-1.5 py-0.5 rounded">

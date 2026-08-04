@@ -57,7 +57,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['restore_backup'])) {
         } else {
             $sqlContent = file_get_contents($file_tmp);
             
-            // Basic SQL content validation (must start with SQL keywords, reject binary)
+            
             if (preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', $sqlContent) || !preg_match('/^\s*(?:INSERT|UPDATE|DELETE|SELECT|CREATE|DROP|ALTER|TRUNCATE|SET|--|\/\*)/i', $sqlContent)) {
                 $error_msg = "Invalid SQL file content.";
             } else {

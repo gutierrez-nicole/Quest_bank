@@ -13,12 +13,12 @@ try {
     $stmt->execute([$teacher_id]);
     $teacher = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    // Fetch teacher's exams
+    
     $stmtExams = $pdo->prepare("SELECT id, title, subject, passing_percentage FROM exams WHERE teacher_id = ? OR created_by = ? ORDER BY id DESC");
     $stmtExams->execute([$teacher_id, $teacher_id]);
     $available_exams = $stmtExams->fetchAll(PDO::FETCH_ASSOC);
 
-    // Fetch enrolled students
+    
     $stmtStudents = $pdo->query("SELECT id, fullname, email FROM users WHERE role = 'student' ORDER BY fullname ASC");
     $available_students = $stmtStudents->fetchAll(PDO::FETCH_ASSOC);
 
@@ -41,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
     } elseif (!isset($_FILES['exam_file']) || $_FILES['exam_file']['error'] !== UPLOAD_ERR_OK) {
         $error_msg = "Please attach a valid answer sheet file (JPG, PNG, PDF).";
     } else {
-        // Validate Teacher Ownership of selected exam
+        
         $stmtCheck = $pdo->prepare("SELECT * FROM exams WHERE id = ? AND (teacher_id = ? OR created_by = ?)");
         $stmtCheck->execute([$exam_id, $teacher_id, $teacher_id]);
         $examObj = $stmtCheck->fetch(PDO::FETCH_ASSOC);
@@ -53,33 +53,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
             $file_tmp = $_FILES['exam_file']['tmp_name'];
             $file_ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
 
-            // Save file to uploads directory
+            
             $upload_dir = __DIR__ . '/../uploads/ocr_sheets/';
             if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
             $target_file = $upload_dir . uniqid('ocr_') . '.' . $file_ext;
 
             if (move_uploaded_file($file_tmp, $target_file)) {
-                // Step 1: Real OCR Extraction
+                
                 $ocrRes = OcrService::processAnswerSheet($target_file, $file_ext);
                 $ocrText = $ocrRes['text'] ?? '';
 
-                // Step 2: Fetch Exam Questions
+                
                 $qStmt = $pdo->prepare("SELECT * FROM exam_questions WHERE exam_id = ? ORDER BY id ASC");
                 $qStmt->execute([$exam_id]);
                 $examQuestions = $qStmt->fetchAll(PDO::FETCH_ASSOC);
 
-                // Step 3: Parse OCR Text into structured answers
+                
                 $parsedOcr = AnswerSheetParser::parseAnswerSheet($ocrText, $examQuestions);
                 $submittedAnswers = $parsedOcr['answers'];
 
-                // Allow teacher-corrected OCR text if provided in POST
+                
                 if (!empty($_POST['corrected_ocr_text'])) {
                     $correctedText = trim(sanitizeInput($_POST['corrected_ocr_text']));
                     $parsedCorr = AnswerSheetParser::parseAnswerSheet($correctedText, $examQuestions);
                     $submittedAnswers = $parsedCorr['answers'];
                 }
 
-                // Step 4: Server-Side Score Calculation via ExamScoringService
+                
                 try {
                     $fileMeta = [
                         'ocr_text' => $ocrText,

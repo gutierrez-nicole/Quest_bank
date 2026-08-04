@@ -71,7 +71,6 @@ $exam_options = $stmtExams->fetchAll(PDO::FETCH_COLUMN);
 $success_msg = "";
 $error_msg = "";
 
-// 1. Workflow Status Transition (Normal forward workflow only; role fetched from DB)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_review_status'])) {
     validateCSRFToken();
     $submission_id = intval($_POST['submission_id'] ?? 0);
@@ -90,7 +89,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_review_status'
     }
 }
 
-// 2. Item-Level Score Override Handler (Strictly itemized; recalculates totals server-side)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['override_item_score'])) {
     validateCSRFToken();
     $submission_id = intval($_POST['submission_id'] ?? 0);
@@ -111,7 +109,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['override_item_score']
     }
 }
 
-// 3. OCR Re-Run Handler (Routes through production ExamScoringService, updates submission_answers, and logs evidence history)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rerun_ocr_ai'])) {
     validateCSRFToken();
     $submission_id = intval($_POST['submission_id'] ?? 0);
@@ -335,7 +332,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rerun_ocr_ai'])) {
 
     </div>
 
-    <!-- Teacher Review Modal (Modal Scoped with data-testid attributes) -->
+    
     <div id="review_modal" data-testid="review-submission-modal" class="fixed inset-0 bg-stone-950/80 backdrop-blur-sm hidden items-center justify-center z-50 p-4 animate-fadeIn">
         <div class="bg-white rounded-3xl p-6 max-w-2xl w-full shadow-2xl space-y-4 border border-stone-200 max-h-[90vh] overflow-y-auto custom-scrollbar">
             <div class="flex items-center justify-between border-b border-stone-100 pb-3">
@@ -353,7 +350,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rerun_ocr_ai'])) {
                 </button>
             </div>
 
-            <!-- Workflow Status Transition Form -->
+            
             <form method="POST" action="reports.php" class="space-y-4">
                 <?php echo csrfInputField(); ?>
                 <input type="hidden" name="submission_id" id="modal_submission_id">
@@ -395,7 +392,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rerun_ocr_ai'])) {
                 </div>
             </form>
 
-            <!-- Item-Level Score Override Section (Centralized itemized overrides) -->
+            
             <div class="pt-4 border-t border-stone-200 space-y-3">
                 <h5 class="text-xs font-extrabold text-stone-800 flex items-center gap-1.5">
                     <i class="fa-solid fa-pen-to-square text-orange-600"></i> Item-Level Score Override (Audit-Logged)

@@ -5,9 +5,8 @@ require_once __DIR__ . '/../../includes/security.php';
 
 class AuthorizationService {
 
-    /**
-     * Check if a teacher/admin can manage an exam
-     */
+    
+
     public static function canManageExam($userId, $examId) {
         $pdo = getDBConnection();
 
@@ -23,9 +22,8 @@ class AuthorizationService {
         return ($stmt->fetchColumn() !== false);
     }
 
-    /**
-     * Check if a teacher/admin can review or update a submission
-     */
+    
+
     public static function canReviewSubmission($userId, $submissionId) {
         $pdo = getDBConnection();
 
@@ -46,23 +44,20 @@ class AuthorizationService {
         return ($stmt->fetchColumn() !== false);
     }
 
-    /**
-     * Check if a teacher/admin can override a score
-     */
+    
+
     public static function canOverrideScore($userId, $submissionId) {
         return self::canReviewSubmission($userId, $submissionId);
     }
 
-    /**
-     * Check if a teacher/admin can publish a submission result
-     */
+    
+
     public static function canPublishSubmission($userId, $submissionId) {
         return self::canReviewSubmission($userId, $submissionId);
     }
 
-    /**
-     * Check if a user (teacher/admin/student) can view a submission
-     */
+    
+
     public static function canViewSubmission($userId, $submissionId) {
         $pdo = getDBConnection();
 
@@ -85,9 +80,8 @@ class AuthorizationService {
         return false;
     }
 
-    /**
-     * Check if a teacher/admin can view or manage a student record
-     */
+    
+
     public static function canViewStudentRecord($userId, $studentId) {
         $pdo = getDBConnection();
 
@@ -98,7 +92,7 @@ class AuthorizationService {
         if ($role === 'admin') return true;
         if ($role !== 'teacher') return false;
 
-        // Check if student has submitted to any exam owned by this teacher
+        
         $stmt = $pdo->prepare("
             SELECT s.id 
             FROM exam_submissions s
@@ -111,7 +105,7 @@ class AuthorizationService {
 
         if ($hasSubmission) return true;
 
-        // Or student is explicitly assigned to any exam owned by this teacher via exam_assignments
+        
         $assignStmt = $pdo->prepare("
             SELECT ea.id
             FROM exam_assignments ea
@@ -123,16 +117,14 @@ class AuthorizationService {
         return ($assignStmt->fetchColumn() !== false);
     }
 
-    /**
-     * Check if a teacher/admin can download an answer sheet
-     */
+    
+
     public static function canDownloadSubmission($userId, $submissionId) {
         return self::canReviewSubmission($userId, $submissionId);
     }
 
-    /**
-     * Enforce access control or terminate with HTTP 403 Forbidden
-     */
+    
+
     public static function enforceSubmissionAccess($userId, $submissionId) {
         if (!self::canReviewSubmission($userId, $submissionId)) {
             http_response_code(403);
@@ -140,9 +132,8 @@ class AuthorizationService {
         }
     }
 
-    /**
-     * Enforce exam ownership or terminate with HTTP 403 Forbidden
-     */
+    
+
     public static function enforceExamAccess($userId, $examId) {
         if (!self::canManageExam($userId, $examId)) {
             http_response_code(403);

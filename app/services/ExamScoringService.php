@@ -5,9 +5,8 @@ require_once __DIR__ . '/../../includes/security.php';
 
 class ExamScoringService {
 
-    /**
-     * Score a single student answer against a stored question record
-     */
+    
+
     public static function evaluateSingleAnswer($question, $studentAnswerRaw) {
         $qType = strtolower($question['type'] ?? strtolower($question['question_type'] ?? 'multiple_choice'));
         $correctAnswer = trim($question['correct_answer'] ?? '');
@@ -124,9 +123,8 @@ class ExamScoringService {
         ];
     }
 
-    /**
-     * Score an entire exam submission server-side and save atomically to database
-     */
+    
+
     public static function evaluateAndSaveSubmission($examId, $studentId, $submittedAnswers, $teacherId = null, $uploadType = 'online', $fileMeta = []) {
         $pdo = getDBConnection();
 
@@ -134,7 +132,7 @@ class ExamScoringService {
             throw new InvalidArgumentException("Exam ID is required.");
         }
 
-        // Fetch Exam metadata
+        
         $stmt = $pdo->prepare("SELECT * FROM exams WHERE id = ?");
         $stmt->execute([$examId]);
         $exam = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -145,7 +143,7 @@ class ExamScoringService {
 
         $passingThreshold = floatval($exam['passing_percentage'] ?? 75.00);
 
-        // Fetch all questions for this exam
+        
         $stmt = $pdo->prepare("SELECT * FROM exam_questions WHERE exam_id = ? ORDER BY id ASC");
         $stmt->execute([$examId]);
         $questions = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -154,7 +152,7 @@ class ExamScoringService {
             throw new Exception("Exam #{$examId} has no questions configured.");
         }
 
-        // Index questions by ID
+        
         $indexedQuestions = [];
         foreach ($questions as $q) {
             $indexedQuestions[$q['id']] = $q;
@@ -163,7 +161,7 @@ class ExamScoringService {
         $resolvedTeacherId = $teacherId ?: ($exam['teacher_id'] ?? ($exam['created_by'] ?? 1));
         $studentIdDb = ($studentId && $studentId > 0) ? $studentId : null;
 
-        // Begin Atomic DB Transaction
+        
         $pdo->beginTransaction();
 
         try {
@@ -174,7 +172,7 @@ class ExamScoringService {
             $reviewRequiredCount = 0;
             $itemResults = [];
 
-            // Score each question in the exam
+            
             foreach ($indexedQuestions as $qId => $q) {
                 $maxPoints = floatval($q['points'] ?? 1.00);
                 $totalPossiblePoints += $maxPoints;
@@ -210,7 +208,7 @@ class ExamScoringService {
                 if ($uName) $studentName = $uName;
             }
 
-            // Calculate attempt_number & qualification_status for Epic 2.1
+            
             $attemptNumber = 1;
             if ($studentIdDb) {
                 $stmtCount = $pdo->prepare("SELECT COUNT(*) FROM exam_submissions WHERE exam_id = ? AND student_id = ?");

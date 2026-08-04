@@ -205,7 +205,7 @@ try {
         $recent_submissions = [];
     }
 
-    // Epic 2.1 Qualifying Examination Metrics
+    
     $total_qualifying_exams = 0;
     $total_qualified_students = 0;
     $total_not_qualified_students = 0;
@@ -230,7 +230,7 @@ try {
             elseif ($r['qualification_status'] === 'pending') $total_pending_qualifying = (int)$r['cnt'];
         }
     } catch (PDOException $e) {
-        // Fail-safe defaults
+        
     }
 
 } catch (PDOException $e) {
@@ -350,7 +350,7 @@ try {
                 </div>
             </div>
 
-            <!-- Epic 2.1 Qualifying Examination Summary Cards -->
+            
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div class="bg-gradient-to-br from-orange-500 to-amber-600 text-white p-4 rounded-xl shadow-sm flex items-center justify-between">
                     <div>

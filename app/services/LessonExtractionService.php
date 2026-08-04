@@ -33,7 +33,7 @@ class LessonExtractionService {
             return ['success' => false, 'error' => 'File is empty (0 bytes).'];
         }
 
-        if ($fileSize > 10485760) { // 10MB
+        if ($fileSize > 10485760) { 
             self::markFailed($pdo, $materialId, "File exceeds maximum size limit of 10MB.");
             return ['success' => false, 'error' => 'File exceeds maximum size limit of 10MB.'];
         }
@@ -43,7 +43,7 @@ class LessonExtractionService {
 
         $fileExt = strtolower(pathinfo($material['file_name'], PATHINFO_EXTENSION));
 
-        // MIME validation
+        
         $finfo = finfo_open(FILEINFO_MIME_TYPE);
         $detectedMime = finfo_file($finfo, $filePath);
         finfo_close($finfo);
@@ -151,22 +151,22 @@ class LessonExtractionService {
     private static function cleanExtractedText($text) {
         if (!is_string($text)) return '';
 
-        // Remove null bytes and non-printable control characters (except newline \n and tab \t)
+        
         $text = str_replace("\0", '', $text);
         $text = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $text);
 
-        // Convert carriage returns to newline
+        
         $text = str_replace("\r\n", "\n", $text);
         $text = str_replace("\r", "\n", $text);
 
-        // Remove repetitive headers/footers patterns like "Page X of Y" or isolated timestamps
+        
         $text = preg_replace('/Page \d+ of \d+/i', '', $text);
         $text = preg_replace('/^\s*\d+\s*$/m', '', $text);
 
-        // Collapse duplicate blank lines (more than 2 consecutive newlines to 2)
+        
         $text = preg_replace("/\n{3,}/", "\n\n", $text);
 
-        // Collapse multiple horizontal spaces into single space
+        
         $text = preg_replace('/[ \t]+/', ' ', $text);
 
         return trim($text);
@@ -185,7 +185,7 @@ class LessonExtractionService {
             throw new Exception("Invalid DOCX format: word/document.xml missing.");
         }
 
-        // Parse XML text elements
+        
         $dom = new DOMDocument();
         libxml_use_internal_errors(true);
         $dom->loadXML($documentXml);
@@ -261,7 +261,7 @@ class LessonExtractionService {
     }
 
     private static function extractFromPdf($filePath) {
-        // Method 1: Check if pdftotext CLI is available
+        
         $pdftotextPath = exec('which pdftotext 2>/dev/null');
         if (!empty($pdftotextPath) && is_executable($pdftotextPath)) {
             $outputFile = tempnam(sys_get_temp_dir(), 'pdf_txt_');
@@ -279,7 +279,7 @@ class LessonExtractionService {
             @unlink($outputFile);
         }
 
-        // Method 2: Native PHP stream PDF text parser
+        
         $content = file_get_contents($filePath);
         if (!$content) {
             throw new Exception("Unable to read PDF file.");
@@ -296,19 +296,19 @@ class LessonExtractionService {
         $pages = preg_match_all('/\/Type\s*\/Page[^s]/i', $content);
         if ($pages === 0) $pages = 1;
 
-        // Extract text inside PDF stream objects
+        
         preg_match_all('/stream[\r\n]+(.*?)[\r\n]+endstream/is', $content, $matches);
         $extractedText = '';
 
         foreach ($matches[1] as $stream) {
-            // Uncompress gzdeflate / FlateDecode streams if necessary
+            
             $decompressed = @gzuncompress($stream);
             if (!$decompressed) {
                 $decompressed = @gzinflate($stream);
             }
             $data = $decompressed ? $decompressed : $stream;
 
-            // Extract Tj and TJ text operators
+            
             preg_match_all('/(?:[\(\[\<])([^\)\>\]]*)(?:[\)\]\>])\s*(?:Tj|TJ|\')/i', $data, $textMatches);
             foreach ($textMatches[1] as $tm) {
                 $cleaned = preg_replace('/[^\x20-\x7E\n]/', '', $tm);

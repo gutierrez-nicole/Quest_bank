@@ -11,7 +11,7 @@ class GroqService {
 
         $key = $apiKey ?: GROQ_API_KEY;
         if (empty($key) || $key === 'YOUR_GROQ_API_KEY_HERE' || strpos($key, 'gsk_') === false) {
-            // Mock fallback AI response for offline/test environment
+            
             $mockQuestions = [
                 [
                     'question' => 'What is the formula for Stopping Sight Distance (SSD)?',
@@ -102,7 +102,7 @@ class GroqService {
         $error = curl_error($ch);
 
         if ($error) {
-            // Fallback to mock questions if cURL network connection fails/times out in offline test environment
+            
             $mockQuestions = [
                 [
                     'question' => 'What is the formula for Stopping Sight Distance (SSD)?',
@@ -178,7 +178,7 @@ class GroqService {
 
         $decoded = json_decode($response, true);
         if (isset($decoded['error']) || !isset($decoded['choices'])) {
-            // API returned error (expired key, rate limit, etc.) — fallback to mock for offline compatibility
+            
             $mockQuestions = [
                 ['question' => 'What is the formula for Stopping Sight Distance (SSD)?', 'type' => 'multiple_choice', 'opt_a' => '0.278*V*t + V^2/(254*f)', 'opt_b' => 'V^2 / 254', 'opt_c' => '0.278*V*t', 'opt_d' => 'None of the above', 'correct_answer' => 'A', 'explanation' => 'Standard SSD formula.', 'points' => 1],
                 ['question' => 'Flexible pavement design uses CBR structural number for traffic load calculation.', 'type' => 'true_false', 'opt_a' => 'True', 'opt_b' => 'False', 'opt_c' => null, 'opt_d' => null, 'correct_answer' => 'True', 'explanation' => 'CBR determines subgrade strength.', 'points' => 1],
@@ -239,7 +239,7 @@ class GroqService {
             return ['error' => 'Failed to parse AI response as JSON: ' . json_last_error_msg()];
         }
 
-        // Validate and deduplicate generated questions
+        
         $validQuestions = [];
         $seen = [];
 
@@ -250,12 +250,12 @@ class GroqService {
             $qType = trim($q['type'] ?? $questionType);
 
             if (empty($qText) || empty($qCorrect)) {
-                continue; // Reject incomplete questions
+                continue; 
             }
 
             $dedupKey = mb_strtolower(preg_replace('/\s+/', ' ', $qText));
             if (isset($seen[$dedupKey])) {
-                continue; // Skip duplicate question
+                continue; 
             }
             $seen[$dedupKey] = true;
 

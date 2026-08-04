@@ -1,9 +1,4 @@
 <?php
-/**
- * QuestBank Schema Migration Runner
- * Idempotent — safe to run multiple times.
- * Adds all columns and tables required for the full capstone system.
- */
 
 require_once __DIR__ . '/../app/bootstrap.php';
 
@@ -35,15 +30,9 @@ function addColumn($pdo, $table, $column, $definition) {
     }
 }
 
-// ============================================
-// USERS — Status Column
-// ============================================
 echo "\n--- users ---\n";
 addColumn($pdo, 'users', 'status', "VARCHAR(20) NOT NULL DEFAULT 'active'");
 
-// ============================================
-// LESSON_MATERIALS — Extraction Engine Columns
-// ============================================
 echo "\n--- lesson_materials ---\n";
 addColumn($pdo, 'lesson_materials', 'lesson_text', "LONGTEXT DEFAULT NULL");
 addColumn($pdo, 'lesson_materials', 'processing_status', "VARCHAR(20) NOT NULL DEFAULT 'pending'");
@@ -55,9 +44,6 @@ addColumn($pdo, 'lesson_materials', 'mime_type', "VARCHAR(100) DEFAULT NULL");
 addColumn($pdo, 'lesson_materials', 'original_filename', "VARCHAR(255) DEFAULT NULL");
 addColumn($pdo, 'lesson_materials', 'stored_filename', "VARCHAR(255) DEFAULT NULL");
 
-// ============================================
-// EXAM_QUESTIONS — Extended Question Fields
-// ============================================
 echo "\n--- exam_questions ---\n";
 addColumn($pdo, 'exam_questions', 'points', "INT(11) NOT NULL DEFAULT 1");
 addColumn($pdo, 'exam_questions', 'formula_latex', "TEXT DEFAULT NULL");
@@ -67,9 +53,6 @@ addColumn($pdo, 'exam_questions', 'difficulty', "VARCHAR(20) DEFAULT 'medium'");
 addColumn($pdo, 'exam_questions', 'topic', "VARCHAR(150) DEFAULT NULL");
 addColumn($pdo, 'exam_questions', 'lesson_id', "INT(11) DEFAULT NULL");
 
-// ============================================
-// EXAMS — Status, Passing Score, Difficulty, AI Metadata
-// ============================================
 echo "\n--- exams ---\n";
 addColumn($pdo, 'exams', 'status', "VARCHAR(20) NOT NULL DEFAULT 'active'");
 addColumn($pdo, 'exams', 'passing_percentage', "DECIMAL(5,2) NOT NULL DEFAULT 75.00");
@@ -83,7 +66,6 @@ addColumn($pdo, 'exams', 'prompt_version', "VARCHAR(20) DEFAULT 'v1.0'");
 addColumn($pdo, 'exams', 'ai_model', "VARCHAR(100) DEFAULT NULL");
 addColumn($pdo, 'exams', 'created_by', "INT(11) DEFAULT NULL");
 
-// Epic 2.1 Qualifying Examination Columns
 addColumn($pdo, 'exams', 'exam_category', "VARCHAR(30) NOT NULL DEFAULT 'regular'");
 addColumn($pdo, 'exams', 'qualifying_passing_percentage', "DECIMAL(5,2) DEFAULT 75.00");
 addColumn($pdo, 'exams', 'qualifying_max_attempts', "INT(11) DEFAULT 1");
@@ -93,9 +75,6 @@ addColumn($pdo, 'exams', 'qualifying_is_required', "TINYINT(1) DEFAULT 1");
 addColumn($pdo, 'exams', 'qualifying_unlock_date', "DATETIME DEFAULT NULL");
 addColumn($pdo, 'exams', 'qualifying_deadline', "DATETIME DEFAULT NULL");
 
-// ============================================
-// EXAM_SUBMISSIONS — OCR, Review, File Storage, Upload Type, Qualification Status
-// ============================================
 echo "\n--- exam_submissions ---\n";
 $pdo->exec("ALTER TABLE `exam_submissions` MODIFY COLUMN `upload_type` VARCHAR(30) NOT NULL DEFAULT 'scanned'");
 $pdo->exec("ALTER TABLE `exam_submissions` MODIFY COLUMN `review_status` VARCHAR(30) NOT NULL DEFAULT 'draft'");
@@ -127,13 +106,9 @@ addColumn($pdo, 'exam_submissions', 'file_path', "VARCHAR(500) DEFAULT NULL");
 addColumn($pdo, 'exam_submissions', 'original_filename', "VARCHAR(255) DEFAULT NULL");
 addColumn($pdo, 'exam_submissions', 'uploaded_file_hash', "VARCHAR(64) DEFAULT NULL");
 
-// Epic 2.1 Qualification Submission Columns
 addColumn($pdo, 'exam_submissions', 'qualification_status', "VARCHAR(30) NOT NULL DEFAULT 'pending'");
 addColumn($pdo, 'exam_submissions', 'attempt_number', "INT(11) NOT NULL DEFAULT 1");
 
-// ============================================
-// SUBJECTS & DEPARTMENTS TABLES
-// ============================================
 $pdo->exec("
     CREATE TABLE IF NOT EXISTS `subjects` (
         `id` INT(11) AUTO_INCREMENT PRIMARY KEY,
@@ -143,9 +118,6 @@ $pdo->exec("
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ");
 
-// ============================================
-// NEW TABLES
-// ============================================
 echo "\n--- New tables ---\n";
 
 if (!tableExists($pdo, 'student_details')) {
@@ -332,13 +304,39 @@ if (!tableExists($pdo, 'submission_status_history')) {
 } else {
     echo "  [=] Table submission_status_history already exists\n";
 }
+echo "\n--- Epic 2.2 Cross-Period Lesson Pool ---\n";
+addColumn($pdo, 'lesson_materials', 'academic_period', "VARCHAR(20) NOT NULL DEFAULT 'general'");
+addColumn($pdo, 'lesson_materials', 'semester', "VARCHAR(20) DEFAULT NULL");
+addColumn($pdo, 'lesson_materials', 'school_year', "VARCHAR(20) DEFAULT NULL");
+addColumn($pdo, 'lesson_materials', 'year_level', "VARCHAR(50) DEFAULT NULL");
+addColumn($pdo, 'lesson_materials', 'program', "VARCHAR(100) DEFAULT NULL");
 
-// ============================================
-// SEED DEFAULT CREDENTIALS (Russel & Nicole)
-// ============================================
+addColumn($pdo, 'exams', 'covered_periods', "VARCHAR(255) DEFAULT NULL");
+addColumn($pdo, 'exams', 'source_lesson_count', "INT(11) DEFAULT 0");
+addColumn($pdo, 'exams', 'generation_source_type', "VARCHAR(50) DEFAULT NULL");
+addColumn($pdo, 'exams', 'generation_batch_id', "VARCHAR(64) DEFAULT NULL");
+
+if (!tableExists($pdo, 'generated_question_sources')) {
+    $pdo->exec("
+        CREATE TABLE `generated_question_sources` (
+            `id` INT(11) NOT NULL AUTO_INCREMENT,
+            `question_id` INT(11) NOT NULL,
+            `lesson_id` INT(11) NOT NULL,
+            `academic_period` VARCHAR(20) DEFAULT NULL,
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `question_id` (`question_id`),
+            KEY `lesson_id` (`lesson_id`),
+            UNIQUE KEY `uq_question_lesson` (`question_id`, `lesson_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+    ");
+    echo "  [+] Created table generated_question_sources\n";
+} else {
+    echo "  [=] Table generated_question_sources already exists\n";
+}
+
 $defaultPassHash = password_hash('Password123!', PASSWORD_DEFAULT);
 
-// Seed Admin: Russel
 $stmtUsr = $pdo->prepare("
     INSERT INTO users (id, username, fullname, email, password, role) 
     VALUES (10, 'Russel', 'Russel Gregorio', 'russel@gmail.com', ?, 'admin') 
@@ -346,7 +344,6 @@ $stmtUsr = $pdo->prepare("
 ");
 $stmtUsr->execute([$defaultPassHash, $defaultPassHash]);
 
-// Seed Student: Nicole
 $stmtUsr = $pdo->prepare("
     INSERT INTO users (id, username, fullname, email, password, role) 
     VALUES (11, 'Nicole', 'Ashley Nicole Gutierrez', 'nikol@gmail.com', ?, 'student') 
@@ -354,7 +351,6 @@ $stmtUsr = $pdo->prepare("
 ");
 $stmtUsr->execute([$defaultPassHash, $defaultPassHash]);
 
-// Seed Student details for Nicole
 $stmtSd = $pdo->prepare("
     INSERT INTO student_details (user_id, student_number, course, year_level, section) 
     VALUES (11, '23-2149184', 'BSCE', 4, 'A') 
@@ -362,7 +358,6 @@ $stmtSd = $pdo->prepare("
 ");
 $stmtSd->execute();
 
-// Seed Teacher: lasjo (jolas)
 $stmtUsr = $pdo->prepare("
     INSERT INTO users (id, username, fullname, email, password, role) 
     VALUES (12, 'lasjo', 'jolas', 'lasjo@gmail.com', ?, 'teacher') 

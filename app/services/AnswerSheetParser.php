@@ -2,9 +2,8 @@
 
 class AnswerSheetParser {
 
-    /**
-     * Parse raw OCR text into structured question-number to answer mappings
-     */
+    
+
     public static function parseAnswerSheet($ocrText, array $examQuestions = []) {
         if (empty(trim($ocrText))) {
             return [
@@ -24,7 +23,7 @@ class AnswerSheetParser {
         $unmatchedText = [];
         $warnings = [];
 
-        // Match numbered lines like "1. A", "2) B", "Q3: True", "4 - Shear Wall", "5. Option C"
+        
         $pattern = '/^(?:Q|q|Question|\#)?\s*(\d+)[\.\)\:\-]\s*(.+)$/i';
 
         foreach ($lines as $line) {
@@ -46,12 +45,12 @@ class AnswerSheetParser {
             }
         }
 
-        // Map parsed numbers to question IDs
+        
         $missingNumbers = [];
         $requiresReview = !empty($duplicateNumbers) || !empty($unmatchedText);
 
         if (!empty($examQuestions)) {
-            // Sort exam questions by ID or sequence
+            
             $qCount = count($examQuestions);
             $index = 1;
             foreach ($examQuestions as $q) {

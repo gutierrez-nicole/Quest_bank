@@ -6,7 +6,7 @@ require_once __DIR__ . '/AuthorizationService.php';
 
 class ResultWorkflowService {
 
-    // Normal forward workflow transitions for teachers
+    
     const ALLOWED_TRANSITIONS = [
         'pending_review' => ['reviewed'],
         'reviewed'       => ['finalized'],
@@ -15,14 +15,12 @@ class ResultWorkflowService {
         'archived'       => []
     ];
 
-    /**
-     * Validate and transition submission review status server-side.
-     * Role authorization is strictly retrieved from the database using $reviewerId.
-     */
+    
+
     public static function transitionStatus($submissionId, $targetStatus, $reviewerId, $remarks = '') {
         $pdo = getDBConnection();
 
-        // Load actor from database to prevent role parameter spoofing
+        
         $stmtUser = $pdo->prepare("SELECT id, role, status FROM users WHERE id = ?");
         $stmtUser->execute([$reviewerId]);
         $actor = $stmtUser->fetch(PDO::FETCH_ASSOC);
@@ -41,7 +39,7 @@ class ResultWorkflowService {
             throw new Exception("Submission #{$submissionId} not found.");
         }
 
-        // Centralized Authorization Enforcement
+        
         if (!AuthorizationService::canReviewSubmission($reviewerId, $submissionId)) {
             throw new SecurityException("Unauthorized: User #{$reviewerId} is not authorized to review submission #{$submissionId}.");
         }
@@ -53,23 +51,23 @@ class ResultWorkflowService {
             throw new SecurityException("Unauthorized: User #{$reviewerId} is not authorized to publish submission #{$submissionId}.");
         }
 
-        // Ordinary teachers are strictly prohibited from backward transitions
+        
         $backwardTransitions = ['reviewed' => 'pending_review', 'finalized' => 'reviewed', 'published' => 'finalized', 'archived' => 'published'];
         if (isset($backwardTransitions[$currentStatus]) && $backwardTransitions[$currentStatus] === $targetStatus) {
             throw new SecurityException("Unauthorized: Teachers cannot perform backward transitions or reopen results. Use the administrative reopen workflow instead.");
         }
 
-        // Check if transition is valid in the forward workflow map
+        
         if (!isset(self::ALLOWED_TRANSITIONS[$currentStatus]) || !in_array($targetStatus, self::ALLOWED_TRANSITIONS[$currentStatus])) {
             throw new InvalidArgumentException("Illegal status transition from '{$currentStatus}' to '{$targetStatus}'. Skipped or backward transitions are strictly rejected.");
         }
 
-        // Validate finalization blockers
+        
         if ($targetStatus === 'finalized') {
             $ocrConf = floatval($sub['ocr_confidence'] ?? 100.00);
             $manualRev = intval($sub['suggested_manual_review'] ?? 0);
 
-            // Check item-level review flags in submission_answers
+            
             $stmtAns = $pdo->prepare("SELECT COUNT(*) FROM submission_answers WHERE submission_id = ? AND requires_review = 1");
             $stmtAns->execute([$submissionId]);
             $unresolvedItems = intval($stmtAns->fetchColumn());
@@ -79,7 +77,7 @@ class ResultWorkflowService {
             }
         }
 
-        // Validate publication requirements
+        
         if ($targetStatus === 'published') {
             if ($currentStatus !== 'finalized' && $currentStatus !== 'archived') {
                 throw new LogicException("Publication rejected: Submission must be in 'finalized' status before publishing.");
@@ -103,7 +101,7 @@ class ResultWorkflowService {
             ");
             $stmtUpd->execute([$targetStatus, $reviewerId, $remarks, $reviewedAt, $publishedAt, $submissionId]);
 
-            // Log transition history
+            
             $stmtHist = $pdo->prepare("
                 INSERT INTO submission_status_history (submission_id, previous_status, new_status, actor_id, remarks, created_at)
                 VALUES (?, ?, ?, ?, ?, NOW())
@@ -130,10 +128,8 @@ class ResultWorkflowService {
         }
     }
 
-    /**
-     * Separate explicit Administrative Reopen Workflow for backward transitions.
-     * Requires DB-verified admin user and mandatory reason, and preserves a full snapshot before reopening.
-     */
+    
+
     public static function reopenSubmission($submissionId, $adminId, $targetStatus, $reason) {
         $pdo = getDBConnection();
 
@@ -165,7 +161,7 @@ class ResultWorkflowService {
             throw new InvalidArgumentException("Invalid reopen target status '{$targetStatus}'. Allowed reopen targets: pending_review, reviewed, finalized.");
         }
 
-        // Fetch all current item-level answers for snapshot
+        
         $stmtAns = $pdo->prepare("SELECT question_id, student_answer, correct_answer, awarded_points, max_points, evaluation_status, evaluation_reason FROM submission_answers WHERE submission_id = ?");
         $stmtAns->execute([$submissionId]);
         $itemAnswers = $stmtAns->fetchAll(PDO::FETCH_ASSOC);
@@ -173,7 +169,7 @@ class ResultWorkflowService {
         $pdo->beginTransaction();
 
         try {
-            // Save complete grading snapshot in submission_snapshots table
+            
             $stmtSnap = $pdo->prepare("
                 INSERT INTO submission_snapshots (
                     submission_id, review_status, status, published_at, reviewed_at,
@@ -229,9 +225,8 @@ class ResultWorkflowService {
         }
     }
 
-    /**
-     * Override item score or answer by teacher with full audit logging, validation, and total score recalculation
-     */
+    
+
     public static function overrideScore($submissionId, $questionId, $newPoints, $teacherId, $reason = '', $newAnswer = null) {
         $pdo = getDBConnection();
 
@@ -256,12 +251,12 @@ class ResultWorkflowService {
             throw new LogicException("Cannot override scores on finalized or published results without an administrative reopen workflow.");
         }
 
-        // Authorization check: Verify ownership via AuthorizationService
+        
         if (!AuthorizationService::canOverrideScore($teacherId, $submissionId)) {
             throw new SecurityException("Unauthorized: You do not have ownership permission to override scores for submission #{$submissionId}.");
         }
 
-        // Fetch original answer record
+        
         $stmtAns = $pdo->prepare("SELECT * FROM submission_answers WHERE submission_id = ? AND question_id = ?");
         $stmtAns->execute([$submissionId, $questionId]);
         $ans = $stmtAns->fetch(PDO::FETCH_ASSOC);
@@ -283,7 +278,7 @@ class ResultWorkflowService {
         $pdo->beginTransaction();
 
         try {
-            // Log complete question-level audit history in submission_score_overrides
+            
             $oldCorrectAnswer = $ans['correct_answer'] ?? null;
             $newCorrectAnswer = $oldCorrectAnswer;
             $stmtLog = $pdo->prepare("
@@ -301,14 +296,14 @@ class ResultWorkflowService {
                 $oldPoints,
                 $newPoints,
                 $sub['total_score'],
-                $newPoints, // will be recalculated below
+                $newPoints, 
                 $oldCorrectAnswer,
                 $newCorrectAnswer,
                 $teacherId,
                 $reason
             ]);
 
-            // Update item answer row
+            
             $stmtUpdAns = $pdo->prepare("
                 UPDATE submission_answers 
                 SET awarded_points = ?, student_answer = ?, evaluation_status = ?, evaluation_reason = ?, requires_review = 0 
@@ -316,7 +311,7 @@ class ResultWorkflowService {
             ");
             $stmtUpdAns->execute([$newPoints, $updatedAnswer, $evalStatus, 'Teacher score override: ' . $reason, $submissionId, $questionId]);
 
-            // Recalculate total submission score server-side
+            
             $stmtSum = $pdo->prepare("
                 SELECT SUM(awarded_points) as total_awarded, SUM(max_points) as total_possible,
                        SUM(CASE WHEN evaluation_status = 'correct' THEN 1 ELSE 0 END) as correct_cnt,
@@ -371,11 +366,8 @@ class ResultWorkflowService {
         }
     }
 
-    /**
-     * Reprocess OCR for a submission through the production scoring engine (ExamScoringService).
-     * Enforces stored question keys, updates submission_answers, recalculates aggregate totals,
-     * and logs full evidence in submission_reprocessing_history.
-     */
+    
+
     public static function reprocessOcr($submissionId, $actorId, $reason = 'OCR Re-run') {
         $pdo = getDBConnection();
 
@@ -383,7 +375,7 @@ class ResultWorkflowService {
             throw new InvalidArgumentException("Reprocessing reason is required.");
         }
 
-        // Fetch submission
+        
         $stmtSub = $pdo->prepare("SELECT * FROM exam_submissions WHERE id = ?");
         $stmtSub->execute([$submissionId]);
         $sub = $stmtSub->fetch(PDO::FETCH_ASSOC);
@@ -392,12 +384,12 @@ class ResultWorkflowService {
             throw new Exception("Submission #{$submissionId} not found.");
         }
 
-        // Authorization check
+        
         if (!AuthorizationService::canReviewSubmission($actorId, $submissionId)) {
             throw new SecurityException("Unauthorized: User #{$actorId} is not authorized to reprocess submission #{$submissionId}.");
         }
 
-        // Published/Finalized Protection: Require admin reopen before OCR rerun
+        
         if (in_array($sub['review_status'], ['finalized', 'published', 'archived'])) {
             throw new LogicException("Cannot re-run OCR on finalized, published, or archived results without an administrative reopen workflow.");
         }
@@ -405,7 +397,7 @@ class ResultWorkflowService {
         $examId = intval($sub['exam_id']);
         $studentId = intval($sub['student_id']);
 
-        // Load stored exam questions for this exact exam
+        
         $stmtQ = $pdo->prepare("SELECT * FROM exam_questions WHERE exam_id = ? ORDER BY id ASC");
         $stmtQ->execute([$examId]);
         $questions = $stmtQ->fetchAll(PDO::FETCH_ASSOC);
@@ -414,7 +406,7 @@ class ResultWorkflowService {
             throw new Exception("Exam #{$examId} has no questions configured for scoring.");
         }
 
-        // Load original uploaded answer sheet file if present
+        
         $filePath = $sub['file_path'] ?? null;
         $ocrText = $sub['ocr_text'] ?? '';
         $submittedAnswers = [];
@@ -446,7 +438,7 @@ class ResultWorkflowService {
             }
         }
 
-        // Check if there are existing submission_answers
+        
         $stmtOldAns = $pdo->prepare("SELECT question_id, student_answer, awarded_points, max_points, evaluation_status FROM submission_answers WHERE submission_id = ?");
         $stmtOldAns->execute([$submissionId]);
         $previousItemScoresList = $stmtOldAns->fetchAll(PDO::FETCH_ASSOC);
@@ -457,7 +449,7 @@ class ResultWorkflowService {
             }
         }
 
-        // Parse OCR text if answers are unpopulated
+        
         if (!empty($ocrText)) {
             if (file_exists(__DIR__ . '/AnswerSheetParser.php')) {
                 require_once __DIR__ . '/AnswerSheetParser.php';
@@ -477,7 +469,7 @@ class ResultWorkflowService {
             }
         }
 
-        // Score through ExamScoringService
+        
         require_once __DIR__ . '/ExamScoringService.php';
 
         $totalAwardedPoints = 0.00;
@@ -517,7 +509,7 @@ class ResultWorkflowService {
         $pdo->beginTransaction();
 
         try {
-            // Save reprocessing history
+            
             $stmtHist = $pdo->prepare("
                 INSERT INTO submission_reprocessing_history (
                     submission_id, previous_ocr_text, new_ocr_text, previous_item_scores,
@@ -539,7 +531,7 @@ class ResultWorkflowService {
                 $reason
             ]);
 
-            // Update item-level submission_answers with ALL fields updated
+            
             $stmtAnswer = $pdo->prepare("
                 INSERT INTO submission_answers (
                     submission_id, exam_id, student_id, question_id, student_answer,
@@ -578,7 +570,7 @@ class ResultWorkflowService {
                 ]);
             }
 
-            // Update submission totals and evaluation_result
+            
             $stmtUpdSub = $pdo->prepare("
                 UPDATE exam_submissions 
                 SET correct_count = ?, wrong_count = ?, total_score = ?, total_possible_score = ?,
@@ -619,9 +611,8 @@ class ResultWorkflowService {
         }
     }
 
-    /**
-     * Enforce student privacy check: Ensures current user is authorized to view submission
-     */
+    
+
     public static function enforceStudentPrivacy($submissionId, $currentStudentId) {
         $pdo = getDBConnection();
 

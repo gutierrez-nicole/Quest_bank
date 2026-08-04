@@ -178,7 +178,7 @@ unset($ex);
                             </select>
                         </div>
 
-                        <!-- Qualifying Exam Parameters Panel -->
+                        
                         <div id="qualifying_config_panel" class="hidden p-4 bg-orange-50/60 border border-orange-200 rounded-xl space-y-4">
                             <div class="flex items-center gap-2 border-b border-orange-200 pb-2">
                                 <i class="fa-solid fa-award text-orange-600"></i>

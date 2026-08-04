@@ -25,7 +25,7 @@ function assertCondition($condition, $testName, $details = '') {
 }
 
 try {
-    // 1. Create a Qualifying Exam via ExamService
+    
     $questions = [
         ['text' => 'What is the minimum concrete cover for cast-in-place concrete beams?', 'type' => 'multiple_choice', 'correct' => 'A', 'points' => 1],
         ['text' => 'Nominal shear strength of concrete beam formula symbol is Vc.', 'type' => 'true_false', 'correct' => 'true', 'points' => 1],
@@ -48,7 +48,7 @@ try {
 
     $examId = $res['exam_id'];
 
-    // Verify stored DB columns
+    
     $stmtEx = $pdo->prepare("SELECT * FROM exams WHERE id = ?");
     $stmtEx->execute([$examId]);
     $examDb = $stmtEx->fetch(PDO::FETCH_ASSOC);
@@ -59,27 +59,27 @@ try {
     assertCondition($examDb['qualifying_year_level'] === '4th Year', 'TEST 5: Eligible Year Level Saved', "year_level = {$examDb['qualifying_year_level']}");
     assertCondition($examDb['qualifying_program'] === 'BSCE', 'TEST 6: Eligible Program Saved', "program = {$examDb['qualifying_program']}");
 
-    // 2. Student Eligibility Checks
-    // Eligible student (ID 11 = Ashley Nicole Gutierrez, BSCE 4th Year)
+    
+    
     $elig1 = ExamService::checkStudentEligibility(11, $examId);
     assertCondition($elig1['eligible'] === true, 'TEST 7: Eligible Student Access Allowed', 'BSCE 4th Year student allowed');
 
-    // Test Ineligible Program (Temporary mock check)
-    // Modify exam to BSCS program eligibility
+    
+    
     $pdo->prepare("UPDATE exams SET qualifying_program = 'BSCS' WHERE id = ?")->execute([$examId]);
     $elig2 = ExamService::checkStudentEligibility(11, $examId);
     assertCondition($elig2['eligible'] === false, 'TEST 8: Wrong Program Rejection', "Reason: " . ($elig2['reason'] ?? ''));
 
-    // Revert exam program to BSCE and test Wrong Year Level
+    
     $pdo->prepare("UPDATE exams SET qualifying_program = 'BSCE', qualifying_year_level = '1st Year' WHERE id = ?")->execute([$examId]);
     $elig3 = ExamService::checkStudentEligibility(11, $examId);
     assertCondition($elig3['eligible'] === false, 'TEST 9: Wrong Year Level Rejection', "Reason: " . ($elig3['reason'] ?? ''));
 
-    // Revert exam requirements
+    
     $stmtRevert = $pdo->prepare("UPDATE exams SET qualifying_program = 'BSCE', qualifying_year_level = '4th Year' WHERE id = ?");
     $stmtRevert->execute([$examId]);
 
-    // Fetch actual question IDs for this exam
+    
     $stmtQs = $pdo->prepare("SELECT id, correct_answer FROM exam_questions WHERE exam_id = ? ORDER BY id ASC");
     $stmtQs->execute([$examId]);
     $qsDb = $stmtQs->fetchAll(PDO::FETCH_ASSOC);
@@ -87,8 +87,8 @@ try {
     $qId2 = isset($qsDb[1]['id']) ? (int)$qsDb[1]['id'] : 0;
     $qId3 = isset($qsDb[2]['id']) ? (int)$qsDb[2]['id'] : 0;
 
-    // 3. Test Qualification Scoring (Passing Score = 80%)
-    // Submission 1: Score 100% (3/3) -> Qualified
+    
+    
     try {
         $sub1 = ExamScoringService::evaluateAndSaveSubmission($examId, 11, [
             $qId1 => 'A',
@@ -100,14 +100,14 @@ try {
         assertCondition(false, 'TEST 10: Submission 1 Score Calculation', "Error: " . $e->getMessage());
     }
 
-    // Check DB submission qualification status
+    
     $stmtSub = $pdo->prepare("SELECT qualification_status, attempt_number FROM exam_submissions WHERE exam_id = ? AND student_id = ? ORDER BY id DESC LIMIT 1");
     $stmtSub->execute([$examId, 11]);
     $subDb1 = $stmtSub->fetch(PDO::FETCH_ASSOC);
     assertCondition(($subDb1['qualification_status'] ?? '') === 'qualified', 'TEST 11: High Score Qualification Status = qualified', "status = " . ($subDb1['qualification_status'] ?? 'none'));
     assertCondition(intval($subDb1['attempt_number'] ?? 0) === 1, 'TEST 12: Attempt Counter Incremented to 1', "attempt_number = " . ($subDb1['attempt_number'] ?? 0));
 
-    // Submission 2: Score 33.33% (1/3) -> Not Qualified
+    
     try {
         $sub2 = ExamScoringService::evaluateAndSaveSubmission($examId, 11, [
             $qId1 => 'B',
@@ -122,15 +122,15 @@ try {
         assertCondition(false, 'TEST 13/14: Submission 2 Evaluation', "Error: " . $e->getMessage());
     }
 
-    // 4. Test Attempt Limit Enforcement (Max attempts = 2, attempts taken = 2)
+    
     $elig4 = ExamService::checkStudentEligibility(11, $examId);
     assertCondition($elig4['eligible'] === false, 'TEST 15: Maximum Attempt Limit Reached Blocking', "Reason: " . ($elig4['reason'] ?? ''));
 
-    // 5. Test Deadline Expiration Blocking
+    
     $stmtDeadUpd = $pdo->prepare("UPDATE exams SET qualifying_deadline = ? WHERE id = ?");
     $stmtDeadUpd->execute([date('Y-m-d H:i:s', strtotime('-10 minutes')), $examId]);
 
-    // Create new exam with 0 attempts taken
+    
     $resDead = ExamService::createExam(12, 'Expired Deadline Qualifying Exam', 'Geotechnical Eng', 'Geotechnical Engineering', 30, $questions, [
         'exam_category' => 'qualifying',
         'qualifying_deadline' => date('Y-m-d H:i:s', strtotime('-10 minutes'))
@@ -138,14 +138,14 @@ try {
     $eligDead = ExamService::checkStudentEligibility(11, $resDead['exam_id']);
     assertCondition($eligDead['eligible'] === false, 'TEST 16: Expired Deadline Blocking', "Reason: " . ($eligDead['reason'] ?? ''));
 
-    // 6. Test Regular Exams Unaffected
+    
     $resReg = ExamService::createExam(12, 'Regular Final Examination', 'Hydraulics', 'Water Resources', 60, $questions, ['exam_category' => 'regular']);
     $stmtExReg = $pdo->prepare("SELECT exam_category FROM exams WHERE id = ?");
     $stmtExReg->execute([$resReg['exam_id']]);
     $catReg = $stmtExReg->fetchColumn();
     assertCondition($catReg === 'regular', 'TEST 17: Regular Exam Unaffected', "category = {$catReg}");
 
-    // Cleanup created test records
+    
     $createdExamIds = array_filter([$examId, $resDead['exam_id'] ?? null, $resReg['exam_id'] ?? null]);
     if (!empty($createdExamIds)) {
         $inClause = implode(',', array_map('intval', $createdExamIds));

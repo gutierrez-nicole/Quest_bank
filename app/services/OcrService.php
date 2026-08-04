@@ -46,7 +46,7 @@ class OcrService {
             ];
         }
 
-        if ($fileSize > 20971520) { // 20MB
+        if ($fileSize > 20971520) { 
             return [
                 'success' => false,
                 'status' => 'failed',
@@ -63,12 +63,12 @@ class OcrService {
             ];
         }
 
-        // MIME & Magic Byte Inspection
+        
         $finfo = finfo_open(FILEINFO_MIME_TYPE);
         $detectedMime = finfo_file($finfo, $filePath);
         finfo_close($finfo);
 
-        // Header magic bytes check
+        
         $headerBytes = @file_get_contents($filePath, false, null, 0, 16);
         $isPdfBytes = (strpos($headerBytes, '%PDF-') === 0);
         $isPngBytes = (substr($headerBytes, 0, 4) === "\x89PNG");
@@ -127,7 +127,7 @@ class OcrService {
             $cleanText = self::cleanOcrText($extractedText);
             $executionTime = round((microtime(true) - $startTime) * 1000, 2);
 
-            // Preserved failed status
+            
             if ($status === 'failed') {
                 return [
                     'success' => false,
@@ -145,7 +145,7 @@ class OcrService {
                 ];
             }
 
-            // Empty/Blank output handling
+            
             if (empty(trim($cleanText))) {
                 return [
                     'success' => true,
@@ -225,7 +225,7 @@ class OcrService {
             ];
         }
 
-        // Check for blank image using GD brightness variance
+        
         if (function_exists('imagecreatefromstring')) {
             $imgData = @file_get_contents($filePath);
             $gdImg = @imagecreatefromstring($imgData);
@@ -244,7 +244,7 @@ class OcrService {
             }
         }
 
-        // Attempt Tesseract OCR CLI with TSV output for word confidence
+        
         $tesseractPath = exec('which tesseract 2>/dev/null');
         if (!empty($tesseractPath) && is_executable($tesseractPath)) {
             $tmpOutputBase = tempnam(sys_get_temp_dir(), 'ocr_tsv_');
@@ -275,7 +275,7 @@ class OcrService {
             }
         }
 
-        // Default safe failure response when OCR engine unavailable or scan unreadable
+        
         return [
             'text' => '',
             'confidence' => 0.00,
@@ -355,7 +355,7 @@ class OcrService {
         $pages = preg_match_all('/\/Type\s*\/Page[^s]/i', $content);
         if ($pages === 0) $pages = 1;
 
-        // Extract text stream objects
+        
         preg_match_all('/stream[\r\n]+(.*?)[\r\n]+endstream/is', $content, $matches);
         $extractedText = '';
 
@@ -377,7 +377,7 @@ class OcrService {
             return [
                 'text' => trim($extractedText),
                 'pages' => max(1, $pages),
-                'confidence' => 100.00, // 100% extraction quality for native PDF text
+                'confidence' => 100.00, 
                 'status' => 'completed',
                 'extraction_mode' => 'native_pdf_text',
                 'suggested_manual_review' => false,
@@ -385,7 +385,7 @@ class OcrService {
             ];
         }
 
-        // Scanned PDF without text layer: Attempt CLI tool conversion (pdftoppm / ImageMagick)
+        
         $pdftoppmPath = exec('which pdftoppm 2>/dev/null');
         $tesseractPath = exec('which tesseract 2>/dev/null');
 
@@ -428,7 +428,7 @@ class OcrService {
             }
         }
 
-        // Scanned PDF without text layer & conversion tools unavailable
+        
         return [
             'text' => '',
             'pages' => max(1, $pages),

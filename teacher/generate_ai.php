@@ -10,10 +10,28 @@ $error_msg = "";
 $generated_questions = null;
 $ai_meta_output = null;
 
-// Fetch teacher's completed lesson materials
-$stmtMaterials = $pdo->prepare("SELECT id, title, subject, lesson_text, word_count, page_count FROM lesson_materials WHERE teacher_id = ? AND processing_status = 'completed' ORDER BY id DESC");
+$stmtMaterials = $pdo->prepare("
+    SELECT id, title, subject, lesson_text, word_count, page_count,
+           COALESCE(academic_period, 'general') AS academic_period,
+           semester, school_year, year_level, program
+    FROM lesson_materials 
+    WHERE teacher_id = ? AND processing_status = 'completed' 
+    ORDER BY FIELD(COALESCE(academic_period,'general'), 'prelim','midterm','finals','general'), id DESC
+");
 $stmtMaterials->execute([$teacher_id]);
 $completed_lessons = $stmtMaterials->fetchAll(PDO::FETCH_ASSOC);
+
+$lessons_by_period = [];
+foreach ($completed_lessons as $cl) {
+    $period = $cl['academic_period'] ?? 'general';
+    $lessons_by_period[$period][] = $cl;
+}
+
+$filter_subjects = array_unique(array_filter(array_column($completed_lessons, 'subject')));
+$filter_semesters = array_unique(array_filter(array_column($completed_lessons, 'semester')));
+$filter_school_years = array_unique(array_filter(array_column($completed_lessons, 'school_year')));
+$filter_year_levels = array_unique(array_filter(array_column($completed_lessons, 'year_level')));
+$filter_programs = array_unique(array_filter(array_column($completed_lessons, 'program')));
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']) || isset($_POST['selected_lessons']) || !empty($_POST['lesson_text']))) {
     validateCSRFToken();
@@ -29,39 +47,90 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
 
     $final_lesson_content = "";
     $associated_lesson_ids = [];
+    $associated_periods = [];
+    $generation_batch_id = bin2hex(random_bytes(16));
+    $generation_source_type = 'manual';
+    $generation_warnings = [];
 
     if ($input_source === 'extracted' && !empty($selected_lesson_ids)) {
-        if (in_array('all', $selected_lesson_ids)) {
-            foreach ($completed_lessons as $cl) {
-                $final_lesson_content .= "\n\n=== Lesson: {$cl['title']} ({$cl['subject']}) ===\n" . $cl['lesson_text'];
-                $associated_lesson_ids[] = $cl['id'];
-            }
-        } else {
+        
+        $selected_lesson_ids = array_filter($selected_lesson_ids, function($id) { return $id !== 'all'; });
+        $selected_lesson_ids = array_unique(array_map('intval', $selected_lesson_ids));
+
+        if (!empty($selected_lesson_ids)) {
+            
             $placeholders = implode(',', array_fill(0, count($selected_lesson_ids), '?'));
-            $stmtFetchSel = $pdo->prepare("SELECT id, title, subject, lesson_text FROM lesson_materials WHERE id IN ($placeholders) AND teacher_id = ?");
-            $params = array_merge(array_map('intval', $selected_lesson_ids), [$teacher_id]);
+            $stmtFetchSel = $pdo->prepare("
+                SELECT id, title, subject, lesson_text, COALESCE(academic_period,'general') AS academic_period,
+                       processing_status, word_count
+                FROM lesson_materials 
+                WHERE id IN ($placeholders) AND teacher_id = ?
+            ");
+            $params = array_merge($selected_lesson_ids, [$teacher_id]);
             $stmtFetchSel->execute($params);
             $selLessons = $stmtFetchSel->fetchAll(PDO::FETCH_ASSOC);
 
-            foreach ($selLessons as $sl) {
-                $final_lesson_content .= "\n\n=== Lesson: {$sl['title']} ({$sl['subject']}) ===\n" . $sl['lesson_text'];
-                $associated_lesson_ids[] = $sl['id'];
+            
+            $returnedIds = array_column($selLessons, 'id');
+            $unauthorizedIds = array_diff($selected_lesson_ids, $returnedIds);
+            if (!empty($unauthorizedIds)) {
+                $error_msg = "Access denied: one or more selected lesson IDs are unauthorized or do not exist.";
+            }
+
+            if (empty($error_msg)) {
+                $lessonIndex = 1;
+                foreach ($selLessons as $sl) {
+                    
+                    if ($sl['processing_status'] !== 'completed') {
+                        $generation_warnings[] = "Lesson '{$sl['title']}' skipped: extraction not completed.";
+                        continue;
+                    }
+                    if (empty(trim($sl['lesson_text'] ?? ''))) {
+                        $generation_warnings[] = "Lesson '{$sl['title']}' skipped: empty extracted content.";
+                        continue;
+                    }
+
+                    
+                    $final_lesson_content .= "\n\nSOURCE LESSON {$lessonIndex}\n";
+                    $final_lesson_content .= "Lesson ID: {$sl['id']}\n";
+                    $final_lesson_content .= "Period: " . ucfirst($sl['academic_period']) . "\n";
+                    $final_lesson_content .= "Title: {$sl['title']}\n";
+                    $final_lesson_content .= "Content:\n" . $sl['lesson_text'];
+
+                    $associated_lesson_ids[] = (int)$sl['id'];
+                    $associated_periods[] = $sl['academic_period'];
+                    $lessonIndex++;
+                }
+                $associated_periods = array_unique($associated_periods);
+                $generation_source_type = count($associated_periods) > 1 ? 'cross_period_lessons' : 'single_period_lessons';
             }
         }
     } else {
         $final_lesson_content = $lesson_text;
+        $generation_source_type = 'manual';
     }
 
-    if (!empty(trim($final_lesson_content)) && $num_questions > 0) {
+    if (!empty(trim($final_lesson_content)) && $num_questions > 0 && empty($error_msg)) {
         $result = GroqService::generateQuestions($final_lesson_content, $num_questions, $subject, $exam_title, $specialization, $question_type, $difficulty);
         if (isset($result['success'])) {
             $generated_questions = $result['questions'];
-            $ai_meta_output = array_merge($result['metadata'] ?? [], ['lesson_ids' => $associated_lesson_ids]);
-            $success_msg = "AI successfully generated " . count($generated_questions) . " question items from " . ($input_source === 'extracted' ? count($associated_lesson_ids) . " extracted lesson(s)" : "manual text") . "!";
+            $ai_meta_output = array_merge($result['metadata'] ?? [], [
+                'lesson_ids' => $associated_lesson_ids,
+                'covered_periods' => array_values($associated_periods),
+                'generation_batch_id' => $generation_batch_id,
+                'generation_source_type' => $generation_source_type,
+                'source_lesson_count' => count($associated_lesson_ids),
+                'generation_warnings' => $generation_warnings
+            ]);
+            $periodLabel = !empty($associated_periods) ? ' (' . implode(', ', array_map('ucfirst', $associated_periods)) . ')' : '';
+            $success_msg = "AI successfully generated " . count($generated_questions) . " question items from " . ($input_source === 'extracted' ? count($associated_lesson_ids) . " extracted lesson(s)" . $periodLabel : "manual text") . "!";
+            if (!empty($generation_warnings)) {
+                $success_msg .= " ⚠ " . count($generation_warnings) . " lesson(s) skipped.";
+            }
         } else {
             $error_msg = $result['error'] ?? "Failed to generate AI questions.";
         }
-    } else {
+    } elseif (empty($error_msg)) {
         $error_msg = "Please select extracted lesson materials or paste valid lesson content.";
     }
 }
@@ -84,6 +153,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
     $meta_json = $_POST['save_ai_metadata'] ?? '{}';
     $lesson_ids_str = $_POST['save_lesson_ids'] ?? '';
 
+    
+    $metaData = json_decode($meta_json, true) ?? [];
+    $save_covered_periods = !empty($metaData['covered_periods']) ? implode(',', $metaData['covered_periods']) : null;
+    $save_source_lesson_count = intval($metaData['source_lesson_count'] ?? 0);
+    $save_generation_source_type = $metaData['generation_source_type'] ?? null;
+    $save_generation_batch_id = $metaData['generation_batch_id'] ?? null;
+    $save_ai_model = $metaData['model'] ?? null;
+
     if (!empty($title) && !empty($subject) && !empty($questions)) {
         try {
             $pdo->beginTransaction();
@@ -92,8 +169,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
                 INSERT INTO exams 
                 (teacher_id, title, subject, specialization, difficulty, time_limit, total_items, ai_metadata, lesson_ids,
                  exam_category, qualifying_passing_percentage, qualifying_max_attempts, qualifying_year_level,
-                 qualifying_program, qualifying_is_required, qualifying_unlock_date, qualifying_deadline) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 qualifying_program, qualifying_is_required, qualifying_unlock_date, qualifying_deadline,
+                 covered_periods, source_lesson_count, generation_source_type, generation_batch_id, ai_model) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $stmt->execute([
                 $teacher_id, 
@@ -112,27 +190,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
                 $qualifying_program,
                 $qualifying_is_required,
                 $qualifying_unlock_date,
-                $qualifying_deadline
+                $qualifying_deadline,
+                $save_covered_periods,
+                $save_source_lesson_count,
+                $save_generation_source_type,
+                $save_generation_batch_id,
+                $save_ai_model
             ]);
             $exam_id = $pdo->lastInsertId();
+
+            
+            $saveLessonIds = array_map('intval', array_filter(explode(',', $lesson_ids_str)));
 
             $qStmt = $pdo->prepare("
                 INSERT INTO exam_questions 
                 (exam_id, question_text, question_type, option_a, option_b, option_c, option_d, correct_answer, formula_latex, matching_pairs, points, explanation, difficulty, topic, lesson_id) 
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
+
+            
+            $srcStmt = $pdo->prepare("
+                INSERT IGNORE INTO generated_question_sources (question_id, lesson_id, academic_period) VALUES (?, ?, ?)
+            ");
+
+            
+            $lessonPeriodMap = [];
+            if (!empty($saveLessonIds)) {
+                $plc = implode(',', array_fill(0, count($saveLessonIds), '?'));
+                $stmtPeriods = $pdo->prepare("SELECT id, COALESCE(academic_period,'general') AS academic_period FROM lesson_materials WHERE id IN ($plc)");
+                $stmtPeriods->execute($saveLessonIds);
+                while ($lp = $stmtPeriods->fetch(PDO::FETCH_ASSOC)) {
+                    $lessonPeriodMap[(int)$lp['id']] = $lp['academic_period'];
+                }
+            }
             
             $seenQuestions = [];
             $savedCount = 0;
-            $primaryLessonId = !empty($associated_lesson_ids[0]) ? intval($associated_lesson_ids[0]) : null;
+            $primaryLessonId = !empty($saveLessonIds[0]) ? $saveLessonIds[0] : null;
 
             foreach ($questions as $q) {
                 $qText = trim($q['text'] ?? $q['question'] ?? '');
                 if (empty($qText) || in_array(mb_strtolower($qText), $seenQuestions)) {
-                    continue; // Skip duplicate question text
+                    continue; 
                 }
                 $seenQuestions[] = mb_strtolower($qText);
 
+                $qLessonId = intval($q['lesson_id'] ?? $primaryLessonId ?? 0) ?: $primaryLessonId;
                 $qStmt->execute([
                     $exam_id,
                     $qText,
@@ -148,17 +251,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
                     $q['explanation'] ?? null,
                     $difficulty,
                     $subject,
-                    $q['lesson_id'] ?? $primaryLessonId
+                    $qLessonId
                 ]);
+                $questionId = $pdo->lastInsertId();
                 $savedCount++;
+
+                
+                foreach ($saveLessonIds as $srcLid) {
+                    $srcPeriod = $lessonPeriodMap[$srcLid] ?? 'general';
+                    $srcStmt->execute([$questionId, $srcLid, $srcPeriod]);
+                }
             }
 
-            // Update total items count
+            
             $stmtUpdateTotal = $pdo->prepare("UPDATE exams SET total_items = ? WHERE id = ?");
             $stmtUpdateTotal->execute([$savedCount, $exam_id]);
 
             $pdo->commit();
-            logActivity("Saved AI-generated exam '{$title}' ({$savedCount} deduplicated questions, Difficulty: {$difficulty}).", $teacher_id);
+            $sourceLabel = $save_generation_source_type === 'cross_period_lessons' ? ", Cross-Period" : "";
+            logActivity("Saved AI-generated exam '{$title}' ({$savedCount} deduplicated questions, Difficulty: {$difficulty}{$sourceLabel}).", $teacher_id);
             $success_msg = "AI-generated exam '{$title}' saved to Question Bank successfully!";
             $generated_questions = null;
         } catch (PDOException $e) {

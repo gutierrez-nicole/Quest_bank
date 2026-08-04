@@ -1,17 +1,4 @@
 <?php
-/**
- * QuestBank Safe Database Data Cleanup Script
- *
- * Removes QA, test, mock, and deterministic data while preserving:
- * - Legitimate production users (Admin: Russel, Teacher: lasjo/jolas, Student: Nicole)
- * - Reference tables (departments, subjects, sections)
- * - Approved professional demo dataset (marked with is_demo = 1 or professional metadata)
- *
- * Usage:
- *   php database/cleanup_qa_data.php --dry-run
- *   php database/cleanup_qa_data.php --execute
- *   php database/cleanup_qa_data.php --execute --confirm-production
- */
 
 require_once __DIR__ . '/../app/bootstrap.php';
 
@@ -35,14 +22,12 @@ echo "Mode: " . ($isDryRun ? "DRY-RUN (Preview Only - No DB modifications)" : "E
 echo "Environment: {$env}\n";
 echo "Timestamp: " . date('Y-m-d H:i:s') . "\n\n";
 
-// Helper for column existence
 function colExists($pdo, $table, $col) {
     $stmt = $pdo->prepare("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?");
     $stmt->execute([$table, $col]);
     return (int)$stmt->fetchColumn() > 0;
 }
 
-// Add is_demo column if not present
 if (!colExists($pdo, 'users', 'is_demo')) {
     $pdo->exec("ALTER TABLE `users` ADD COLUMN `is_demo` TINYINT(1) NOT NULL DEFAULT 0");
 }
@@ -56,11 +41,6 @@ if (!colExists($pdo, 'lesson_materials', 'is_demo')) {
     $pdo->exec("ALTER TABLE `lesson_materials` ADD COLUMN `is_demo` TINYINT(1) NOT NULL DEFAULT 0");
 }
 
-// -------------------------------------------------------------
-// 1. INVENTORY & CLASSIFICATION
-// -------------------------------------------------------------
-
-// QA Users to purge
 $qaUsersStmt = $pdo->query("
     SELECT id, username, fullname, email 
     FROM users 
@@ -71,7 +51,6 @@ $qaUsersStmt = $pdo->query("
 $qaUsers = $qaUsersStmt->fetchAll(PDO::FETCH_ASSOC);
 $qaUserIds = array_column($qaUsers, 'id');
 
-// Legitimate users to preserve
 $legitUsersStmt = $pdo->query("
     SELECT id, username, fullname, email, role 
     FROM users 
@@ -79,7 +58,6 @@ $legitUsersStmt = $pdo->query("
 ");
 $legitUsers = $legitUsersStmt->fetchAll(PDO::FETCH_ASSOC);
 
-// QA Exams to purge
 $qaExamsStmt = $pdo->query("
     SELECT id, title, teacher_id 
     FROM exams 
@@ -94,7 +72,6 @@ $qaExamsStmt = $pdo->query("
 $qaExams = $qaExamsStmt->fetchAll(PDO::FETCH_ASSOC);
 $qaExamIds = array_column($qaExams, 'id');
 
-// QA Submissions to purge
 $qaSubmissionsStmt = $pdo->query("
     SELECT id, exam_title, student_name 
     FROM exam_submissions 
@@ -110,7 +87,6 @@ $qaSubmissionsStmt = $pdo->query("
 $qaSubmissions = $qaSubmissionsStmt->fetchAll(PDO::FETCH_ASSOC);
 $qaSubmissionIds = array_column($qaSubmissions, 'id');
 
-// Count dependent records
 $qaSubInClause = empty($qaSubmissionIds) ? "0" : implode(',', $qaSubmissionIds);
 $qaExamInClause = empty($qaExamIds) ? "0" : implode(',', $qaExamIds);
 $qaUserInClause = empty($qaUserIds) ? "0" : implode(',', $qaUserIds);
@@ -156,66 +132,62 @@ if ($isDryRun) {
     exit(0);
 }
 
-// -------------------------------------------------------------
-// 2. TRANSACTIONAL EXECUTION OF SAFE CLEANUP
-// -------------------------------------------------------------
-
 $pdo->beginTransaction();
 
 try {
     echo "=== EXECUTING SAFE DATABASE CLEANUP ===\n";
 
-    // 1. Reprocessing history
+    
     $pdo->exec("DELETE FROM submission_reprocessing_history WHERE submission_id IN ({$qaSubInClause}) OR actor_id IN ({$qaUserInClause})");
     echo "  [✓] Deleted submission_reprocessing_history rows\n";
 
-    // 2. Score overrides
+    
     $pdo->exec("DELETE FROM submission_score_overrides WHERE submission_id IN ({$qaSubInClause}) OR reviewer_id IN ({$qaUserInClause})");
     echo "  [✓] Deleted submission_score_overrides rows\n";
 
-    // 3. Status history
+    
     $pdo->exec("DELETE FROM submission_status_history WHERE submission_id IN ({$qaSubInClause}) OR actor_id IN ({$qaUserInClause})");
     echo "  [✓] Deleted submission_status_history rows\n";
 
-    // 4. Snapshots
+    
     $pdo->exec("DELETE FROM submission_snapshots WHERE submission_id IN ({$qaSubInClause})");
     echo "  [✓] Deleted submission_snapshots rows\n";
 
-    // 5. Submission answers
+    
     $pdo->exec("DELETE FROM submission_answers WHERE submission_id IN ({$qaSubInClause}) OR exam_id IN ({$qaExamInClause})");
     echo "  [✓] Deleted submission_answers rows\n";
 
-    // 6. Exam submissions
+    
     $pdo->exec("DELETE FROM exam_submissions WHERE id IN ({$qaSubInClause}) OR teacher_id IN ({$qaUserInClause}) OR student_id IN ({$qaUserInClause}) OR exam_id IN ({$qaExamInClause})");
     echo "  [✓] Deleted exam_submissions rows\n";
 
-    // 7. Exam questions
+    
     $pdo->exec("DELETE FROM exam_questions WHERE exam_id IN ({$qaExamInClause})");
     echo "  [✓] Deleted exam_questions rows\n";
 
-    // 8. Exams
+    
     $pdo->exec("DELETE FROM exams WHERE id IN ({$qaExamInClause}) OR teacher_id IN ({$qaUserInClause})");
     echo "  [✓] Deleted exams rows\n";
 
-    // 9. Lesson materials
+    
     $pdo->exec("DELETE FROM lesson_materials WHERE teacher_id IN ({$qaUserInClause}) OR original_filename LIKE 'highway_engineering_%' OR original_filename LIKE 'valid_lesson%' OR original_filename IN ('empty.txt', 'corrupt.docx', 'fake.pdf', 'scanned.pdf')");
     echo "  [✓] Deleted lesson_materials rows\n";
 
-    // 10. Student details for QA users
+    
     $pdo->exec("DELETE FROM student_details WHERE user_id IN ({$qaUserInClause})");
     echo "  [✓] Deleted student_details rows for QA accounts\n";
 
-    // 11. Activity logs for QA users
+    
     $pdo->exec("DELETE FROM activity_logs WHERE user_id IN ({$qaUserInClause}) OR action_description LIKE 'QA Audit%'");
     echo "  [✓] Deleted activity_logs rows\n";
 
-    // 12. QA Users
+    
     $pdo->exec("DELETE FROM users WHERE id IN ({$qaUserInClause})");
     echo "  [✓] Deleted QA user accounts\n";
 
-    // -------------------------------------------------------------
-    // 3. ORPHAN CLEANUP STEP
-    // -------------------------------------------------------------
+    
+    
+    
     echo "\n--- Cleaning Orphaned Records ---\n";
     $orphAns = $pdo->exec("DELETE FROM submission_answers WHERE submission_id NOT IN (SELECT id FROM exam_submissions)");
     echo "  [✓] Deleted {$orphAns} orphaned submission_answers rows\n";
@@ -229,12 +201,12 @@ try {
     $orphHistory = $pdo->exec("DELETE FROM submission_status_history WHERE submission_id NOT IN (SELECT id FROM exam_submissions)");
     echo "  [✓] Deleted {$orphHistory} orphaned submission_status_history rows\n";
 
-    // -------------------------------------------------------------
-    // 4. SEED APPROVED PROFESSIONAL DEMO DATASET
-    // -------------------------------------------------------------
+    
+    
+    
     echo "\n--- Seeding Approved Professional Demo Dataset ---\n";
 
-    // Ensure Subjects Exist
+    
     $stmtSubj1 = $pdo->prepare("
         INSERT INTO subjects (id, code, title) VALUES (1, 'CE-401', 'Structural Engineering')
         ON DUPLICATE KEY UPDATE title = VALUES(title)
@@ -247,7 +219,7 @@ try {
     ");
     $stmtSubj2->execute();
 
-    // Ensure Demo Demo Student: John Mark Santos (user_id = 20)
+    
     $passHash = password_hash('Password123!', PASSWORD_DEFAULT);
     $stmtUsrDemo = $pdo->prepare("
         INSERT INTO users (id, username, fullname, email, password, role, is_demo)
@@ -263,7 +235,7 @@ try {
     ");
     $stmtSdDemo->execute();
 
-    // 1 Demo Uploaded Lesson
+    
     $stmtLesson = $pdo->prepare("
         INSERT INTO lesson_materials (id, teacher_id, title, subject, file_name, file_path, file_type, file_size, original_filename, stored_filename, lesson_text, word_count, page_count, processing_status, is_demo, created_at)
         VALUES (10, 12, 'Structural Steel & Reinforced Concrete Design Fundamentals', 'Structural Engineering', 'demo_structural_steel.txt', 'teacher/uploads/demo_structural_steel.txt', 'txt', 1024, 'demo_structural_steel.txt', 'demo_structural_steel.txt', 'Reinforced concrete flexural design relies on ultimate limit state analysis and steel tensile reinforcement capacity.', 150, 1, 'completed', 1, NOW())
@@ -271,7 +243,7 @@ try {
     ");
     $stmtLesson->execute();
 
-    // 1 Demo Exam (ID 10) created by Teacher lasjo (jolas, ID 12)
+    
     $stmtExam = $pdo->prepare("
         INSERT INTO exams (id, teacher_id, created_by, title, subject, specialization, difficulty, time_limit, total_items, passing_percentage, status, is_demo, created_at)
         VALUES (10, 12, 12, 'Civil Engineering Board Exam Review - Structural Design & Construction', 'Structural Engineering', 'Structural Engineering', 'medium', 60, 3, 75.00, 'active', 1, NOW())
@@ -279,7 +251,7 @@ try {
     ");
     $stmtExam->execute();
 
-    // 3 Demo Exam Questions
+    
     $questionsData = [
         [101, 10, 'What is the standard minimum concrete cover for reinforced concrete beams exposed to soil?', 'multiple_choice', '75 mm', '50 mm', '40 mm', '25 mm', '75 mm', 1.00],
         [102, 10, 'Under the National Structural Code of the Philippines (NSCP 2015), flexural strength reduction factor phi for tension-controlled sections is 0.90.', 'true_false', 'true', 'false', NULL, NULL, 'true', 1.00],
@@ -295,7 +267,7 @@ try {
         $stmtQ->execute($qd);
     }
 
-    // 1 Published Demo Submission for Nicole (Student ID 11)
+    
     $stmtSubPublished = $pdo->prepare("
         INSERT INTO exam_submissions (id, exam_id, student_id, teacher_id, student_name, exam_title, upload_type, correct_count, wrong_count, total_score, total_possible_score, total_items, percentage, status, review_status, is_demo, created_at, published_at)
         VALUES (500, 10, 11, 12, 'Ashley Nicole Gutierrez', 'Civil Engineering Board Exam Review - Structural Design & Construction', 'online', 3, 0, 3.00, 3.00, 3, 100.00, 'Pass', 'published', 1, NOW(), NOW())
@@ -317,7 +289,7 @@ try {
         $stmtAnsP->execute($ap);
     }
 
-    // 1 Pending Review Demo Submission for John Mark Santos (Student ID 20)
+    
     $stmtSubPending = $pdo->prepare("
         INSERT INTO exam_submissions (id, exam_id, student_id, teacher_id, student_name, exam_title, upload_type, correct_count, wrong_count, total_score, total_possible_score, total_items, percentage, status, review_status, is_demo, created_at)
         VALUES (501, 10, 20, 12, 'John Mark Santos', 'Civil Engineering Board Exam Review - Structural Design & Construction', 'scanned', 2, 1, 2.00, 3.00, 3, 66.67, 'Fail', 'pending_review', 1, NOW())
@@ -342,9 +314,9 @@ try {
     $pdo->commit();
     echo "  [✓] Successfully seeded approved professional demo dataset\n";
 
-    // -------------------------------------------------------------
-    // 5. POST-CLEANUP VALIDATION
-    // -------------------------------------------------------------
+    
+    
+    
     echo "\n=== POST-CLEANUP TABLE ROW COUNTS ===\n";
     foreach (['users','student_details','departments','subjects','lesson_materials','exams','exam_questions','exam_submissions','submission_answers','submission_score_overrides','submission_status_history','activity_logs'] as $t) {
         $cnt = $pdo->query("SELECT COUNT(*) FROM {$t}")->fetchColumn();

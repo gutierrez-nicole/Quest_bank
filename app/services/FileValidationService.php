@@ -1,21 +1,21 @@
 <?php
 
 class FileValidationService {
-    const MAX_FILE_SIZE = 10485760; // 10MB
+    const MAX_FILE_SIZE = 10485760; 
 
     public static function validateFile($fileTmpPath, $originalFilename, $maxSize = self::MAX_FILE_SIZE) {
-        // Path traversal check
+        
         if (strpos($originalFilename, '../') !== false || strpos($originalFilename, '..\\') !== false || strpos($originalFilename, "\0") !== false) {
             return ['success' => false, 'error' => 'Invalid filename: Path traversal characters detected.'];
         }
 
-        // Max file size check
+        
         $fileSize = filesize($fileTmpPath);
         if ($fileSize === 0 || $fileSize > $maxSize) {
             return ['success' => false, 'error' => 'Invalid file size.'];
         }
 
-        // Double extension check
+        
         $clean_original_filename = basename($originalFilename);
         $file_parts = explode('.', $clean_original_filename);
         $forbidden_exts = ['php', 'phtml', 'php3', 'php4', 'php5', 'phps', 'phar', 'exe', 'sh', 'bat', 'cmd', 'js', 'pl', 'py', 'cgi'];
@@ -28,7 +28,7 @@ class FileValidationService {
 
         $file_ext = strtolower(pathinfo($clean_original_filename, PATHINFO_EXTENSION));
 
-        // Read file contents for magic byte validation
+        
         $content = file_get_contents($fileTmpPath, false, null, 0, 8);
         if ($content === false) {
             return ['success' => false, 'error' => 'Could not read file.'];
@@ -40,7 +40,7 @@ class FileValidationService {
 
         $identified = false;
 
-        // Magic byte validation
+        
         if ($file_ext === 'pdf') {
             if (strpos($content, '%PDF-') !== 0) {
                 return ['success' => false, 'error' => 'Invalid PDF: Magic bytes do not match.'];
@@ -86,7 +86,7 @@ class FileValidationService {
                 return ['success' => false, 'error' => 'Invalid Office document: Could not open ZIP container.'];
             }
         } elseif ($file_ext === 'txt') {
-            // TXT validation (must be valid UTF-8 text, reject binary)
+            
             $fullContent = file_get_contents($fileTmpPath);
             if (!mb_check_encoding($fullContent, 'UTF-8')) {
                 return ['success' => false, 'error' => 'Invalid TXT: File must be valid UTF-8.'];

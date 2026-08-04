@@ -188,7 +188,7 @@ try {
         $pending_exams = [];
     }
 
-    // Epic 2.1 Student Qualifying Examinations List
+    
     $qualifying_exams_list = [];
     try {
         $stmtQList = $pdo->prepare("
@@ -685,7 +685,7 @@ try {
                     </div>
                 </div>
 
-                <!-- Epic 2.1 Student Qualifying Examinations Panel -->
+                
                 <div class="bg-white dark:bg-stone-900 border border-orange-200 dark:border-orange-950 rounded-2xl p-6 shadow-sm space-y-4">
                     <div class="flex items-center justify-between border-b border-stone-100 dark:border-stone-800 pb-3">
                         <h3 class="text-sm font-extrabold text-stone-800 dark:text-stone-100 flex items-center gap-2">
@@ -713,7 +713,7 @@ try {
                                             <span class="bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-300 text-[10px] font-bold px-2.5 py-0.5 rounded-md">Passing: <?php echo number_format($qex['qualifying_passing_percentage'] ?? 80, 1); ?>%</span>
                                             <span class="bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-300 text-[10px] font-bold px-2.5 py-0.5 rounded-md">Attempts: <?php echo $attemptsTaken; ?> / <?php echo $maxAttempts; ?></span>
 
-                                            <!-- Qualification Result Badge -->
+                                            
                                             <?php if ($qualStatus === 'qualified'): ?>
                                                 <span class="bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-black px-2.5 py-0.5 rounded-md flex items-center gap-1">
                                                     <i class="fa-solid fa-circle-check"></i> QUALIFIED
