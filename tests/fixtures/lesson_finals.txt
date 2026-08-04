@@ -1,0 +1,4 @@
+Steel Design Finals Module
+FIXTURE_FINALS_STEEL_COLUMN_BUCKLING
+This lesson covers final steel frame stability, column Euler buckling capacity, and moment connection details.
+Key topics: LRFD design method, effective length factor K, lateral torsional buckling, weld strength.

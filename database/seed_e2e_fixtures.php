@@ -38,17 +38,15 @@ if ($appEnv !== 'testing') {
     return;
 }
 
-// 2. CLI / Authorized Internal Route Check
+// 2. CLI Execution Enforcement (Strict CLI-only access)
 $isCLI = (php_sapi_name() === 'cli');
-$internalKey = $_SERVER['HTTP_X_INTERNAL_TEST_KEY'] ?? $_SERVER['HTTP_X_TEST_KEY'] ?? '';
-$isAuthorizedTestRoute = ($internalKey === 'questbank_internal_e2e_secret');
 
-if (!$isCLI && !$isAuthorizedTestRoute) {
+if (!$isCLI) {
     if (!headers_sent()) {
         http_response_code(403);
     }
     echo json_encode([
-        'error' => 'Forbidden: Direct browser access to database seeder is prohibited. Access via CLI or internal test runner only.'
+        'error' => 'Forbidden: Direct web access to database seeder is prohibited. Execution allowed via CLI only.'
     ]);
     return;
 }

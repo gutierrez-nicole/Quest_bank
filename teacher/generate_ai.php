@@ -366,11 +366,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
 
     // Server-Authoritative: Accept ONLY a stable generation_batch_id from POST
     $save_generation_batch_id = trim($_POST['save_generation_batch_id'] ?? $_POST['generation_batch_id'] ?? '');
-    if (empty($save_generation_batch_id)) {
-        $meta_json_post = $_POST['save_ai_metadata'] ?? '{}';
-        $meta_post = json_decode($meta_json_post, true) ?? [];
-        $save_generation_batch_id = $meta_post['generation_batch_id'] ?? '';
-    }
 
     if (empty($save_generation_batch_id)) {
         $error_msg = "Cannot save exam: Generation batch ID is missing.";
@@ -1232,12 +1227,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                 </span>
                             </div>
 
+                            <input type="hidden" name="save_generation_batch_id" value="<?php echo htmlspecialchars($ai_meta_output['generation_batch_id'] ?? ''); ?>" data-testid="save-generation-batch-id">
                             <input type="hidden" name="save_title" value="<?php echo htmlspecialchars($_POST['exam_title']); ?>">
                             <input type="hidden" name="save_subject" value="<?php echo htmlspecialchars($_POST['subject']); ?>">
                             <input type="hidden" name="save_specialization" value="<?php echo htmlspecialchars($_POST['specialization']); ?>">
                             <input type="hidden" name="save_difficulty" value="<?php echo htmlspecialchars($difficulty ?? 'medium'); ?>">
-                            <input type="hidden" name="save_ai_metadata" value="<?php echo htmlspecialchars(json_encode($ai_meta_output ?? [])); ?>">
-                            <input type="hidden" name="save_lesson_ids" value="<?php echo htmlspecialchars(implode(',', $ai_meta_output['lesson_ids'] ?? [])); ?>">
                             <input type="hidden" name="ack_token" value="<?php echo htmlspecialchars($ai_meta_output['ack_token'] ?? ''); ?>">
 
                             <?php if (($ai_meta_output['batch_status'] ?? '') === 'incomplete'): ?>

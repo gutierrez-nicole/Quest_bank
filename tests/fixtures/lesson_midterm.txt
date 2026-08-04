@@ -1,0 +1,4 @@
+Reinforced Concrete Design Midterm Module
+FIXTURE_MIDTERM_REINFORCED_CONCRETE_TENSION
+This lesson covers midterm reinforced concrete design, tensile steel rebar ratio, and Whitney stress block analysis.
+Key principles: ultimate strength design, balanced steel ratio, deflection control, shear reinforcement stirrups.
