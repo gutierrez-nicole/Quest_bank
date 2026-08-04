@@ -220,7 +220,7 @@ class GroqService {
         $wordCount = str_word_count($lessonText);
         $estimatedTokens = (int)ceil($charLength / 4);
 
-        $chunkLimit = defined('AI_SAFE_INPUT_TOKENS') ? (AI_SAFE_INPUT_TOKENS * 4) : 96000;
+        $chunkLimit = (defined('TEST_CHUNK_LIMIT') && TEST_CHUNK_LIMIT > 0) ? TEST_CHUNK_LIMIT : (defined('AI_SAFE_INPUT_TOKENS') ? (AI_SAFE_INPUT_TOKENS * 4) : 96000);
         $generationWarnings = [];
         $rawChunkResponses = [];
 

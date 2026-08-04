@@ -6,10 +6,13 @@
  * Strict Exit Code Rules: Exits 0 ONLY IF all setup, connection, and assertions pass.
  */
 putenv('APP_ENV=testing');
+putenv('TEST_BOOTSTRAP_ACTIVE=1');
 $_ENV['APP_ENV'] = 'testing';
-if (!defined('AI_SAFE_INPUT_TOKENS')) {
-    define('AI_SAFE_INPUT_TOKENS', 2000);
-}
+$_ENV['TEST_BOOTSTRAP_ACTIVE'] = '1';
+$_SERVER['APP_ENV'] = 'testing';
+$_SERVER['TEST_BOOTSTRAP_ACTIVE'] = '1';
+require_once __DIR__ . '/../app/testing_bootstrap.php';
+define('TEST_CHUNK_LIMIT', 6000);
 
 require_once __DIR__ . '/../app/bootstrap.php';
 require_once __DIR__ . '/../app/services/GroqService.php';

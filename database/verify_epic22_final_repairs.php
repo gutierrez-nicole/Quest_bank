@@ -2,9 +2,13 @@
 /**
  * Verification Script for QuestBank Epic 2.2 Final Repairs 2-6
  */
-require_once __DIR__ . '/../app/bootstrap.php';
 putenv('APP_ENV=testing');
-GroqService::$testMode = true;
+putenv('TEST_BOOTSTRAP_ACTIVE=1');
+$_ENV['APP_ENV'] = 'testing';
+$_ENV['TEST_BOOTSTRAP_ACTIVE'] = '1';
+$_SERVER['APP_ENV'] = 'testing';
+$_SERVER['TEST_BOOTSTRAP_ACTIVE'] = '1';
+require_once __DIR__ . '/../app/bootstrap.php';
 
 $pdo = getDBConnection();
 $passed = 0;

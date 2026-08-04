@@ -4,6 +4,11 @@
  * Strict Exit Code Rules: Exits 0 ONLY IF all setup, connection, and assertions pass.
  */
 putenv('APP_ENV=testing');
+putenv('TEST_BOOTSTRAP_ACTIVE=1');
+$_ENV['APP_ENV'] = 'testing';
+$_ENV['TEST_BOOTSTRAP_ACTIVE'] = '1';
+$_SERVER['APP_ENV'] = 'testing';
+$_SERVER['TEST_BOOTSTRAP_ACTIVE'] = '1';
 require_once __DIR__ . '/../app/bootstrap.php';
 require_once __DIR__ . '/../includes/security.php';
 
