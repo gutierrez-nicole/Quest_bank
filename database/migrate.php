@@ -371,6 +371,10 @@ if (!tableExists($pdo, 'ai_generation_batches')) {
 } else {
     echo "  [=] Table ai_generation_batches already exists\n";
 }
+addColumn($pdo, 'ai_generation_batches', 'semester', "VARCHAR(50) DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'school_year', "VARCHAR(50) DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'year_level', "VARCHAR(50) DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'program', "VARCHAR(100) DEFAULT NULL");
 
 $defaultPassHash = password_hash('Password123!', PASSWORD_DEFAULT);
 

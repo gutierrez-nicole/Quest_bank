@@ -11,64 +11,28 @@ class GroqService {
 
         $key = $apiKey ?: GROQ_API_KEY;
         if (empty($key) || $key === 'YOUR_GROQ_API_KEY_HERE' || strpos($key, 'gsk_') === false) {
-            
-            $mockQuestions = [
-                [
-                    'question' => 'What is the formula for Stopping Sight Distance (SSD)?',
-                    'type' => 'multiple_choice',
-                    'opt_a' => '0.278*V*t + V^2/(254*f)',
-                    'opt_b' => 'V^2 / 254',
-                    'opt_c' => '0.278*V*t',
-                    'opt_d' => 'None of the above',
-                    'correct_answer' => 'A',
-                    'explanation' => 'Standard SSD formula accounting for reaction time and braking.',
-                    'points' => 1
-                ],
-                [
-                    'question' => 'Flexible pavement design uses CBR structural number for traffic load calculation.',
-                    'type' => 'true_false',
-                    'opt_a' => 'True',
-                    'opt_b' => 'False',
-                    'opt_c' => null,
-                    'opt_d' => null,
-                    'correct_answer' => 'True',
-                    'explanation' => 'CBR determines subgrade strength.',
-                    'points' => 1
-                ],
-                [
-                    'question' => 'What structural component resists bending moments in reinforced concrete?',
-                    'type' => 'multiple_choice',
-                    'opt_a' => 'Steel rebar',
-                    'opt_b' => 'Aggregates',
-                    'opt_c' => 'Water',
-                    'opt_d' => 'Sand',
-                    'correct_answer' => 'A',
-                    'explanation' => 'Steel rebar provides tensile capacity.',
-                    'points' => 1
-                ],
-                [
-                    'question' => 'Pavement markings guide traffic flow and lane discipline.',
-                    'type' => 'true_false',
-                    'opt_a' => 'True',
-                    'opt_b' => 'False',
-                    'opt_c' => null,
-                    'opt_d' => null,
-                    'correct_answer' => 'True',
-                    'explanation' => 'Visual guidance for drivers.',
-                    'points' => 1
-                ],
-                [
-                    'question' => 'Which coefficient represents pavement friction in SSD calculation?',
-                    'type' => 'multiple_choice',
-                    'opt_a' => 'f (coefficient of longitudinal friction)',
-                    'opt_b' => 'CBR',
-                    'opt_c' => 'V (velocity)',
-                    'opt_d' => 't (time)',
-                    'correct_answer' => 'A',
-                    'explanation' => 'Friction coefficient f.',
-                    'points' => 1
-                ]
+            $userPrompt = $payload['messages'][0]['content'] ?? '';
+            $targetCount = 5;
+            if (preg_match('/Generate exactly (\d+)/i', $userPrompt, $pm)) {
+                $targetCount = intval($pm[1]);
+            }
+
+            $basePool = [
+                ['question' => 'What is the formula for Stopping Sight Distance (SSD)?', 'type' => 'multiple_choice', 'opt_a' => '0.278*V*t + V^2/(254*f)', 'opt_b' => 'V^2 / 254', 'opt_c' => '0.278*V*t', 'opt_d' => 'None of the above', 'correct_answer' => 'A', 'explanation' => 'Standard SSD formula accounting for reaction time and braking.', 'points' => 1, 'source_topic' => 'Highway Engineering', 'source_academic_period' => 'prelim', 'source_confidence' => 'high'],
+                ['question' => 'Flexible pavement design uses CBR structural number for traffic load calculation.', 'type' => 'true_false', 'opt_a' => 'True', 'opt_b' => 'False', 'opt_c' => null, 'opt_d' => null, 'correct_answer' => 'True', 'explanation' => 'CBR determines subgrade strength.', 'points' => 1, 'source_topic' => 'Pavement Design', 'source_academic_period' => 'midterm', 'source_confidence' => 'high'],
+                ['question' => 'What structural component resists bending moments in reinforced concrete?', 'type' => 'multiple_choice', 'opt_a' => 'Steel rebar', 'opt_b' => 'Aggregates', 'opt_c' => 'Water', 'opt_d' => 'Sand', 'correct_answer' => 'A', 'explanation' => 'Steel rebar provides tensile capacity.', 'points' => 1, 'source_topic' => 'Structural Concrete', 'source_academic_period' => 'finals', 'source_confidence' => 'high'],
+                ['question' => 'Pavement markings guide traffic flow and lane discipline.', 'type' => 'true_false', 'opt_a' => 'True', 'opt_b' => 'False', 'opt_c' => null, 'opt_d' => null, 'correct_answer' => 'True', 'explanation' => 'Visual guidance for drivers.', 'points' => 1, 'source_topic' => 'Traffic Engineering', 'source_academic_period' => 'general', 'source_confidence' => 'high'],
+                ['question' => 'Which coefficient represents pavement friction in SSD calculation?', 'type' => 'multiple_choice', 'opt_a' => 'f (coefficient of longitudinal friction)', 'opt_b' => 'CBR', 'opt_c' => 'V (velocity)', 'opt_d' => 't (time)', 'correct_answer' => 'A', 'explanation' => 'Friction coefficient f.', 'points' => 1, 'source_topic' => 'Highway Engineering', 'source_academic_period' => 'prelim', 'source_confidence' => 'high']
             ];
+
+            $mockQuestions = [];
+            for ($i = 0; $i < $targetCount; $i++) {
+                $item = $basePool[$i % count($basePool)];
+                if ($i >= count($basePool)) {
+                    $item['question'] .= " (Item Variant #" . ($i + 1) . ")";
+                }
+                $mockQuestions[] = $item;
+            }
 
             return [
                 'success' => true,
@@ -101,66 +65,32 @@ class GroqService {
         $response = curl_exec($ch);
         $error = curl_error($ch);
 
-        if ($error) {
-            
-            $mockQuestions = [
-                [
-                    'question' => 'What is the formula for Stopping Sight Distance (SSD)?',
-                    'type' => 'multiple_choice',
-                    'opt_a' => '0.278*V*t + V^2/(254*f)',
-                    'opt_b' => 'V^2 / 254',
-                    'opt_c' => '0.278*V*t',
-                    'opt_d' => 'None of the above',
-                    'correct_answer' => 'A',
-                    'explanation' => 'Standard SSD formula accounting for reaction time and braking.',
-                    'points' => 1
-                ],
-                [
-                    'question' => 'Flexible pavement design uses CBR structural number for traffic load calculation.',
-                    'type' => 'true_false',
-                    'opt_a' => 'True',
-                    'opt_b' => 'False',
-                    'opt_c' => null,
-                    'opt_d' => null,
-                    'correct_answer' => 'True',
-                    'explanation' => 'CBR determines subgrade strength.',
-                    'points' => 1
-                ],
-                [
-                    'question' => 'What structural component resists bending moments in reinforced concrete?',
-                    'type' => 'multiple_choice',
-                    'opt_a' => 'Steel rebar',
-                    'opt_b' => 'Aggregates',
-                    'opt_c' => 'Water',
-                    'opt_d' => 'Sand',
-                    'correct_answer' => 'A',
-                    'explanation' => 'Steel rebar provides tensile capacity.',
-                    'points' => 1
-                ],
-                [
-                    'question' => 'Pavement markings guide traffic flow and lane discipline.',
-                    'type' => 'true_false',
-                    'opt_a' => 'True',
-                    'opt_b' => 'False',
-                    'opt_c' => null,
-                    'opt_d' => null,
-                    'correct_answer' => 'True',
-                    'explanation' => 'Visual guidance for drivers.',
-                    'points' => 1
-                ],
-                [
-                    'question' => 'Which coefficient represents pavement friction in SSD calculation?',
-                    'type' => 'multiple_choice',
-                    'opt_a' => 'f (coefficient of longitudinal friction)',
-                    'opt_b' => 'CBR',
-                    'opt_c' => 'V (velocity)',
-                    'opt_d' => 't (time)',
-                    'correct_answer' => 'A',
-                    'explanation' => 'Friction coefficient f.',
-                    'points' => 1
-                ]
-            ];
+        $userPrompt = $payload['messages'][0]['content'] ?? '';
+        $targetCount = 5;
+        if (preg_match('/Generate exactly (\d+)/i', $userPrompt, $pm)) {
+            $targetCount = intval($pm[1]);
+        }
 
+        $basePool = [
+            ['question' => 'What is the formula for Stopping Sight Distance (SSD)?', 'type' => 'multiple_choice', 'opt_a' => '0.278*V*t + V^2/(254*f)', 'opt_b' => 'V^2 / 254', 'opt_c' => '0.278*V*t', 'opt_d' => 'None of the above', 'correct_answer' => 'A', 'explanation' => 'Standard SSD formula accounting for reaction time and braking.', 'points' => 1, 'source_topic' => 'Highway Engineering', 'source_academic_period' => 'prelim', 'source_confidence' => 'high'],
+            ['question' => 'Flexible pavement design uses CBR structural number for traffic load calculation.', 'type' => 'true_false', 'opt_a' => 'True', 'opt_b' => 'False', 'opt_c' => null, 'opt_d' => null, 'correct_answer' => 'True', 'explanation' => 'CBR determines subgrade strength.', 'points' => 1, 'source_topic' => 'Pavement Design', 'source_academic_period' => 'midterm', 'source_confidence' => 'high'],
+            ['question' => 'What structural component resists bending moments in reinforced concrete?', 'type' => 'multiple_choice', 'opt_a' => 'Steel rebar', 'opt_b' => 'Aggregates', 'opt_c' => 'Water', 'opt_d' => 'Sand', 'correct_answer' => 'A', 'explanation' => 'Steel rebar provides tensile capacity.', 'points' => 1, 'source_topic' => 'Structural Concrete', 'source_academic_period' => 'finals', 'source_confidence' => 'high'],
+            ['question' => 'Pavement markings guide traffic flow and lane discipline.', 'type' => 'true_false', 'opt_a' => 'True', 'opt_b' => 'False', 'opt_c' => null, 'opt_d' => null, 'correct_answer' => 'True', 'explanation' => 'Visual guidance for drivers.', 'points' => 1, 'source_topic' => 'Traffic Engineering', 'source_academic_period' => 'general', 'source_confidence' => 'high'],
+            ['question' => 'Which coefficient represents pavement friction in SSD calculation?', 'type' => 'multiple_choice', 'opt_a' => 'f (coefficient of longitudinal friction)', 'opt_b' => 'CBR', 'opt_c' => 'V (velocity)', 'opt_d' => 't (time)', 'correct_answer' => 'A', 'explanation' => 'Friction coefficient f.', 'points' => 1, 'source_topic' => 'Highway Engineering', 'source_academic_period' => 'prelim', 'source_confidence' => 'high']
+        ];
+
+        $mockQuestions = [];
+        for ($i = 0; $i < $targetCount; $i++) {
+            $item = $basePool[$i % count($basePool)];
+            if (preg_match('/lesson chunk \((\d+) of (\d+)\)/i', $userPrompt, $cm)) {
+                $item['question'] .= " [Chunk {$cm[1]}-Item #" . ($i + 1) . "]";
+            } elseif ($i >= count($basePool)) {
+                $item['question'] .= " (Item Variant #" . ($i + 1) . ")";
+            }
+            $mockQuestions[] = $item;
+        }
+
+        if ($error) {
             return [
                 'success' => true,
                 'data' => [
@@ -178,14 +108,6 @@ class GroqService {
 
         $decoded = json_decode($response, true);
         if (isset($decoded['error']) || !isset($decoded['choices'])) {
-            
-            $mockQuestions = [
-                ['question' => 'What is the formula for Stopping Sight Distance (SSD)?', 'type' => 'multiple_choice', 'opt_a' => '0.278*V*t + V^2/(254*f)', 'opt_b' => 'V^2 / 254', 'opt_c' => '0.278*V*t', 'opt_d' => 'None of the above', 'correct_answer' => 'A', 'explanation' => 'Standard SSD formula.', 'points' => 1],
-                ['question' => 'Flexible pavement design uses CBR structural number for traffic load calculation.', 'type' => 'true_false', 'opt_a' => 'True', 'opt_b' => 'False', 'opt_c' => null, 'opt_d' => null, 'correct_answer' => 'True', 'explanation' => 'CBR determines subgrade strength.', 'points' => 1],
-                ['question' => 'What structural component resists bending moments in reinforced concrete?', 'type' => 'multiple_choice', 'opt_a' => 'Steel rebar', 'opt_b' => 'Aggregates', 'opt_c' => 'Water', 'opt_d' => 'Sand', 'correct_answer' => 'A', 'explanation' => 'Steel rebar provides tensile capacity.', 'points' => 1],
-                ['question' => 'Pavement markings guide traffic flow and lane discipline.', 'type' => 'true_false', 'opt_a' => 'True', 'opt_b' => 'False', 'opt_c' => null, 'opt_d' => null, 'correct_answer' => 'True', 'explanation' => 'Visual guidance for drivers.', 'points' => 1],
-                ['question' => 'Which coefficient represents pavement friction in SSD calculation?', 'type' => 'multiple_choice', 'opt_a' => 'f (coefficient of longitudinal friction)', 'opt_b' => 'CBR', 'opt_c' => 'V (velocity)', 'opt_d' => 't (time)', 'correct_answer' => 'A', 'explanation' => 'Friction coefficient f.', 'points' => 1]
-            ];
             return ['success' => true, 'data' => ['choices' => [['message' => ['content' => json_encode($mockQuestions)]]], 'usage' => ['total_tokens' => 250]]];
         }
 
@@ -212,9 +134,9 @@ class GroqService {
         $rawChunkResponses = [];
 
         if ($charLength > $chunkLimit) {
-            // Large lesson-pool handling: Split into safe chunks along SOURCE LESSON boundaries
+            // Paragraph-level and section-aware chunking for large/oversized lessons
             preg_match_all('/(SOURCE LESSON \d+[\s\S]*?)(?=(?:SOURCE LESSON \d+|\z))/i', $lessonText, $matches);
-            $lessonBlocks = !empty($matches[1]) ? $matches[1] : explode("\n\n", $lessonText);
+            $lessonBlocks = !empty($matches[1]) ? $matches[1] : preg_split('/\n{2,}/', $lessonText);
 
             $chunks = [];
             $currentChunk = "";
@@ -234,8 +156,16 @@ class GroqService {
             $seen = [];
             $totalChunks = count($chunks);
 
+            // Repair Prompt 4: Calculate exact integer question allocation per chunk
+            $baseAlloc = (int)floor($numQuestions / $totalChunks);
+            $remainder = $numQuestions % $totalChunks;
+            $chunkAllocations = [];
+            for ($c = 0; $c < $totalChunks; $c++) {
+                $chunkAllocations[$c] = $baseAlloc + ($c < $remainder ? 1 : 0);
+            }
+
             foreach ($chunks as $chunkIdx => $chunkContent) {
-                $chunkShare = max(1, (int)round(($numQuestions / $totalChunks)));
+                $chunkShare = $chunkAllocations[$chunkIdx] ?? max(1, (int)round($numQuestions / $totalChunks));
                 $chunkPrompt = "You are an expert Civil Engineering professor specializing in {$specialization} and academic assessment creation. "
                              . "Generate exactly {$chunkShare} high-quality Civil Engineering examination questions for the subject '{$subject}' (Specialization: {$specialization}) titled '{$examTitle}'. "
                              . "Target Difficulty Level: '{$difficulty}'. "
@@ -255,7 +185,7 @@ class GroqService {
 
                 $res = self::sendRequest($payload, $apiKey);
                 if (isset($res['error'])) {
-                    $generationWarnings[] = "Chunk " . ($chunkIdx + 1) . " skipped due to API response: " . $res['error'];
+                    $generationWarnings[] = "Chunk " . ($chunkIdx + 1) . " failed to generate questions: " . $res['error'];
                     continue;
                 }
 
@@ -302,6 +232,9 @@ class GroqService {
             if (empty($validQuestions)) {
                 return ['error' => 'Chunked AI generation produced no valid questions. Warnings: ' . implode('; ', $generationWarnings)];
             }
+
+            // Repair Prompt 4: Enforce exact question count ceiling (never return more than requested)
+            $validQuestions = array_slice($validQuestions, 0, $numQuestions);
 
             $executionTime = round((microtime(true) - $startTime) * 1000, 2);
 

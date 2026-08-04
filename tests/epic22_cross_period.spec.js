@@ -46,7 +46,7 @@ test.describe('Epic 2.2 Cross-Period Lesson Pool Playwright End-to-End Workflow'
             await midtermCheckboxes.first().check();
         }
 
-        // Step 7: Clear Selection Test
+        // Clear Selection Test
         await page.click('[data-testid="clear-selection"]');
         if (count > 0) {
             await expect(prelimCheckboxes.first()).not.toBeChecked();
@@ -54,13 +54,11 @@ test.describe('Epic 2.2 Cross-Period Lesson Pool Playwright End-to-End Workflow'
     });
 
     test('Unauthorized Lesson ID Security Injection Block', async ({ page }) => {
-        // Login as Teacher
         await page.goto('/index.php');
         await page.fill('input[name="username"]', 'russel');
         await page.fill('input[name="password"]', 'Password123!');
         await page.click('button[type="submit"]');
 
-        // Attempt POST with unauthorized lesson ID via browser fetch
         const response = await page.evaluate(async () => {
             const formData = new FormData();
             formData.append('input_source', 'extracted');
@@ -78,5 +76,29 @@ test.describe('Epic 2.2 Cross-Period Lesson Pool Playwright End-to-End Workflow'
         });
 
         expect(response).toContain('Access denied');
+    });
+
+    test('Server-side HMAC Confirmation Token Rejection for Forged Input', async ({ page }) => {
+        await page.goto('/index.php');
+        await page.fill('input[name="username"]', 'russel');
+        await page.fill('input[name="password"]', 'Password123!');
+        await page.click('button[type="submit"]');
+
+        const response = await page.evaluate(async () => {
+            const formData = new FormData();
+            formData.append('confirm_partial_token', '1');
+            formData.append('partial_token', 'invalid_forged_base64_payload');
+            formData.append('num_questions', '5');
+            formData.append('subject', 'Soil Mechanics');
+            formData.append('exam_title', 'Forged Token Test');
+
+            const res = await fetch('/teacher/generate_ai.php', {
+                method: 'POST',
+                body: formData
+            });
+            return res.text();
+        });
+
+        expect(response).toContain('Invalid, expired, or tampered');
     });
 });

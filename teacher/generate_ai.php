@@ -66,6 +66,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
     $generation_warnings = [];
     $validation_errors = [];
     $structured_conflicts = [];
+    $signed_confirmation_token = null;
+
+    $secretKey = (defined('DB_PASS') ? DB_PASS : '') . '_questbank_secret_salt_2026';
+
+    // Repair Prompt 2: Process HMAC signed confirmation submission
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_partial_token'])) {
+        $tokenInput = $_POST['partial_token'] ?? '';
+        $tokenData = verifyPartialToken($tokenInput, $teacher_id, $secretKey);
+        if (!$tokenData) {
+            $error_msg = "Invalid, expired, or tampered partial generation confirmation token.";
+        } else {
+            $selected_lesson_ids = $tokenData['valid_ids'];
+            $input_source = 'extracted';
+        }
+    }
 
     if ($input_source === 'extracted' && !empty($selected_lesson_ids)) {
         $selected_lesson_ids = array_filter($selected_lesson_ids, function($id) { return $id !== 'all'; });
@@ -182,8 +197,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
                 }
             }
 
-            if (!empty($structured_conflicts) || !empty($validation_errors)) {
-                $error_msg = "Academic Context Conflict Detected. Please resolve metadata mismatches before generating.";
+            if (!empty($structured_conflicts) || (!empty($validation_errors) && !isset($_POST['confirm_partial_token']))) {
+                $error_msg = "Academic Context Conflict / Validation Error Detected. Please resolve before generating.";
+                if (!empty($associated_lesson_ids) && !empty($validation_errors)) {
+                    $signed_confirmation_token = generatePartialToken($teacher_id, $associated_lesson_ids, $unauthorizedIds, $secretKey);
+                }
             } else {
                 $associated_periods = array_unique($associated_periods);
                 $generation_source_type = count($associated_periods) > 1 ? 'cross_period_lessons' : 'single_period_lessons';
@@ -203,6 +221,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
             $generated_questions = $result['questions'];
             $estimatedTokens = (int)ceil(strlen($final_lesson_content) / 4);
 
+            $selSem = $selLessons[0]['semester'] ?? null;
+            $selSy = $selLessons[0]['school_year'] ?? null;
+            $selYl = $selLessons[0]['year_level'] ?? null;
+            $selProg = $selLessons[0]['program'] ?? null;
+            $failedQuestionCount = max(0, $num_questions - count($generated_questions));
+
             $ai_meta_output = array_merge($result['metadata'] ?? [], [
                 'lesson_ids' => $associated_lesson_ids,
                 'covered_periods' => array_values($associated_periods),
@@ -211,15 +235,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
                 'source_lesson_count' => count($associated_lesson_ids),
                 'generation_warnings' => array_merge($generation_warnings, $result['metadata']['generation_warnings'] ?? []),
                 'total_words' => $total_selected_words,
-                'estimated_tokens' => $estimatedTokens
+                'estimated_tokens' => $estimatedTokens,
+                'semester' => $selSem,
+                'school_year' => $selSy,
+                'year_level' => $selYl,
+                'program' => $selProg
             ]);
 
-            // Repair Prompt 5: Persist generation audit record in ai_generation_batches
+            // Repair Prompt 5: Persist generation audit record with full runtime metadata
             try {
                 $stmtBatch = $pdo->prepare("
                     INSERT INTO ai_generation_batches 
-                    (generation_batch_id, teacher_id, selected_lesson_ids, selected_lesson_titles, selected_periods, selected_subject, total_selected_words, estimated_tokens, ai_model, generation_duration, requested_question_count, generated_question_count, failed_question_count, warnings)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (generation_batch_id, teacher_id, selected_lesson_ids, selected_lesson_titles, selected_periods, selected_subject, semester, school_year, year_level, program, total_selected_words, estimated_tokens, ai_model, generation_duration, requested_question_count, generated_question_count, failed_question_count, warnings)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
                 $stmtBatch->execute([
                     $generation_batch_id,
@@ -228,13 +256,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
                     json_encode($associated_lesson_titles),
                     implode(',', $associated_periods),
                     $subject,
+                    $selSem,
+                    $selSy,
+                    $selYl,
+                    $selProg,
                     $total_selected_words,
                     $estimatedTokens,
                     GROQ_DEFAULT_MODEL,
                     floatval($result['metadata']['generation_time_ms'] ?? 0) / 1000,
                     $num_questions,
                     count($generated_questions),
-                    0,
+                    $failedQuestionCount,
                     json_encode($ai_meta_output['generation_warnings'])
                 ]);
             } catch (PDOException $e) {
@@ -510,6 +542,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
                             </tbody>
                         </table>
                     </div>
+                </div>
+            <?php endif; ?>
+
+            <?php if (!empty($signed_confirmation_token)): ?>
+                <div class="bg-amber-50 border border-amber-300 rounded-2xl p-5 shadow-md space-y-4 animate-fadeIn" data-testid="partial-generation-confirmation">
+                    <div class="flex items-center gap-2 text-amber-900 font-extrabold text-xs">
+                        <i class="fa-solid fa-shield-halved text-amber-600 text-base"></i>
+                        <span>Secure Server-Side Partial Generation Confirmation</span>
+                    </div>
+                    <p class="text-xs text-amber-800 font-medium">Some selected lessons are invalid or incomplete. Would you like to proceed generating assessment items strictly using the <strong class="text-amber-950 font-bold"><?php echo count($associated_lesson_ids); ?> valid lesson(s)</strong>?</p>
+                    
+                    <form action="generate_ai.php" method="POST" class="flex items-center gap-3">
+                        <?php echo csrfInputField(); ?>
+                        <input type="hidden" name="partial_token" value="<?php echo htmlspecialchars($signed_confirmation_token); ?>">
+                        <input type="hidden" name="num_questions" value="<?php echo htmlspecialchars($_POST['num_questions'] ?? 5); ?>">
+                        <input type="hidden" name="subject" value="<?php echo htmlspecialchars($_POST['subject'] ?? ''); ?>">
+                        <input type="hidden" name="exam_title" value="<?php echo htmlspecialchars($_POST['exam_title'] ?? ''); ?>">
+                        <input type="hidden" name="specialization" value="<?php echo htmlspecialchars($_POST['specialization'] ?? ''); ?>">
+                        <input type="hidden" name="question_type" value="<?php echo htmlspecialchars($_POST['question_type'] ?? ''); ?>">
+                        <input type="hidden" name="difficulty" value="<?php echo htmlspecialchars($_POST['difficulty'] ?? ''); ?>">
+
+                        <button type="submit" name="confirm_partial_token" value="1" data-testid="confirm-partial-btn" class="bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl shadow transition-all flex items-center gap-2">
+                            <i class="fa-solid fa-check-double"></i> Confirm Partial Generation with Valid Lessons Only
+                        </button>
+                        <a href="generate_ai.php" class="text-xs font-bold text-amber-700 hover:text-amber-900">Cancel</a>
+                    </form>
                 </div>
             <?php endif; ?>
 

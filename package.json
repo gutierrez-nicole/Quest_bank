@@ -1,0 +1,13 @@
+{
+  "name": "questbank",
+  "version": "1.0.0",
+  "description": "QuestBank - AI Assessment Generator & Cross-Period Lesson Pool",
+  "main": "index.php",
+  "scripts": {
+    "test": "npx playwright test",
+    "test:epic22": "npx playwright test tests/epic22_cross_period.spec.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0"
+  }
+}
