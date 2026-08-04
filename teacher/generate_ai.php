@@ -291,8 +291,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
             try {
                 $stmtBatch = $pdo->prepare("
                     INSERT INTO ai_generation_batches 
-                    (generation_batch_id, teacher_id, selected_lesson_ids, selected_lesson_titles, selected_periods, selected_subject, semester, school_year, year_level, program, total_selected_words, estimated_tokens, ai_model, generation_duration, requested_question_count, generated_question_count, failed_question_count, warnings, batch_status, failed_chunk_count, affected_lesson_ids, failure_messages)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (generation_batch_id, teacher_id, selected_lesson_ids, selected_lesson_titles, selected_periods, selected_subject, semester, school_year, year_level, program, total_selected_words, estimated_tokens, ai_model, generation_duration, requested_question_count, generated_question_count, failed_question_count, warnings, batch_status, failed_chunk_count, affected_lesson_ids, failure_messages, chunk_generation_results, questions_per_lesson, questions_per_period, uncovered_lesson_ids, uncovered_periods, refill_attempt_count, refill_warnings)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
                 $batchInsertedSuccess = $stmtBatch->execute([
                     $generation_batch_id,
@@ -316,7 +316,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
                     $batchStatus,
                     $failedChunkCount,
                     $affectedLessonIdsStr,
-                    $failureMessagesStr
+                    $failureMessagesStr,
+                    json_encode($result['metadata']['chunk_generation_results'] ?? []),
+                    json_encode($result['metadata']['questions_per_lesson'] ?? (object)[]),
+                    json_encode($result['metadata']['questions_per_period'] ?? (object)[]),
+                    json_encode($result['metadata']['uncovered_lesson_ids'] ?? []),
+                    json_encode($result['metadata']['uncovered_periods'] ?? []),
+                    intval($result['metadata']['refill_attempt_count'] ?? 0),
+                    json_encode($result['metadata']['refill_warnings'] ?? [])
                 ]);
             } catch (Throwable $e) {
                 $batchInsertedSuccess = false;

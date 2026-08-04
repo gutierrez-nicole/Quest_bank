@@ -418,6 +418,13 @@ addColumn($pdo, 'ai_generation_batches', 'acknowledgement_token_hash', "VARCHAR(
 addColumn($pdo, 'ai_generation_batches', 'batch_consumed_at', "TIMESTAMP NULL DEFAULT NULL");
 addColumn($pdo, 'ai_generation_batches', 'batch_consumed_by', "INT(11) DEFAULT NULL");
 addColumn($pdo, 'ai_generation_batches', 'saved_exam_id', "INT(11) DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'chunk_generation_results', "LONGTEXT DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'questions_per_lesson', "LONGTEXT DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'questions_per_period', "LONGTEXT DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'uncovered_lesson_ids', "LONGTEXT DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'uncovered_periods', "LONGTEXT DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'refill_attempt_count', "INT(11) DEFAULT 0");
+addColumn($pdo, 'ai_generation_batches', 'refill_warnings', "LONGTEXT DEFAULT NULL");
 
 $defaultPassHash = password_hash('Password123!', PASSWORD_DEFAULT);
 

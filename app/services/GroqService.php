@@ -25,9 +25,24 @@ class GroqService {
                 ['question' => 'Which coefficient represents pavement friction in SSD calculation?', 'type' => 'multiple_choice', 'opt_a' => 'f (coefficient of longitudinal friction)', 'opt_b' => 'CBR', 'opt_c' => 'V (velocity)', 'opt_d' => 't (time)', 'correct_answer' => 'A', 'explanation' => 'Friction coefficient f.', 'points' => 1, 'source_topic' => 'Highway Engineering', 'source_academic_period' => 'prelim', 'source_confidence' => 'high']
             ];
 
+            preg_match_all('/Lesson ID:\s*(\d+)/i', $userPrompt, $lMatch);
+            $promptLids = !empty($lMatch[1]) ? array_values(array_unique(array_map('intval', $lMatch[1]))) : [];
+            if (empty($promptLids) && preg_match('/source_lesson_ids.*?\[([\d,\s]+)\]/i', $userPrompt, $eMatch)) {
+                $promptLids = array_values(array_unique(array_map('intval', explode(',', $eMatch[1]))));
+            }
+
+            preg_match('/Period:\s*([^\r\n]+)/i', $userPrompt, $pMatch);
+            $promptPeriod = !empty($pMatch[1]) ? strtolower(trim($pMatch[1])) : null;
+
             $mockQuestions = [];
             for ($i = 0; $i < $targetCount; $i++) {
                 $item = $basePool[$i % count($basePool)];
+                if (!empty($promptLids)) {
+                    $item['source_lesson_ids'] = $promptLids;
+                }
+                if (!empty($promptPeriod)) {
+                    $item['source_academic_period'] = $promptPeriod;
+                }
                 if (preg_match('/lesson chunk \((\d+) of (\d+)\)/i', $userPrompt, $cm)) {
                     $item['question'] .= " [Chunk {$cm[1]}-Item #" . ($i + 1) . "]";
                 } elseif ($i >= count($basePool)) {
@@ -251,8 +266,9 @@ class GroqService {
             $totalChunks = count($chunks);
             $failedChunkCount = 0;
             $affectedLessonIds = [];
+            $chunkGenerationResults = [];
 
-            // Repair Prompt 4: Calculate exact integer question allocation per chunk
+            // Calculate exact integer question allocation per chunk
             $baseAlloc = (int)floor($numQuestions / $totalChunks);
             $remainder = $numQuestions % $totalChunks;
             $chunkAllocations = [];
@@ -263,9 +279,21 @@ class GroqService {
             foreach ($chunks as $chunkIdx => $chunkContent) {
                 $chunkShare = $chunkAllocations[$chunkIdx] ?? max(1, (int)round($numQuestions / $totalChunks));
                 
-                // Extract lesson IDs in current chunk for failure tracking
+                // Extract lesson IDs in current chunk for failure and coverage tracking
                 preg_match_all('/Lesson ID:\s*(\d+)/i', $chunkContent, $lIdMatches);
-                $chunkLessonIds = !empty($lIdMatches[1]) ? array_map('intval', $lIdMatches[1]) : [];
+                $chunkLessonIds = !empty($lIdMatches[1]) ? array_values(array_unique(array_map('intval', $lIdMatches[1]))) : [];
+
+                // Extract academic periods in current chunk
+                preg_match_all('/Period:\s*([^\r\n]+)/i', $chunkContent, $pMatches);
+                $chunkPeriods = [];
+                if (!empty($pMatches[1])) {
+                    foreach ($pMatches[1] as $pm) {
+                        $pm = strtolower(trim($pm));
+                        if (!empty($pm) && !in_array($pm, $chunkPeriods, true)) {
+                            $chunkPeriods[] = $pm;
+                        }
+                    }
+                }
 
                 $chunkPrompt = "You are an expert Civil Engineering professor specializing in {$specialization} and academic assessment creation. "
                              . "Generate exactly {$chunkShare} high-quality Civil Engineering examination questions for the subject '{$subject}' (Specialization: {$specialization}) titled '{$examTitle}'. "
@@ -276,7 +304,7 @@ class GroqService {
                              . "Format response strictly as a JSON array of objects without markdown code blocks. "
                              . "Each object MUST have: \"question\" (string), \"type\" (string), \"opt_a\" (string or null), \"opt_b\" (string or null), \"opt_c\" (string or null), \"opt_d\" (string or null), "
                              . "\"correct_answer\" (string), \"formula_latex\" (string or null), \"matching_pairs\" (object or null), \"explanation\" (string), \"points\" (int), "
-                             . "\"source_lesson_ids\" (array of integers, e.g. [12]), \"source_topic\" (string), \"source_academic_period\" (string), \"source_confidence\" (string: 'high', 'medium', or 'review_required').";
+                             . "\"source_lesson_ids\" (array of integers, e.g. [" . implode(',', $chunkLessonIds) . "]), \"source_topic\" (string), \"source_academic_period\" (string), \"source_confidence\" (string: 'high', 'medium', or 'review_required').";
 
                 $payload = [
                     'model' => GROQ_DEFAULT_MODEL,
@@ -284,105 +312,261 @@ class GroqService {
                     'temperature' => 0.3
                 ];
 
+                $chunkCallFailed = false;
+                $invalidQuestionCount = 0;
+                $duplicateCount = 0;
+                $acceptedFromChunk = 0;
+                $rawGeneratedCount = 0;
+
                 $res = self::sendRequest($payload, $apiKey);
                 if (isset($res['error']) || (isset($res['success']) && $res['success'] === false)) {
+                    $chunkCallFailed = true;
                     $failedChunkCount++;
                     $affectedLessonIds = array_merge($affectedLessonIds, $chunkLessonIds);
                     $errMsg = $res['user_message'] ?? $res['error'] ?? 'Chunk generation failed';
                     $generationWarnings[] = "Chunk " . ($chunkIdx + 1) . " of {$totalChunks} failed: " . $errMsg;
-                    continue;
-                }
+                } else {
+                    $content = $res['data']['choices'][0]['message']['content'] ?? '';
+                    $cleanContent = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', trim($content));
+                    $cleanJson = json_decode(trim($cleanContent), true);
 
-                $content = $res['data']['choices'][0]['message']['content'] ?? '';
-                $cleanContent = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', trim($content));
-                $cleanJson = json_decode(trim($cleanContent), true);
+                    if (is_array($cleanJson)) {
+                        foreach ($cleanJson as $q) {
+                            if (!is_array($q)) continue;
+                            $rawGeneratedCount++;
+                            $qText = trim($q['question'] ?? '');
+                            $qCorrect = trim($q['correct_answer'] ?? '');
+                            if (empty($qText) || empty($qCorrect)) {
+                                $invalidQuestionCount++;
+                                continue;
+                            }
 
-                if (is_array($cleanJson)) {
-                    foreach ($cleanJson as $q) {
-                        if (!is_array($q)) continue;
-                        $qText = trim($q['question'] ?? '');
-                        $qCorrect = trim($q['correct_answer'] ?? '');
-                        if (empty($qText) || empty($qCorrect)) continue;
-
-                        $dedupKey = mb_strtolower(preg_replace('/\s+/', ' ', $qText));
-                        if (isset($seen[$dedupKey])) continue;
-                        $seen[$dedupKey] = true;
-
-                        $srcLessonIds = is_array($q['source_lesson_ids'] ?? null) ? array_map('intval', $q['source_lesson_ids']) : [];
-
-                        $validQuestions[] = [
-                            'question' => $qText,
-                            'type' => trim($q['type'] ?? $questionType),
-                            'opt_a' => $q['opt_a'] ?? null,
-                            'opt_b' => $q['opt_b'] ?? null,
-                            'opt_c' => $q['opt_c'] ?? null,
-                            'opt_d' => $q['opt_d'] ?? null,
-                            'correct_answer' => $qCorrect,
-                            'formula_latex' => $q['formula_latex'] ?? null,
-                            'matching_pairs' => $q['matching_pairs'] ?? null,
-                            'explanation' => $q['explanation'] ?? '',
-                            'points' => intval($q['points'] ?? 1),
-                            'difficulty' => $difficulty,
-                            'topic' => $q['source_topic'] ?? $subject,
-                            'source_lesson_ids' => $srcLessonIds,
-                            'source_topic' => $q['source_topic'] ?? $subject,
-                            'source_academic_period' => strtolower($q['source_academic_period'] ?? 'general'),
-                            'source_confidence' => $q['source_confidence'] ?? 'high'
-                        ];
-                    }
-                }
-            }
-
-            // Final Repair 11: Controlled Refill Generation for Question Shortfall
-            $shortfall = $numQuestions - count($validQuestions);
-            if ($shortfall > 0 && !empty($chunks[0])) {
-                $refillPrompt = "You are an expert Civil Engineering professor specializing in {$specialization}. "
-                              . "Generate exactly {$shortfall} ADDITIONAL non-duplicate examination questions for the subject '{$subject}' (Specialization: {$specialization}) titled '{$examTitle}'. "
-                              . "Target Difficulty Level: '{$difficulty}'. Target Question Type: '{$questionType}'. "
-                              . "based strictly on: \"{$chunks[0]}\". "
-                              . "Format response strictly as a JSON array of objects without markdown code blocks.";
-                
-                $refillPayload = [
-                    'model' => GROQ_DEFAULT_MODEL,
-                    'messages' => [['role' => 'user', 'content' => $refillPrompt]],
-                    'temperature' => 0.3
-                ];
-                $refillRes = self::sendRequest($refillPayload, $apiKey);
-                if (isset($refillRes['data']['choices'][0]['message']['content'])) {
-                    $refillContent = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', trim($refillRes['data']['choices'][0]['message']['content']));
-                    $refillJson = json_decode(trim($refillContent), true);
-                    if (is_array($refillJson)) {
-                        foreach ($refillJson as $rq) {
-                            if (count($validQuestions) >= $numQuestions) break;
-                            if (!is_array($rq)) continue;
-                            $rqText = trim($rq['question'] ?? '');
-                            $rqCorrect = trim($rq['correct_answer'] ?? '');
-                            if (empty($rqText) || empty($rqCorrect)) continue;
-
-                            $dedupKey = mb_strtolower(preg_replace('/\s+/', ' ', $rqText));
-                            if (isset($seen[$dedupKey])) continue;
+                            $dedupKey = mb_strtolower(preg_replace('/\s+/', ' ', $qText));
+                            if (isset($seen[$dedupKey])) {
+                                $duplicateCount++;
+                                continue;
+                            }
                             $seen[$dedupKey] = true;
 
+                            $srcLessonIds = is_array($q['source_lesson_ids'] ?? null) ? array_map('intval', $q['source_lesson_ids']) : [];
+                            if (empty($srcLessonIds)) {
+                                $srcLessonIds = $chunkLessonIds;
+                            }
+
+                            $srcPeriod = strtolower(trim($q['source_academic_period'] ?? ''));
+                            if (empty($srcPeriod) || $srcPeriod === 'general') {
+                                $srcPeriod = !empty($chunkPeriods) ? $chunkPeriods[0] : 'general';
+                            }
+
                             $validQuestions[] = [
-                                'question' => $rqText,
-                                'type' => trim($rq['type'] ?? $questionType),
-                                'opt_a' => $rq['opt_a'] ?? null,
-                                'opt_b' => $rq['opt_b'] ?? null,
-                                'opt_c' => $rq['opt_c'] ?? null,
-                                'opt_d' => $rq['opt_d'] ?? null,
-                                'correct_answer' => $rqCorrect,
-                                'formula_latex' => $rq['formula_latex'] ?? null,
-                                'matching_pairs' => $rq['matching_pairs'] ?? null,
-                                'explanation' => $rq['explanation'] ?? '',
-                                'points' => intval($rq['points'] ?? 1),
+                                'question' => $qText,
+                                'type' => trim($q['type'] ?? $questionType),
+                                'opt_a' => $q['opt_a'] ?? null,
+                                'opt_b' => $q['opt_b'] ?? null,
+                                'opt_c' => $q['opt_c'] ?? null,
+                                'opt_d' => $q['opt_d'] ?? null,
+                                'correct_answer' => $qCorrect,
+                                'formula_latex' => $q['formula_latex'] ?? null,
+                                'matching_pairs' => $q['matching_pairs'] ?? null,
+                                'explanation' => $q['explanation'] ?? '',
+                                'points' => intval($q['points'] ?? 1),
                                 'difficulty' => $difficulty,
-                                'topic' => $rq['source_topic'] ?? $subject,
-                                'source_lesson_ids' => is_array($rq['source_lesson_ids'] ?? null) ? array_map('intval', $rq['source_lesson_ids']) : [],
-                                'source_topic' => $rq['source_topic'] ?? $subject,
-                                'source_academic_period' => strtolower($rq['source_academic_period'] ?? 'general'),
-                                'source_confidence' => $rq['source_confidence'] ?? 'high'
+                                'topic' => $q['source_topic'] ?? $subject,
+                                'source_lesson_ids' => $srcLessonIds,
+                                'source_topic' => $q['source_topic'] ?? $subject,
+                                'source_academic_period' => $srcPeriod,
+                                'source_confidence' => $q['source_confidence'] ?? 'high'
                             ];
+                            $acceptedFromChunk++;
                         }
+                    } else {
+                        $invalidQuestionCount += $chunkShare;
+                    }
+                }
+
+                $failedCount = $chunkCallFailed ? $chunkShare : max(0, $chunkShare - $acceptedFromChunk);
+
+                $chunkGenerationResults[$chunkIdx] = [
+                    'chunk_id' => $chunkIdx,
+                    'source_lesson_ids' => $chunkLessonIds,
+                    'academic_periods' => $chunkPeriods,
+                    'requested_question_allocation' => $chunkShare,
+                    'successfully_generated_count' => $rawGeneratedCount,
+                    'invalid_question_count' => $invalidQuestionCount,
+                    'duplicate_count' => $duplicateCount,
+                    'failed_count' => $failedCount,
+                    'final_accepted_count' => $acceptedFromChunk
+                ];
+            }
+
+            // --- COVERAGE-AWARE SHORTFALL REFILL ---
+            $refillAttemptCount = 0;
+            $refillWarnings = [];
+            $shortfall = $numQuestions - count($validQuestions);
+
+            if ($shortfall > 0) {
+                preg_match_all('/Lesson ID:\s*(\d+)/i', $lessonText, $allLMatches);
+                $allSelectedLessonIds = !empty($allLMatches[1]) ? array_values(array_unique(array_map('intval', $allLMatches[1]))) : [];
+
+                preg_match_all('/Period:\s*([^\r\n]+)/i', $lessonText, $allPMatches);
+                $allSelectedPeriods = [];
+                if (!empty($allPMatches[1])) {
+                    foreach ($allPMatches[1] as $pm) {
+                        $pm = strtolower(trim($pm));
+                        if (!empty($pm) && !in_array($pm, $allSelectedPeriods, true)) {
+                            $allSelectedPeriods[] = $pm;
+                        }
+                    }
+                }
+
+                // Determine refill queue based on priority order:
+                // 1. Failed chunks
+                // 2. Chunks below allocated question count
+                // 3. Selected lessons with zero coverage
+                // 4. Academic periods with zero coverage
+                // 5. Other underrepresented source content
+                $p1_failed = [];
+                $p2_underfilled = [];
+                $p3_uncovered_lessons = [];
+                $p4_uncovered_periods = [];
+                $p5_others = [];
+
+                $lessonCoverage = array_fill_keys($allSelectedLessonIds, 0);
+                $periodCoverage = array_fill_keys($allSelectedPeriods, 0);
+                foreach ($validQuestions as $vq) {
+                    foreach ($vq['source_lesson_ids'] as $lId) {
+                        if (isset($lessonCoverage[$lId])) $lessonCoverage[$lId]++;
+                    }
+                    $p = strtolower($vq['source_academic_period'] ?? '');
+                    if (isset($periodCoverage[$p])) $periodCoverage[$p]++;
+                }
+
+                $zeroLessons = array_keys(array_filter($lessonCoverage, function($cnt) { return $cnt === 0; }));
+                $zeroPeriods = array_keys(array_filter($periodCoverage, function($cnt) { return $cnt === 0; }));
+
+                for ($c = 0; $c < $totalChunks; $c++) {
+                    $cRes = $chunkGenerationResults[$c];
+                    $deficit = $cRes['requested_question_allocation'] - $cRes['final_accepted_count'];
+                    
+                    if ($cRes['failed_count'] > 0 || $cRes['final_accepted_count'] === 0) {
+                        $p1_failed[] = $c;
+                    } elseif ($deficit > 0) {
+                        $p2_underfilled[$c] = $deficit;
+                    }
+
+                    foreach ($cRes['source_lesson_ids'] as $lId) {
+                        if (in_array($lId, $zeroLessons, true)) {
+                            $p3_uncovered_lessons[] = $c;
+                        }
+                    }
+
+                    foreach ($cRes['academic_periods'] as $per) {
+                        if (in_array($per, $zeroPeriods, true)) {
+                            $p4_uncovered_periods[] = $c;
+                        }
+                    }
+
+                    $p5_others[] = $c;
+                }
+
+                arsort($p2_underfilled);
+                $p2_chunks = array_keys($p2_underfilled);
+
+                $refillQueue = [];
+                foreach (array_merge($p1_failed, $p2_chunks, $p3_uncovered_lessons, $p4_uncovered_periods, $p5_others) as $idx) {
+                    if (!in_array($idx, $refillQueue, true)) {
+                        $refillQueue[] = $idx;
+                    }
+                }
+
+                $qIndex = 0;
+                $maxRefillAttempts = count($refillQueue) * 2;
+
+                while (count($validQuestions) < $numQuestions && $refillAttemptCount < $maxRefillAttempts && !empty($refillQueue)) {
+                    $targetChunkIdx = $refillQueue[$qIndex % count($refillQueue)];
+                    $qIndex++;
+                    $refillAttemptCount++;
+
+                    $targetChunkContent = $chunks[$targetChunkIdx];
+                    $targetChunkLessonIds = $chunkGenerationResults[$targetChunkIdx]['source_lesson_ids'] ?? [];
+                    $targetChunkPeriods = $chunkGenerationResults[$targetChunkIdx]['academic_periods'] ?? [];
+
+                    $currentShortfall = $numQuestions - count($validQuestions);
+                    $targetDeficit = max(1, ($chunkAllocations[$targetChunkIdx] ?? 1) - ($chunkGenerationResults[$targetChunkIdx]['final_accepted_count'] ?? 0));
+                    $neededRefill = min($currentShortfall, max(1, $targetDeficit));
+
+                    $refillPrompt = "You are an expert Civil Engineering professor specializing in {$specialization}. "
+                                  . "Generate exactly {$neededRefill} ADDITIONAL non-duplicate examination questions for the subject '{$subject}' (Specialization: {$specialization}) titled '{$examTitle}'. "
+                                  . "Target Difficulty Level: '{$difficulty}'. Target Question Type: '{$questionType}'. "
+                                  . "based strictly on the following lesson content chunk (" . ($targetChunkIdx + 1) . " of {$totalChunks}): \"{$targetChunkContent}\". "
+                                  . "Do NOT invent facts outside the lesson content. "
+                                  . "Format response strictly as a JSON array of objects without markdown code blocks. "
+                                  . "Each object MUST have: \"question\" (string), \"type\" (string), \"opt_a\" (string or null), \"opt_b\" (string or null), \"opt_c\" (string or null), \"opt_d\" (string or null), "
+                                  . "\"correct_answer\" (string), \"formula_latex\" (string or null), \"matching_pairs\" (object or null), \"explanation\" (string), \"points\" (int), "
+                                  . "\"source_lesson_ids\" (array of integers, e.g. [" . implode(',', $targetChunkLessonIds) . "]), \"source_topic\" (string), \"source_academic_period\" (string), \"source_confidence\" (string: 'high', 'medium', or 'review_required').";
+
+                    $refillPayload = [
+                        'model' => GROQ_DEFAULT_MODEL,
+                        'messages' => [['role' => 'user', 'content' => $refillPrompt]],
+                        'temperature' => 0.3
+                    ];
+
+                    $refillRes = self::sendRequest($refillPayload, $apiKey);
+                    $acceptedThisRefill = 0;
+
+                    if (isset($refillRes['data']['choices'][0]['message']['content'])) {
+                        $refillContent = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', trim($refillRes['data']['choices'][0]['message']['content']));
+                        $refillJson = json_decode(trim($refillContent), true);
+
+                        if (is_array($refillJson)) {
+                            foreach ($refillJson as $rq) {
+                                if (count($validQuestions) >= $numQuestions) break;
+                                if (!is_array($rq)) continue;
+                                $rqText = trim($rq['question'] ?? '');
+                                $rqCorrect = trim($rq['correct_answer'] ?? '');
+                                if (empty($rqText) || empty($rqCorrect)) continue;
+
+                                $dedupKey = mb_strtolower(preg_replace('/\s+/', ' ', $rqText));
+                                if (isset($seen[$dedupKey])) continue;
+                                $seen[$dedupKey] = true;
+
+                                $srcLessonIds = is_array($rq['source_lesson_ids'] ?? null) ? array_map('intval', $rq['source_lesson_ids']) : [];
+                                if (empty($srcLessonIds)) {
+                                    $srcLessonIds = $targetChunkLessonIds;
+                                }
+
+                                $srcPeriod = strtolower(trim($rq['source_academic_period'] ?? ''));
+                                if (empty($srcPeriod) || $srcPeriod === 'general') {
+                                    $srcPeriod = !empty($targetChunkPeriods) ? $targetChunkPeriods[0] : 'general';
+                                }
+
+                                $validQuestions[] = [
+                                    'question' => $rqText,
+                                    'type' => trim($rq['type'] ?? $questionType),
+                                    'opt_a' => $rq['opt_a'] ?? null,
+                                    'opt_b' => $rq['opt_b'] ?? null,
+                                    'opt_c' => $rq['opt_c'] ?? null,
+                                    'opt_d' => $rq['opt_d'] ?? null,
+                                    'correct_answer' => $rqCorrect,
+                                    'formula_latex' => $rq['formula_latex'] ?? null,
+                                    'matching_pairs' => $rq['matching_pairs'] ?? null,
+                                    'explanation' => $rq['explanation'] ?? '',
+                                    'points' => intval($rq['points'] ?? 1),
+                                    'difficulty' => $difficulty,
+                                    'topic' => $rq['source_topic'] ?? $subject,
+                                    'source_lesson_ids' => $srcLessonIds,
+                                    'source_topic' => $rq['source_topic'] ?? $subject,
+                                    'source_academic_period' => $srcPeriod,
+                                    'source_confidence' => $rq['source_confidence'] ?? 'high'
+                                ];
+                                $acceptedThisRefill++;
+                                $chunkGenerationResults[$targetChunkIdx]['final_accepted_count']++;
+                            }
+                        }
+                    }
+
+                    if ($acceptedThisRefill === 0) {
+                        $refillWarnings[] = "Refill attempt {$refillAttemptCount} on Chunk " . ($targetChunkIdx + 1) . " produced 0 new questions.";
                     }
                 }
             }
@@ -395,8 +579,59 @@ class GroqService {
             $validQuestions = array_slice($validQuestions, 0, $numQuestions);
             $finalGeneratedCount = count($validQuestions);
             $shortfallCount = max(0, $numQuestions - $finalGeneratedCount);
-            $batchStatus = ($failedChunkCount > 0 || $shortfallCount > 0) ? 'incomplete' : 'completed';
 
+            // Compute post-generation coverage metrics per lesson & period
+            preg_match_all('/Lesson ID:\s*(\d+)/i', $lessonText, $allLMatches);
+            $allSelectedLessonIds = !empty($allLMatches[1]) ? array_values(array_unique(array_map('intval', $allLMatches[1]))) : [];
+
+            preg_match_all('/Period:\s*([^\r\n]+)/i', $lessonText, $allPMatches);
+            $allSelectedPeriods = [];
+            if (!empty($allPMatches[1])) {
+                foreach ($allPMatches[1] as $pm) {
+                    $pm = strtolower(trim($pm));
+                    if (!empty($pm) && !in_array($pm, $allSelectedPeriods, true)) {
+                        $allSelectedPeriods[] = $pm;
+                    }
+                }
+            }
+
+            $questionsPerLesson = array_fill_keys($allSelectedLessonIds, 0);
+            $questionsPerPeriod = array_fill_keys($allSelectedPeriods, 0);
+
+            foreach ($validQuestions as $vq) {
+                foreach ($vq['source_lesson_ids'] as $lId) {
+                    if (isset($questionsPerLesson[(int)$lId])) {
+                        $questionsPerLesson[(int)$lId]++;
+                    }
+                }
+                $p = strtolower($vq['source_academic_period'] ?? '');
+                if (isset($questionsPerPeriod[$p])) {
+                    $questionsPerPeriod[$p]++;
+                }
+            }
+
+            $uncoveredLessonIds = [];
+            foreach ($questionsPerLesson as $lId => $cnt) {
+                if ($cnt === 0) {
+                    $uncoveredLessonIds[] = (int)$lId;
+                }
+            }
+
+            $uncoveredPeriods = [];
+            foreach ($questionsPerPeriod as $per => $cnt) {
+                if ($cnt === 0) {
+                    $uncoveredPeriods[] = $per;
+                }
+            }
+
+            $batchStatus = ($failedChunkCount > 0 || $shortfallCount > 0 || !empty($uncoveredLessonIds) || !empty($uncoveredPeriods)) ? 'incomplete' : 'completed';
+
+            if (!empty($uncoveredLessonIds)) {
+                $generationWarnings[] = "Selected lesson(s) with zero question coverage: " . implode(', ', $uncoveredLessonIds);
+            }
+            if (!empty($uncoveredPeriods)) {
+                $generationWarnings[] = "Academic period(s) with zero question coverage: " . implode(', ', array_map('ucfirst', $uncoveredPeriods));
+            }
             if ($shortfallCount > 0) {
                 $generationWarnings[] = "Generation shortfall: Requested {$numQuestions} questions, but only {$finalGeneratedCount} unique valid items could be generated.";
             }
@@ -422,6 +657,13 @@ class GroqService {
                     'shortfall_count' => $shortfallCount,
                     'affected_lesson_ids' => array_values(array_unique($affectedLessonIds)),
                     'generation_warnings' => $generationWarnings,
+                    'chunk_generation_results' => array_values($chunkGenerationResults),
+                    'questions_per_lesson' => $questionsPerLesson,
+                    'questions_per_period' => $questionsPerPeriod,
+                    'uncovered_lesson_ids' => array_values($uncoveredLessonIds),
+                    'uncovered_periods' => array_values($uncoveredPeriods),
+                    'refill_attempt_count' => $refillAttemptCount,
+                    'refill_warnings' => $refillWarnings,
                     'difficulty' => $difficulty
                 ]
             ];
@@ -511,6 +753,63 @@ class GroqService {
             return ['error' => 'AI generation produced no valid questions after schema validation.'];
         }
 
+        $validQuestions = array_slice($validQuestions, 0, $numQuestions);
+        $finalGeneratedCount = count($validQuestions);
+        $shortfallCount = max(0, $numQuestions - $finalGeneratedCount);
+
+        preg_match_all('/Lesson ID:\s*(\d+)/i', $lessonText, $allLMatches);
+        $allSelectedLessonIds = !empty($allLMatches[1]) ? array_values(array_unique(array_map('intval', $allLMatches[1]))) : [];
+
+        preg_match_all('/Period:\s*([^\r\n]+)/i', $lessonText, $allPMatches);
+        $allSelectedPeriods = [];
+        if (!empty($allPMatches[1])) {
+            foreach ($allPMatches[1] as $pm) {
+                $pm = strtolower(trim($pm));
+                if (!empty($pm) && !in_array($pm, $allSelectedPeriods, true)) {
+                    $allSelectedPeriods[] = $pm;
+                }
+            }
+        }
+
+        $questionsPerLesson = array_fill_keys($allSelectedLessonIds, 0);
+        $questionsPerPeriod = array_fill_keys($allSelectedPeriods, 0);
+
+        foreach ($validQuestions as $vq) {
+            foreach ($vq['source_lesson_ids'] as $lId) {
+                if (isset($questionsPerLesson[(int)$lId])) {
+                    $questionsPerLesson[(int)$lId]++;
+                }
+            }
+            $p = strtolower($vq['source_academic_period'] ?? '');
+            if (isset($questionsPerPeriod[$p])) {
+                $questionsPerPeriod[$p]++;
+            }
+        }
+
+        $uncoveredLessonIds = [];
+        foreach ($questionsPerLesson as $lId => $cnt) {
+            if ($cnt === 0) $uncoveredLessonIds[] = (int)$lId;
+        }
+
+        $uncoveredPeriods = [];
+        foreach ($questionsPerPeriod as $per => $cnt) {
+            if ($cnt === 0) $uncoveredPeriods[] = $per;
+        }
+
+        $batchStatus = ($shortfallCount > 0 || !empty($uncoveredLessonIds) || !empty($uncoveredPeriods)) ? 'incomplete' : 'completed';
+
+        $singleChunkResult = [
+            'chunk_id' => 0,
+            'source_lesson_ids' => $allSelectedLessonIds,
+            'academic_periods' => $allSelectedPeriods,
+            'requested_question_allocation' => $numQuestions,
+            'successfully_generated_count' => count($cleanJson),
+            'invalid_question_count' => max(0, count($cleanJson) - count($seen)),
+            'duplicate_count' => max(0, count($cleanJson) - count($validQuestions)),
+            'failed_count' => $shortfallCount,
+            'final_accepted_count' => $finalGeneratedCount
+        ];
+
         return [
             'success' => true,
             'questions' => $validQuestions,
@@ -522,6 +821,21 @@ class GroqService {
                 'estimated_tokens' => $estimatedTokens,
                 'chunked' => false,
                 'prompt' => mb_substr($prompt, 0, 500),
+                'batch_status' => $batchStatus,
+                'failed_chunk_count' => 0,
+                'requested_question_count' => $numQuestions,
+                'generated_question_count' => $finalGeneratedCount,
+                'failed_question_count' => $shortfallCount,
+                'shortfall_count' => $shortfallCount,
+                'affected_lesson_ids' => [],
+                'generation_warnings' => [],
+                'chunk_generation_results' => [$singleChunkResult],
+                'questions_per_lesson' => $questionsPerLesson,
+                'questions_per_period' => $questionsPerPeriod,
+                'uncovered_lesson_ids' => array_values($uncoveredLessonIds),
+                'uncovered_periods' => array_values($uncoveredPeriods),
+                'refill_attempt_count' => 0,
+                'refill_warnings' => [],
                 'difficulty' => $difficulty
             ]
         ];
