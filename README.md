@@ -1,188 +1,136 @@
-# 🎓 QuestBank: AI-Powered Automated Examination Management & Academic Performance Monitoring System
+# 🎓 QuestBank: Automated Examination Management & Performance Monitoring System
 
 > **Target Institution:** Holy Cross College – Pampanga  
 > **Target Department:** College of Engineering (Department of Civil Engineering - BSCE)  
-> **Core Integration:** Groq Cloud AI Engine (`llama-3.3-70b-versatile` & `llama-3.2-11b-vision-preview`)  
+> **AI Vision & Evaluation Engine:** Groq Cloud AI API (`llama-3.3-70b-versatile` & `llama-3.2-11b-vision-preview`)
 
 ---
 
-## 📌 Project Overview
+## 📌 System Overview
 
-**QuestBank** is an intelligent, web-based examination management and optical evaluation portal tailored for academic civil engineering institutions. Built with a **ProMax Layered Architecture** (Repositories, Services, Controllers, and Frontend Modules), the system streamlines test item generation from instructional materials, automates optical/handwritten student answer sheet grading, computes performance analytics, tracks ISO/IEC 25010 Quality Model metrics, and predicts academically at-risk students using Artificial Intelligence.
-
----
-
-## ✨ Key Features
-
-## 🚀 Database Setup & Test Execution
-
-### 1. Authoritative Database Clean Installation Path
-Follow this exact sequence for a clean installation:
-
-```bash
-# Step 1: Create target database
-mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS bankquest_db;"
-
-# Step 2: Import base schema tables
-mysql -u root -p bankquest_db < database/bankquest_db.sql
-
-# Step 3: Run schema migrations & seed QA test accounts
-php database/migrate.php
-
-# Step 4: Verify schema integrity
-php database/verify_schema.php
-
-# Step 5: Check system dependencies
-php tests/check_dependencies.php
-```
-
-### 2. Run Automated Unit Test Suites
-Execute all Priority 1 capability unit test suites:
-```bash
-php tests/test_prompt1_extraction.php
-php tests/test_prompt2_ai_generation.php
-php tests/test_prompt3_ocr.php
-php tests/test_prompt4_evaluation.php
-php tests/test_prompt5_results_review.php
-```
-
-### 3. Run Playwright End-to-End Tests
-Install Playwright dependencies and execute end-to-end tests:
-```bash
-npm install
-npx playwright install chromium
-npx playwright test
-```
-
-### 👨‍🏫 Faculty / Teacher Portal
-* 📄 **Instructional Material Processing:** Upload lesson materials in PDF, DOCX, PPTX, or TXT format.
-* 🤖 **AI Question Generator:** Automatically create Multiple Choice, True/False, Fill-in-the-Blank, Identification, Matching Type, and **Civil Engineering Problem Solving / Math Formulas**.
-* ✍️ **AI Optical Answer Sheet Checker (OCR):** Evaluate scanned or uploaded images/PDFs of student test papers against answer keys with automated Vision OCR grading.
-* ⚠️ **Academically At-Risk Student Early Warning:** Automated identification of students scoring below 75% average for targeted faculty tutorial intervention.
-* 📊 **Performance Analytics & Native FPDF Export:** Comprehensive topic performance reports and printable PDF analytical exports.
-* 💾 **System Backup & Restore:** Generate full SQL database snapshots and restore data directly from the portal.
-
-### 🎓 Student Portal
-* 📈 **Performance Dashboard:** View overall GPA, passing rates, exam completion history, and score analytics.
-* 📄 **Official Examination Transcripts:** Export printable PDF transcripts of exam results and topic breakdowns.
-
-### 🛠️ Administrator Console
-* 👥 **User Account Management:** Complete CRUD management for Admin, Teacher, and Student credentials.
-* 🏛️ **Departments & Curriculum Management:** Manage academic departments (DCE - Department of Civil Engineering), faculty heads, subjects catalog, and section rosters.
-* 🏆 **ISO/IEC 25010 Quality Model Assessment:** Evaluate system acceptability across 9 software quality characteristics with automated 4-point Likert scale weighted mean calculation (`3.92 / 4.00`) and printable FPDF exports.
-* 📋 **Global Activity Audit Log:** Real-time color-coded multi-role audit trail of all user activities and telemetry events.
+**QuestBank** is an intelligent, web-based examination management and optical evaluation portal designed for academic civil engineering institutions. The system provides end-to-end capabilities:
+- **Instructional Material Extraction:** Upload and extract content from PDF, DOCX, PPTX, and TXT lesson files.
+- **AI Exam Generation:** Automatically generate Multiple Choice, True/False, Identification, and Civil Engineering Problem Solving questions.
+- **Optical Answer Sheet Checker (OCR):** Evaluate scanned student answer sheets via Groq Vision OCR and automated scoring logic.
+- **Review & Publication Workflow:** Faculty score review, item-level overrides, status state transitions (`draft` $\rightarrow$ `pending_review` $\rightarrow$ `reviewed` $\rightarrow$ `finalized` $\rightarrow$ `published`), and complete audit history.
+- **Student Performance Analytics:** Grade tracking, passing rate metrics, radar topic breakdown, and FPDF transcript exports.
+- **ISO/IEC 25010 Evaluation:** Quality assessment tool for institutional evaluation.
 
 ---
 
-## 🛠️ Technology Stack & Architecture
+## 📋 Production Requirements
 
-* **Architecture Pattern:** Enterprise Layered Architecture (Repositories, Business Services, Controllers, Asset Bundles)
-* **Backend Engine:** Native PHP 8.0+ (Central Bootstrap Autoloader, PDO Singleton Pattern)
-* **Database:** MySQL (`bankquest_db`) with SQL Schema repository
-* **Frontend UI/UX:** HTML5, Tailwind CSS, FontAwesome 6, Chart.js, Google Fonts (*Plus Jakarta Sans*)
-* **JavaScript Assets:** Modular JS Modules (`assets/js/global.js`, `admin-charts.js`, `file-uploader.js`)
-* **AI & Vision Engine:** Groq Cloud Vision & LLM API (`app/services/GroqService.php`)
-* **PDF Exporter:** Native FPDF 1.86 Engine (`app/fpdf.php`)
-* **Security Layer:** Anti-CSRF Token Validation, PDO Prepared Statements, Session Fixation Regeneration (`session_regenerate_id`), Secure HTTP-Only Cookie Flags, Server-side MIME & Extension Verification, IDOR Ownership Binding
+### 1. Web & Database Server
+- **PHP:** 8.0 or higher
+- **Database:** MySQL 5.7+ or MariaDB 10.4+
+- **Web Server:** Apache (with `mod_rewrite`), Nginx, or PHP CLI Server for development.
 
----
+### 2. Required PHP Extensions
+- `pdo_mysql` (Database connectivity)
+- `fileinfo` (MIME validation & magic-byte verification)
+- `gd` / `imagick` (Image processing)
+- `json` (API payload handling)
+- `mbstring` (Multibyte text processing)
+- `curl` (Groq API communication)
+- `zip` (DOCX & PPTX container inspection)
 
-## 📂 Project Directory Structure
-
-```text
-Quest_bank/
-├── app/                        # Application Core Architecture
-│   ├── bootstrap.php           #  - Central Autoloader & System Bootstrap
-│   ├── config/config.php       #  - Global Configuration & Groq API Credentials
-│   ├── database.php            #  - Central PDO Connection Singleton (getDBConnection())
-│   ├── session.php             #  - Security Sessions & Role Middleware (requireRole())
-│   ├── fpdf.php                #  - Native FPDF Engine (v1.86)
-│   ├── repositories/           #  - Data Access Layer (RAW SQL PDO Queries)
-│   │   ├── UserRepository.php
-│   │   ├── DepartmentRepository.php
-│   │   ├── ISORepository.php
-│   │   └── ActivityLogRepository.php
-│   └── services/               #  - Business Logic & Service Layer
-│       ├── AuthService.php
-│       ├── DepartmentService.php
-│       ├── ISOService.php
-│       ├── ExamService.php
-│       ├── StudentService.php
-│       └── GroqService.php
-│
-├── assets/                     # Frontend Static Assets
-│   └── js/                     #  - Modular JavaScript Asset Files
-│       ├── global.js           #    * Shared UI Modal Controls & Popover Handlers
-│       ├── admin-charts.js     #    * Chart.js Data Visualizations
-│       └── file-uploader.js    #    * Drag & Drop File Zone & Image Previews
-│
-├── database/                   # Database Backups & Initial SQL Schema Dump
-│   └── bankquest_db.sql        #  - Main System MySQL Database Dump
-│
-├── pdf/                        # PDF Document Assets
-│   └── QuestBank_50Percent_Completion_Report.pdf
-│
-├── includes/                   # Layout Navigation & Security Utilities
-│   ├── security.php            #  - Anti-CSRF & Input Sanitization Helpers
-│   ├── admin_sidebar.php       #  - Administrator Navigation Sidebar
-│   ├── teacher_sidebar.php     #  - Faculty Navigation Sidebar
-│   └── student_sidebar.php     #  - Student Navigation Sidebar
-│
-├── admin/                      # Administrator Console Pages
-├── teacher/                    # Faculty & Exam Creator Modules
-├── student/                    # Student Portal & Transcript Exporter
-├── index.php                   # Authentication Gateway (Login & Register)
-├── logout.php                  # Session Termination
-└── README.md                   # System Documentation
-```
+### 3. Required Command-Line Dependencies (for PDF Extraction & OCR)
+- **pdftotext / pdfimages** (`poppler-utils`) — Required for PDF text & image extraction.
+  - *Ubuntu/Debian:* `sudo apt-get install poppler-utils`
+  - *macOS:* `brew install poppler`
+- **tesseract** — Required as local fallback OCR engine when Vision API is offline.
+  - *Ubuntu/Debian:* `sudo apt-get install tesseract-ocr`
+  - *macOS:* `brew install tesseract`
 
 ---
 
-## 🚀 Local Development Setup Guide
+## 🚀 Installation & Environment Setup
 
-### Prerequisites
-* **PHP 8.0+**
-* **MySQL 5.7+** or **MariaDB**
-* Local Web Server Environment (**XAMPP**, **MAMP**, or **Homebrew PHP/MySQL**)
-
-### Installation Steps
-
-1. **Clone / Open Repository:**
+### Step 1: Database Setup
+1. Create the MySQL database:
+   ```sql
+   CREATE DATABASE bankquest_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+   ```
+2. Import the base database schema:
    ```bash
-   cd /Users/loyd/Quest_bank
+   mysql -u root -p bankquest_db < database/bankquest_db.sql
+   ```
+3. Run the idempotent database migration script to apply all table enhancements:
+   ```bash
+   php database/migrate.php
    ```
 
-2. **Database Setup:**
-   * Start your MySQL service.
-   * Create a database named `bankquest_db`:
-     ```sql
-     CREATE DATABASE bankquest_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-     ```
-   * Import the system SQL schema file (`database/bankquest_db.sql`).
+### Step 2: Configure Environment Variables
+Copy `.env.example` to `.env` and fill in your environment settings:
+```bash
+cp .env.example .env
+```
+Edit `.env`:
+```ini
+DB_HOST=127.0.0.1
+DB_NAME=bankquest_db
+DB_USER=root
+DB_PASS=your_db_password
+GROQ_API_KEY=your_groq_api_key
+```
 
-3. **Configure Environment Settings:**
-   * Edit `app/config/config.php`:
-     ```php
-     define('DB_HOST', '127.0.0.1');
-     define('DB_NAME', 'bankquest_db');
-     define('DB_USER', 'root');
-     define('DB_PASS', '');
-     define('GROQ_API_KEY', 'your_groq_api_key_here'); // Obtain free key from console.groq.com
-     ```
+Alternatively, configure constants directly in `app/config/config.php`.
 
-4. **Launch Application:**
-   * Run via PHP built-in web server:
-     ```bash
-     php -S localhost:8000
-     ```
-   * Open your browser and navigate to `http://localhost:8000`.
+### Step 3: Set Upload Directory Permissions
+Ensure write permissions for document uploads:
+```bash
+chmod 775 teacher/uploads uploads
+```
+
+### Step 4: Launch Web Application
+Run using Apache/Nginx or built-in PHP web server:
+```bash
+php -S localhost:8000
+```
+Access the application at `http://localhost:8000`.
 
 ---
 
-## 🔒 Security & Code Standards
+## 🔑 Login & Initial Setup Process
 
-* **CSRF Mitigation:** Anti-CSRF token verification (`validateCSRFToken()`) on all HTTP POST handlers.
-* **SQLi Prevention:** 100% Parameterized prepared statements across all Repositories and Services.
-* **XSS Safeguards:** UTF-8 context-aware HTML escaping (`htmlspecialchars(..., ENT_QUOTES, 'UTF-8')`).
-* **Session Hardening:** Automatic session ID regeneration on authentication (`session_regenerate_id(true)`), `HttpOnly` and `SameSite=Lax` cookie flags.
-* **File Upload Defense:** Server-side `finfo_file` MIME type verification, extension whitelisting, and strict 10MB size limits.
+1. **Initial Credentials:** Upon running `database/migrate.php`, administrative and default accounts are populated in the database.
+2. **First Login:**
+   - Access `http://localhost:8000` to reach the login gateway.
+   - Login as Administrator or Faculty to manage departments, subjects, and student rosters.
+3. **Password Update:** Immediately change default account passwords via **Profile Settings**.
+
+---
+
+## 💡 Production Usage Guide
+
+### Faculty / Teacher Portal (`teacher/`)
+- **Upload Lessons:** Upload course materials (`.pdf`, `.docx`, `.pptx`, `.txt`). The extraction engine parses text into structured material.
+- **AI Exam Generator:** Select extracted materials, set question count, difficulty, and question types to generate AI exams.
+- **OCR Answer Checker:** Upload scanned answer sheets (`.pdf`, `.png`, `.jpg`). The system evaluates answers and calculates total scores.
+- **Reports & Review:** Inspect OCR confidence scores, apply item-level score overrides with mandatory reason logging, and advance submission statuses through publication.
+
+### Student Portal (`student/`)
+- **Dashboard:** View published exam results, average scores, and topic performance.
+- **Export Transcripts:** Download official FPDF transcripts of published exams.
+
+### Administrator Console (`admin/`)
+- **User & Roster Management:** Create and manage Teacher, Student, and Admin accounts.
+- **Departments & Subjects:** Manage institutional course offerings.
+- **Activity Audit Logs:** Inspect real-time multi-role action audit logs.
+
+---
+
+## 🔒 Deployment & Security Notes
+
+- **CSRF Protection:** All forms include anti-CSRF token verification (`validateCSRFToken()`).
+- **SQL Injection Prevention:** 100% prepared PDO statements throughout database repositories and services.
+- **MIME & Extension Security:** File uploads undergo extension whitelisting, double extension blocking, and magic byte validation via `FileValidationService`.
+- **Student Privacy & IDOR Prevention:** Student access is restricted strictly to their own results (`student_id = session.user_id`) and published submissions (`review_status = 'published'`).
+
+---
+
+## ⚠️ Known OCR & System Limitations
+
+1. **Low Quality Scans:** Extremely low resolution or heavily skewed phone photographs may result in lower OCR confidence scores (<75%), automatically flagging the submission for teacher review.
+2. **Handwritten Identification:** Complex cursive handwriting on identification questions may require teacher review via the item-level score override modal.
+3. **Groq API Rate Limits:** Free-tier Groq API keys may experience rate limits during concurrent bulk OCR requests. Local Tesseract CLI fallback is recommended for high-volume environments.

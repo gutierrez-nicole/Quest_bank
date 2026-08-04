@@ -441,7 +441,7 @@ CREATE TABLE `users` (
 
 LOCK TABLES `users` WRITE;
 /*!40000 ALTER TABLE `users` DISABLE KEYS */;
-INSERT INTO `users` VALUES (2,'jolas','lasjo','lasjo@gmail.com','$2y$10$WUsMFtmboYjhnLqaDbIGve.ocPLTkNUdzBtNW8Aw3yHPqYKQJI8fy','teacher','2026-07-20 14:21:13'),(4,'Ashley Nicole Gutierrez','Nicole','nikol@gmail.com','$2y$10$Rqr7bLIFxDeyG0qiPaNqBe6461nHLOi3xWUzgllgZtPcQ54ulfMi6','student','2026-07-21 09:42:05'),(5,'Russel Gregorio','Russel','russel@gmail.com','$2y$10$7cZuxT8tktcT2Q9xUdGzxuKNtheikTEKBL3.NcsJRSvMJrD0xvOg.','admin','2026-07-21 11:25:28'),(6,'QA Test Administrator','qa_admin','qa_admin@questbank.test','$2y$12$nv9Rc5MLxQQP2ODPpRqdT.ndEmh3HIIfcRcG/wq5sjoNVMPCtdWtC','admin','2026-07-31 03:12:50'),(7,'QA Test Professor','qa_teacher','qa_teacher@questbank.test','$2y$12$nv9Rc5MLxQQP2ODPpRqdT.ndEmh3HIIfcRcG/wq5sjoNVMPCtdWtC','teacher','2026-07-31 03:12:50'),(8,'QA Student Alpha','qa_student_a','qa_student_a@questbank.test','$2y$12$nv9Rc5MLxQQP2ODPpRqdT.ndEmh3HIIfcRcG/wq5sjoNVMPCtdWtC','student','2026-07-31 03:12:50'),(9,'QA Student Beta','qa_student_b','qa_student_b@questbank.test','$2y$12$nv9Rc5MLxQQP2ODPpRqdT.ndEmh3HIIfcRcG/wq5sjoNVMPCtdWtC','student','2026-07-31 03:12:50');
+INSERT INTO `users` VALUES (2,'jolas','lasjo','lasjo@gmail.com','$2y$10$WUsMFtmboYjhnLqaDbIGve.ocPLTkNUdzBtNW8Aw3yHPqYKQJI8fy','teacher','2026-07-20 14:21:13'),(4,'Ashley Nicole Gutierrez','Nicole','nikol@gmail.com','$2y$10$Rqr7bLIFxDeyG0qiPaNqBe6461nHLOi3xWUzgllgZtPcQ54ulfMi6','student','2026-07-21 09:42:05'),(5,'Russel Gregorio','Russel','russel@gmail.com','$2y$10$7cZuxT8tktcT2Q9xUdGzxuKNtheikTEKBL3.NcsJRSvMJrD0xvOg.','admin','2026-07-21 11:25:28');
 /*!40000 ALTER TABLE `users` ENABLE KEYS */;
 UNLOCK TABLES;
 SET @@SESSION.SQL_LOG_BIN = @MYSQLDUMP_TEMP_LOG_BIN;

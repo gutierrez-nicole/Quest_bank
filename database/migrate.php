@@ -324,24 +324,6 @@ if (!tableExists($pdo, 'submission_status_history')) {
 // ============================================
 $defaultPassHash = password_hash('Password123!', PASSWORD_DEFAULT);
 
-// Seed QA Accounts for automated test suites
-$qaUsers = [
-    [1, 'qa_admin', 'QA Test Administrator', 'qa_admin@questbank.test', 'admin'],
-    [2, 'qa_teacher_a', 'QA Test Professor Alpha', 'qa_teacher_a@questbank.test', 'teacher'],
-    [3, 'qa_teacher_b', 'QA Test Professor Beta', 'qa_teacher_b@questbank.test', 'teacher'],
-    [4, 'qa_student_a', 'QA Test Student Alpha', 'qa_student_a@questbank.test', 'student'],
-    [5, 'qa_student_b', 'QA Test Student Beta', 'qa_student_b@questbank.test', 'student']
-];
-
-foreach ($qaUsers as $u) {
-    $stmtUsr = $pdo->prepare("
-        INSERT INTO users (id, username, fullname, email, password, role) 
-        VALUES (?, ?, ?, ?, ?, ?) 
-        ON DUPLICATE KEY UPDATE password = ?, fullname = VALUES(fullname), email = VALUES(email), role = VALUES(role)
-    ");
-    $stmtUsr->execute([$u[0], $u[1], $u[2], $u[3], $defaultPassHash, $u[4], $defaultPassHash]);
-}
-
 // Seed Admin: Russel
 $stmtUsr = $pdo->prepare("
     INSERT INTO users (id, username, fullname, email, password, role) 
@@ -373,97 +355,5 @@ $stmtUsr = $pdo->prepare("
     ON DUPLICATE KEY UPDATE password = ?, fullname = 'jolas', email = 'lasjo@gmail.com'
 ");
 $stmtUsr->execute([$defaultPassHash, $defaultPassHash]);
-
-// Seed Deterministic Test Exam (ID #1) for Automated E2E verification
-$stmtExamSeed = $pdo->prepare("
-    INSERT INTO exams (id, teacher_id, title, subject, specialization, difficulty, time_limit, total_items, passing_percentage, status, created_at)
-    VALUES (1, 2, 'QA Civil Engineering Fundamentals Exam', 'Structural Engineering', 'Structural Engineering', 'medium', 45, 2, 75.00, 'active', NOW())
-    ON DUPLICATE KEY UPDATE title = VALUES(title), total_items = VALUES(total_items), passing_percentage = VALUES(passing_percentage)
-");
-$stmtExamSeed->execute();
-
-$stmtQ1Seed = $pdo->prepare("
-    INSERT INTO exam_questions (id, exam_id, question_text, question_type, option_a, option_b, option_c, option_d, correct_answer, points)
-    VALUES (1, 1, 'What is the formula for Stopping Sight Distance (SSD)?', 'multiple_choice', 'a', 'b', 'c', 'd', 'a', 1.00)
-    ON DUPLICATE KEY UPDATE question_text = VALUES(question_text)
-");
-$stmtQ1Seed->execute();
-
-$stmtQ2Seed = $pdo->prepare("
-    INSERT INTO exam_questions (id, exam_id, question_text, question_type, option_a, option_b, option_c, option_d, correct_answer, points)
-    VALUES (2, 1, 'Flexible pavement design uses CBR structural number.', 'true_false', 'true', 'false', NULL, NULL, 'true', 1.00)
-    ON DUPLICATE KEY UPDATE question_text = VALUES(question_text)
-");
-$stmtQ2Seed->execute();
-
-// Seed Student details for QA Student A & B
-$stmtSdA = $pdo->prepare("
-    INSERT INTO student_details (user_id, student_number, course, year_level, section) 
-    VALUES (4, '23-QA-1001', 'BSCE', 4, 'A') 
-    ON DUPLICATE KEY UPDATE course = 'BSCE', year_level = 4, section = 'A'
-");
-$stmtSdA->execute();
-
-$stmtSdB = $pdo->prepare("
-    INSERT INTO student_details (user_id, student_number, course, year_level, section) 
-    VALUES (5, '23-QA-1002', 'BSCE', 4, 'B') 
-    ON DUPLICATE KEY UPDATE course = 'BSCE', year_level = 4, section = 'B'
-");
-$stmtSdB->execute();
-
-// Seed Deterministic Submissions for IDOR & Review E2E Verification
-// Submission #100: Student A - Published
-$stmtSub100 = $pdo->prepare("
-    INSERT INTO exam_submissions (id, exam_id, student_id, teacher_id, student_name, exam_title, upload_type, correct_count, wrong_count, total_score, total_possible_score, percentage, status, review_status, created_at, published_at)
-    VALUES (100, 1, 4, 2, 'QA Test Student Alpha', 'QA Civil Engineering Fundamentals Exam', 'online', 2, 0, 2.00, 2.00, 100.00, 'Pass', 'published', NOW(), NOW())
-    ON DUPLICATE KEY UPDATE student_id = 4, student_name = 'QA Test Student Alpha', review_status = 'published', percentage = 100.00, correct_count = 2
-");
-$stmtSub100->execute();
-
-// Submission #101: Student B - Published
-$stmtSub101 = $pdo->prepare("
-    INSERT INTO exam_submissions (id, exam_id, student_id, teacher_id, student_name, exam_title, upload_type, correct_count, wrong_count, total_score, total_possible_score, percentage, status, review_status, created_at, published_at)
-    VALUES (101, 1, 5, 2, 'QA Test Student Beta', 'QA Civil Engineering Fundamentals Exam', 'online', 1, 1, 1.00, 2.00, 50.00, 'Fail', 'published', NOW(), NOW())
-    ON DUPLICATE KEY UPDATE student_id = 5, student_name = 'QA Test Student Beta', review_status = 'published', percentage = 50.00, correct_count = 1
-");
-$stmtSub101->execute();
-
-// Submission #102: Student A - Pending Review
-$stmtSub102 = $pdo->prepare("
-    INSERT INTO exam_submissions (id, exam_id, student_id, teacher_id, student_name, exam_title, upload_type, correct_count, wrong_count, total_score, total_possible_score, percentage, status, review_status, created_at)
-    VALUES (102, 1, 4, 2, 'QA Test Student Alpha', 'QA Civil Engineering Fundamentals Exam', 'online', 1, 1, 1.00, 2.00, 50.00, 'Fail', 'pending_review', NOW())
-    ON DUPLICATE KEY UPDATE review_status = 'pending_review', percentage = 50.00, correct_count = 1
-");
-$stmtSub102->execute();
-
-// Seed item answers for Submission #100
-$stmtAns100_1 = $pdo->prepare("
-    INSERT INTO submission_answers (submission_id, exam_id, student_id, question_id, student_answer, correct_answer, awarded_points, max_points, evaluation_status)
-    VALUES (100, 1, 4, 1, 'a', 'a', 1.00, 1.00, 'correct')
-    ON DUPLICATE KEY UPDATE awarded_points = 1.00, evaluation_status = 'correct'
-");
-$stmtAns100_1->execute();
-
-$stmtAns100_2 = $pdo->prepare("
-    INSERT INTO submission_answers (submission_id, exam_id, student_id, question_id, student_answer, correct_answer, awarded_points, max_points, evaluation_status)
-    VALUES (100, 1, 4, 2, 'true', 'true', 1.00, 1.00, 'correct')
-    ON DUPLICATE KEY UPDATE awarded_points = 1.00, evaluation_status = 'correct'
-");
-$stmtAns100_2->execute();
-
-// Seed item answers for Submission #102 (Pending Review)
-$stmtAns102_1 = $pdo->prepare("
-    INSERT INTO submission_answers (submission_id, exam_id, student_id, question_id, student_answer, correct_answer, awarded_points, max_points, evaluation_status)
-    VALUES (102, 1, 4, 1, 'a', 'a', 1.00, 1.00, 'correct')
-    ON DUPLICATE KEY UPDATE awarded_points = 1.00, evaluation_status = 'correct'
-");
-$stmtAns102_1->execute();
-
-$stmtAns102_2 = $pdo->prepare("
-    INSERT INTO submission_answers (submission_id, exam_id, student_id, question_id, student_answer, correct_answer, awarded_points, max_points, evaluation_status)
-    VALUES (102, 1, 4, 2, 'false', 'true', 0.00, 1.00, 'incorrect')
-    ON DUPLICATE KEY UPDATE awarded_points = 0.00, evaluation_status = 'incorrect'
-");
-$stmtAns102_2->execute();
 
 echo "\n=== Migration Complete ===\n";

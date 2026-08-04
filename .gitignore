@@ -1,31 +1,37 @@
-# Configuration files with sensitive data
-app/config.php
-
-# Environment files
+# Sensitive environment configuration
 .env
-.env.local
+.env.*
+!.env.example
 
-# Dependency directories
+# Production upload directories (preserve directory placeholders)
+teacher/uploads/*
+!teacher/uploads/.gitkeep
+uploads/*
+!uploads/.gitkeep
+!uploads/.htaccess
+
+# Dependency & Vendor directories
 node_modules/
 vendor/
 
-# IDE files
+# System & IDE files
+.DS_Store
+Thumbs.db
 .vscode/
 .idea/
 *.swp
 *.swo
 
-# OS files
-.DS_Store
-Thumbs.db
-
-# Logs
+# Log files & caches
 *.log
+app.log
+.cache/
 
-# Uploads and temporary test fixtures
-teacher/uploads/*
-!teacher/uploads/.gitkeep
-tests/fixtures_p1/
-tests/fixtures_p3/
-tests/fixtures/
+# Test & trace artifacts
+test-results/
+playwright-report/
+.last-run.json
 
+# Local archive releases
+*.zip
+*.tar.gz
