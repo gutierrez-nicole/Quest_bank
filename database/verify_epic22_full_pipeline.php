@@ -1,9 +1,6 @@
 <?php
-/**
- * Verification Script for QuestBank Epic 2.2 Repair Prompts 2-6: Full Service & Integration Pipeline
- */
 require_once __DIR__ . '/../app/bootstrap.php';
-
+putenv('APP_ENV=testing');
 GroqService::$testMode = true;
 
 $pdo = getDBConnection();

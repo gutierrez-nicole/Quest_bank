@@ -59,9 +59,11 @@ try {
     logTest("TEST 4: Structured Failure Contract Keys Present", $hasContractKeys, "Contains error_code, user_message, technical_message, retryable, provider_status");
 
     // --- TEST 5: Explicit Test Mock Works ONLY in Testing Mode ---
+    putenv('APP_ENV=testing');
     GroqService::$testMode = true;
     $res5 = GroqService::generateQuestions($sampleLessonText, 5, 'Soil Mechanics', 'Test Exam', 'Geotechnical', 'multiple_choice', 'medium', 'TEST_MOCK_KEY');
     GroqService::$testMode = false;
+    putenv('APP_ENV=production');
     $pass5 = (isset($res5['success']) && $res5['success'] === true) && count($res5['questions'] ?? []) === 5;
     logTest("TEST 5: Explicit Test Mock Works ONLY in Testing Mode", $pass5, "Generated " . count($res5['questions'] ?? []) . " questions under testMode=true");
 

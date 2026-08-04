@@ -2,12 +2,16 @@
 
 require_once __DIR__ . '/../app/bootstrap.php';
 
-$pdo = getDBConnection();
-$dbName = $pdo->query("SELECT DATABASE()")->fetchColumn();
+try {
+    $pdo = getDBConnection();
+    if (!$pdo) {
+        throw new Exception("Database connection failed or returned null.");
+    }
+    $dbName = $pdo->query("SELECT DATABASE()")->fetchColumn();
 
-echo "=== QuestBank Schema Migration ===\n";
-echo "Database: {$dbName}\n";
-echo "Timestamp: " . date('Y-m-d H:i:s') . "\n\n";
+    echo "=== QuestBank Schema Migration ===\n";
+    echo "Database: {$dbName}\n";
+    echo "Timestamp: " . date('Y-m-d H:i:s') . "\n\n";
 
 function columnExists($pdo, $table, $column) {
     $stmt = $pdo->prepare("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?");
@@ -409,6 +413,7 @@ addColumn($pdo, 'ai_generation_batches', 'affected_lesson_ids', "TEXT DEFAULT NU
 addColumn($pdo, 'ai_generation_batches', 'failure_messages', "TEXT DEFAULT NULL");
 addColumn($pdo, 'ai_generation_batches', 'teacher_acknowledged_at', "TIMESTAMP NULL DEFAULT NULL");
 addColumn($pdo, 'ai_generation_batches', 'teacher_acknowledged_by', "INT(11) DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'acknowledgement_reason', "TEXT DEFAULT NULL");
 
 $defaultPassHash = password_hash('Password123!', PASSWORD_DEFAULT);
 
@@ -441,3 +446,8 @@ $stmtUsr = $pdo->prepare("
 $stmtUsr->execute([$defaultPassHash, $defaultPassHash]);
 
 echo "\n=== Migration Complete ===\n";
+exit(0);
+} catch (Throwable $e) {
+    echo "\n[CRITICAL FAILURE] Migration aborted: " . $e->getMessage() . "\n";
+    exit(1);
+}

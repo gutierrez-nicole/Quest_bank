@@ -3,7 +3,7 @@
  * Verification Script for QuestBank Epic 2.2 Final Repairs 2-6
  */
 require_once __DIR__ . '/../app/bootstrap.php';
-
+putenv('APP_ENV=testing');
 GroqService::$testMode = true;
 
 $pdo = getDBConnection();

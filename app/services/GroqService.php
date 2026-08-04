@@ -7,9 +7,10 @@ class GroqService {
     public static $testMode = false;
 
     private static function sendRequest($payload, $apiKey = null) {
-        // Test-only Mock check (Strictly scoped to testMode, APP_ENV === 'testing', or explicit TEST_MOCK_KEY)
-        $isTestEnv = self::$testMode || (defined('APP_ENV') && APP_ENV === 'testing') || ($apiKey === 'TEST_MOCK_KEY');
-        if ($isTestEnv && ($apiKey === 'TEST_MOCK_KEY' || empty($apiKey) || $apiKey === 'YOUR_GROQ_API_KEY_HERE')) {
+        // Final Blocker 2: Mock provider executes ONLY IF APP_ENV === 'testing' AND self::$testMode === true
+        $currentEnv = getenv('APP_ENV') ?: (defined('APP_ENV') ? APP_ENV : 'production');
+        $isTestEnvMode = ($currentEnv === 'testing') && (self::$testMode === true);
+        if ($isTestEnvMode && ($apiKey === 'TEST_MOCK_KEY' || empty($apiKey) || $apiKey === 'YOUR_GROQ_API_KEY_HERE')) {
             $userPrompt = $payload['messages'][0]['content'] ?? '';
             $targetCount = 5;
             if (preg_match('/Generate exactly (\d+)/i', $userPrompt, $pm)) {

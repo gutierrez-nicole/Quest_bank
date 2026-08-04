@@ -346,7 +346,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
     $save_generation_batch_id = $metaData['generation_batch_id'] ?? null;
     $save_ai_model = $metaData['model'] ?? null;
 
-    if (!empty($title) && !empty($subject) && !empty($questions)) {
+    $batchStatus = $metaData['batch_status'] ?? 'completed';
+    $ackReason = trim(sanitizeInput($_POST['acknowledgement_reason'] ?? ''));
+
+    // Final Blocker 4: Saving incomplete batch without explicit teacher acknowledgement must fail
+    if ($batchStatus === 'incomplete' && empty($ackReason) && empty($metaData['teacher_acknowledged_at'])) {
+        $error_msg = "Cannot save exam: Incomplete AI generation batch requires explicit teacher acknowledgement and reason before saving.";
+    } elseif (!empty($title) && !empty($subject) && !empty($questions)) {
         try {
             $pdo->beginTransaction();
 
@@ -484,6 +490,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
             } else {
                 $stmtUpdateTotal = $pdo->prepare("UPDATE exams SET total_items = ? WHERE id = ?");
                 $stmtUpdateTotal->execute([$savedCount, $exam_id]);
+
+                if (!empty($save_generation_batch_id)) {
+                    $stmtUpdB = $pdo->prepare("UPDATE ai_generation_batches SET teacher_acknowledged_by = ?, teacher_acknowledged_at = NOW(), acknowledgement_reason = ? WHERE generation_batch_id = ?");
+                    $stmtUpdB->execute([$teacher_id, !empty($ackReason) ? $ackReason : 'Teacher confirmed save of generated questions', $save_generation_batch_id]);
+                }
 
                 $pdo->commit();
                 $sourceLabel = $save_generation_source_type === 'cross_period_lessons' ? ", Cross-Period" : "";
@@ -1127,6 +1138,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
                             <input type="hidden" name="save_difficulty" value="<?php echo htmlspecialchars($difficulty ?? 'medium'); ?>">
                             <input type="hidden" name="save_ai_metadata" value="<?php echo htmlspecialchars(json_encode($ai_meta_output ?? [])); ?>">
                             <input type="hidden" name="save_lesson_ids" value="<?php echo htmlspecialchars(implode(',', $ai_meta_output['lesson_ids'] ?? [])); ?>">
+
+                            <?php if (($ai_meta_output['batch_status'] ?? '') === 'incomplete'): ?>
+                                <div class="bg-amber-50 border border-amber-300 rounded-xl p-3 space-y-2" data-testid="incomplete-batch-acknowledgement-block">
+                                    <div class="flex items-center gap-1.5 text-xs font-bold text-amber-900">
+                                        <i class="fa-solid fa-triangle-exclamation text-amber-600"></i>
+                                        <span>Incomplete Generation Batch Acknowledgement Required</span>
+                                    </div>
+                                    <p class="text-[11px] text-amber-800 font-medium">Some lesson chunks failed during AI generation. To save this incomplete assessment, state your explicit reason below.</p>
+                                    <input type="text" name="acknowledgement_reason" required placeholder="e.g. Proceeding with partial prelim/midterm coverage for quiz setup" data-testid="ack-reason-input" class="w-full bg-white border border-amber-300 rounded-lg p-2 text-xs font-semibold text-stone-800 outline-none focus:border-amber-500">
+                                </div>
+                            <?php endif; ?>
 
                             <div class="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
                                 <?php foreach ($generated_questions as $idx => $item): 

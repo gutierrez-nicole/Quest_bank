@@ -116,9 +116,17 @@ function verifyPartialToken($tokenString, $expectedTeacherId, $secretKey, $conte
         }
     }
 
-    // Replay prevention check via used_confirmation_tokens DB
+    // Nonce existence check
+    if (empty($payload['nonce']) || !is_string($payload['nonce'])) {
+        return false;
+    }
+
+    // Fail-Closed Replay prevention check via used_confirmation_tokens DB
     try {
         $pdo = getDBConnection();
+        if (!$pdo) {
+            return false; // DB unavailable -> FAIL CLOSED!
+        }
         $tokenHash = hash('sha256', $tokenString);
         $stmtCheck = $pdo->prepare("SELECT COUNT(*) FROM used_confirmation_tokens WHERE token_hash = ?");
         $stmtCheck->execute([$tokenHash]);
@@ -129,8 +137,9 @@ function verifyPartialToken($tokenString, $expectedTeacherId, $secretKey, $conte
         // Record token usage to prevent replay
         $stmtMark = $pdo->prepare("INSERT INTO used_confirmation_tokens (token_hash, teacher_id, used_at, expires_at) VALUES (?, ?, NOW(), FROM_UNIXTIME(?))");
         $stmtMark->execute([$tokenHash, $expectedTeacherId, intval($payload['timestamp']) + $maxAgeSeconds]);
-    } catch (Exception $e) {
-        // Fallback: If DB check fails, signature & expiry are still enforced
+    } catch (Throwable $e) {
+        // FAIL CLOSED: If DB check or nonce persistence fails, reject token!
+        return false;
     }
 
     return $payload;
