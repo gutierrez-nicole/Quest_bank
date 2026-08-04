@@ -1,0 +1,72 @@
+{
+    "admin": {
+        "id": 1,
+        "username": "qa_admin",
+        "email": "qa_admin@questbank.test",
+        "password": "Password123!"
+    },
+    "teacher_a": {
+        "id": 2,
+        "username": "qa_teacher_a",
+        "email": "qa_teacher_a@questbank.test",
+        "password": "Password123!"
+    },
+    "teacher_b": {
+        "id": 3,
+        "username": "qa_teacher_b",
+        "email": "qa_teacher_b@questbank.test",
+        "password": "Password123!"
+    },
+    "student_a": {
+        "id": 4,
+        "username": "qa_student_a",
+        "email": "qa_student_a@questbank.test",
+        "password": "Password123!"
+    },
+    "student_b": {
+        "id": 5,
+        "username": "qa_student_b",
+        "email": "qa_student_b@questbank.test",
+        "password": "Password123!"
+    },
+    "exam": {
+        "id": 1,
+        "title": "QA Civil Engineering Fundamentals Exam",
+        "subject": "Structural Engineering",
+        "passing_percentage": 75,
+        "expected_total_points": 2,
+        "expected_percentage": 100,
+        "expected_pass_fail": "Pass"
+    },
+    "questions": [
+        {
+            "id": 1,
+            "text": "What is the formula for Stopping Sight Distance (SSD)?",
+            "type": "multiple_choice",
+            "correct_answer": "a",
+            "points": 1
+        },
+        {
+            "id": 2,
+            "text": "Flexible pavement design uses CBR structural number.",
+            "type": "true_false",
+            "correct_answer": "true",
+            "points": 1
+        }
+    ],
+    "submissions": {
+        "student_a_published": 100,
+        "student_b_published": 101,
+        "student_a_pending": 102
+    },
+    "analytics_exam": {
+        "id": 2,
+        "title": "QA Analytics Benchmark Exam",
+        "expected_total": 4,
+        "expected_passed": 2,
+        "expected_failed": 2,
+        "expected_pass_rate": 50,
+        "expected_avg_percentage": 75,
+        "expected_highest": 90
+    }
+}

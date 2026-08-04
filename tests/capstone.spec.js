@@ -2,14 +2,38 @@ const { test, expect } = require('@playwright/test');
 const fs = require('fs');
 const path = require('path');
 
-// Load deterministic test state fixture
+// TASK 1: Load deterministic test state fixture — single source of truth
 const fixturePath = path.join(__dirname, 'fixtures', 'test_state.json');
 if (!fs.existsSync(fixturePath)) {
-  throw new Error(`Test fixture missing at ${fixturePath}. Run php tests/seed_test_data.php first.`);
+  throw new Error(`FATAL: Test fixture missing at ${fixturePath}. Run: php tests/seed_test_data.php`);
 }
 const testState = JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
 
-test.describe('QuestBank Capstone End-to-End Production Verification Suite', () => {
+/**
+ * Build dynamic answer payload from fixture questions.
+ * No hardcoded question IDs — all values come from test_state.json.
+ */
+function buildCorrectAnswerPayload() {
+  const payload = {};
+  for (const q of testState.questions) {
+    payload[String(q.id)] = q.correct_answer;
+  }
+  return payload;
+}
+
+function getExpectedTotalPoints() {
+  return testState.questions.reduce((sum, q) => sum + q.points, 0);
+}
+
+function getExpectedPercentage() {
+  return 100; // All correct answers submitted
+}
+
+function getExpectedPassFail() {
+  return getExpectedPercentage() >= testState.exam.passing_percentage ? 'Pass' : 'Fail';
+}
+
+test.describe('QuestBank Capstone E2E Production Verification Suite', () => {
 
   test.beforeEach(async ({ page }) => {
     page.on('console', msg => {
@@ -19,11 +43,11 @@ test.describe('QuestBank Capstone End-to-End Production Verification Suite', () 
     });
   });
 
-  /**
-   * WORKFLOW 1: LESSON UPLOAD -> EXTRACTION -> SELECT EXTRACTED LESSON -> AI EXAM GENERATION -> SAVE EXAM
-   */
-  test('Workflow 1: Real Lesson Upload to Extracted AI Exam Generation & Exam Creation', async ({ page }) => {
-    // 1. Login as Teacher A
+  // ──────────────────────────────────────────────────────────────────────────
+  // WORKFLOW 1: TASK 2 — AI Question Generation & Verification
+  // ──────────────────────────────────────────────────────────────────────────
+  test('Workflow 1: Lesson Upload → AI Exam Generation → Save & Verify', async ({ page }) => {
+    // 1. Login as Teacher A using fixture credentials
     await page.goto('/index.php');
     await page.fill('input[name="email"]', testState.teacher_a.email);
     await page.fill('input[name="password"]', testState.teacher_a.password);
@@ -51,109 +75,114 @@ test.describe('QuestBank Capstone End-to-End Production Verification Suite', () 
 
     await page.click('button[name="upload_material"]');
     await page.waitForLoadState('networkidle');
-    
-    // Assert extraction succeeded and unique text phrase appears in preview
+
+    // Assert extraction succeeded with unique text phrase
     await expect(page.locator('body')).toContainText(uniqueTitle);
     await expect(page.locator('body')).toContainText('Stopping Sight Distance');
 
-    // 3. Open AI Generator & Select Extracted Lesson (No Manual Paste override)
+    // 3. Open AI Generator & Select Extracted Lesson
     await page.goto('/teacher/generate_ai.php');
     const examTitle = `E2E Highway Exam ${timestamp}`;
     await page.fill('input[name="exam_title"]', examTitle);
     await page.fill('input[name="subject"]', 'Transportation Engineering');
 
-    // Ensure input_source = extracted is selected
+    // Select extracted lesson source — MUST exist, no conditional fallback
     await page.evaluate(() => {
       const radioExtracted = document.querySelector('input[name="input_source"][value="extracted"]');
-      if (radioExtracted) {
-        radioExtracted.checked = true;
-        if (typeof toggleInputSource === 'function') toggleInputSource('extracted');
-      }
+      if (!radioExtracted) throw new Error('Extracted lesson radio button not found');
+      radioExtracted.checked = true;
+      if (typeof toggleInputSource === 'function') toggleInputSource('extracted');
     });
 
-    // Check the single newly extracted lesson checkbox
-    const specificLessonCheckbox = page.locator('input[name="selected_lessons[]"]:not([value="all"])').first();
-    if (await specificLessonCheckbox.count() > 0) {
-      await specificLessonCheckbox.check({ force: true });
-    } else {
-      const fallbackCheckbox = page.locator('input[name="selected_lessons[]"]').first();
-      if (await fallbackCheckbox.count() > 0) {
-        await fallbackCheckbox.check({ force: true });
-      }
-    }
+    // TASK 7: Check lesson checkbox — MUST exist, no conditional pass
+    const lessonCheckbox = page.locator('input[name="selected_lessons[]"]:not([value="all"])').first();
+    await expect(lessonCheckbox).toBeAttached({ timeout: 5000 });
+    await lessonCheckbox.check({ force: true });
 
-    if (await page.locator('select[name="num_questions"]').count() > 0) {
-      await page.selectOption('select[name="num_questions"]', '5');
-    }
+    // Set number of questions — MUST exist
+    const numQuestionsSelect = page.locator('select[name="num_questions"]');
+    await expect(numQuestionsSelect).toBeAttached({ timeout: 5000 });
+    await numQuestionsSelect.selectOption('5');
 
     // Submit AI Question Generation form
     await page.click('button[name="generate_questions"]');
     await page.waitForLoadState('domcontentloaded');
 
-    // Assert generated output page renders AI items and Save Exam form with complete assertions
+    // TASK 2: Verify AI generation success
     await expect(page.locator('body')).toContainText(/AI successfully generated|generated/i);
 
-    // Verify generated questions schema
+    // Verify generated questions have required schema fields
     const generatedQuestionInputs = page.locator('input[name^="questions"]');
     const qCount = await generatedQuestionInputs.count();
     expect(qCount).toBeGreaterThan(0);
 
-    // Save generated exam to Question Bank
+    // Save generated exam — MUST have save button
     const saveBtn = page.locator('button[name="save_ai_exam"]');
-    if (await saveBtn.count() > 0) {
-      await saveBtn.click();
-      await page.waitForLoadState('domcontentloaded');
-      await expect(page.locator('body')).toContainText(/saved|Question Bank/i);
-    }
+    await expect(saveBtn).toBeAttached({ timeout: 5000 });
+    await saveBtn.click();
+    await page.waitForLoadState('domcontentloaded');
+    await expect(page.locator('body')).toContainText(/saved|Question Bank/i);
   });
 
-  /**
-   * WORKFLOW 2: REAL STUDENT EXAM SUBMISSION & PRIVACY BEFORE PUBLICATION
-   */
-  test('Workflow 2: Student Exam Submission & Score Privacy Protection', async ({ page }) => {
-    // 1. Student Login using test_state fixture
+  // ──────────────────────────────────────────────────────────────────────────
+  // WORKFLOW 2: TASK 1 + TASK 3 — Student Submission with Fixture-Based
+  //             Dynamic Answers & Server-Side Score Manipulation Rejection
+  // ──────────────────────────────────────────────────────────────────────────
+  test('Workflow 2: Student Submission with Dynamic Fixture Answers & Manipulation Rejection', async ({ page }) => {
+    // 1. Student Login using fixture
     await page.goto('/index.php');
     await page.fill('input[name="email"]', testState.student_a.email);
     await page.fill('input[name="password"]', testState.student_a.password);
     await page.click('#login-box button[type="submit"]');
     await page.waitForURL(/.*student\/dashboard\.php/);
-
     await expect(page.locator('body')).toContainText(/Student Portal|Dashboard|Welcome/i);
 
-    // 2. Submit online exam with known answers and attempted client-side score manipulation
-    const response = await page.evaluate(async (examId) => {
+    // 2. TASK 1: Build dynamic answer payload from fixture — NO hardcoded IDs
+    const correctAnswers = buildCorrectAnswerPayload();
+    const expectedTotal = getExpectedTotalPoints();
+    const expectedPercentage = getExpectedPercentage();
+    const expectedPassFail = getExpectedPassFail();
+
+    // 3. TASK 3: Submit with correct answers AND attempted client-side manipulation
+    const response = await page.evaluate(async ({ examId, answers }) => {
       const formData = new FormData();
       formData.append('action', 'submit_online_exam');
       formData.append('exam_id', String(examId));
-      formData.append('answers', JSON.stringify({ 1: 'a', 2: 'true' }));
-      formData.append('manipulated_score', '999.00'); // Client-side manipulation attempt
-      
+      formData.append('answers', JSON.stringify(answers));
+      // Client-side manipulation attempts — server MUST ignore all of these
+      formData.append('manipulated_score', '999.00');
+      formData.append('total_score', '999');
+      formData.append('percentage', '999');
+      formData.append('pass_fail', 'PASS');
+      formData.append('correct_count', '999');
+
       const res = await fetch('/student/dashboard.php', {
         method: 'POST',
         body: formData
       });
       return await res.json();
-    }, testState.exam.id);
+    }, { examId: testState.exam.id, answers: correctAnswers });
 
+    // TASK 3: Assert server-calculated values match fixture expectations
     expect(response.success).toBe(true);
     expect(Number(response.submission_id)).toBeGreaterThan(0);
-    const submissionId = response.submission_id;
 
-    // Server-calculated score must equal 2.0 (100%), ignoring client-side manipulated_score
-    expect(response.total_score).toBe(2);
-    expect(response.percentage).toBe(100);
+    // Server must recalculate — not use manipulated values
+    expect(response.total_score).toBe(expectedTotal);
+    expect(response.percentage).toBe(expectedPercentage);
 
-    // 3. Verify privacy: Student Dashboard must NOT display pending_review results in published list
+    // 4. Verify privacy: unpublished results not leaked
     await page.goto('/student/dashboard.php');
     const pageText = await page.locator('body').innerText();
-    expect(pageText).not.toContain(`UNPUBLISHED_SECRET_LEAK_${submissionId}`);
+    expect(pageText).not.toContain(`UNPUBLISHED_SECRET_LEAK_${response.submission_id}`);
   });
 
-  /**
-   * WORKFLOW 3: TEACHER REVIEW, ITEM-LEVEL SCORE OVERRIDE & RESULT PUBLICATION
-   */
-  test('Workflow 3: Teacher Review, Item-Level Score Override & Result Publication', async ({ page }) => {
-    // 1. Teacher Login using test_state fixture
+  // ──────────────────────────────────────────────────────────────────────────
+  // WORKFLOW 3: TASK 4 — Complete Review Lifecycle
+  // pending_review → reviewed → finalized → published
+  // ──────────────────────────────────────────────────────────────────────────
+  test('Workflow 3: Complete Review Lifecycle with All Transitions', async ({ page }) => {
+    // 1. Teacher Login using fixture
     await page.goto('/index.php');
     await page.fill('input[name="email"]', testState.teacher_a.email);
     await page.fill('input[name="password"]', testState.teacher_a.password);
@@ -164,23 +193,23 @@ test.describe('QuestBank Capstone End-to-End Production Verification Suite', () 
     await page.goto('/teacher/reports.php');
     await expect(page.locator('body')).toContainText(/Student Grade Submissions|Class Performance/i);
 
-    // 3. Target pending_review submission row for Student A (Must exist, fail if missing)
-    const pendingRow = page.locator('tr', { hasText: 'QA Test Student Alpha' }).filter({ hasText: 'Pending Review' }).first();
-    const count = await pendingRow.count();
-    if (count === 0) {
-      throw new Error('Pending submission row for Student Alpha is missing. Review lifecycle cannot proceed.');
-    }
-    await expect(pendingRow).toBeVisible();
+    // 3. TASK 4: Target pending_review submission — MUST exist (no conditional pass)
+    const pendingRow = page.locator('tr', { hasText: 'QA Test Student Alpha' })
+      .filter({ hasText: /Pending Review/i }).first();
+    await expect(pendingRow).toBeVisible({ timeout: 10000 });
 
+    // Perform item-level score override on the pending submission
     const reviewBtn = pendingRow.locator('button[onclick*="openReviewModal"]');
+    await expect(reviewBtn).toBeVisible();
     await reviewBtn.click();
-    
-    const modal = page.locator('[data-testid="review-submission-modal"]');
-    await expect(modal).toBeVisible();
 
-    // Perform item-level score override on pending submission item #2
+    const modal = page.locator('[data-testid="review-submission-modal"]');
+    await expect(modal).toBeVisible({ timeout: 5000 });
+
+    // Item-level override using fixture question ID
+    const overrideQuestionId = String(testState.questions[1].id);
     const itemForm = modal.locator('[data-testid="item-override-form"]');
-    await itemForm.locator('[data-testid="item-question-id"]').fill('2');
+    await itemForm.locator('[data-testid="item-question-id"]').fill(overrideQuestionId);
     await itemForm.locator('[data-testid="item-points-input"]').fill('1.0');
     await itemForm.locator('[data-testid="item-reason-input"]').fill('Verified via manual item audit');
     await itemForm.locator('[data-testid="item-override-submit"]').click();
@@ -188,20 +217,24 @@ test.describe('QuestBank Capstone End-to-End Production Verification Suite', () 
 
     await expect(page.locator('body')).toContainText(/overridden|Recalculated|Item/i);
 
-    // Step-by-step transition: pending_review -> reviewed -> finalized -> published
-    const updatedPendingRow = page.locator('tr', { hasText: 'QA Test Student Alpha' }).filter({ hasText: 'Pending Review' }).first();
-    await updatedPendingRow.locator('button[onclick*="openReviewModal"]').click();
+    // ── TRANSITION 1: pending_review → reviewed ──
+    await page.goto('/teacher/reports.php');
+    const pendingRow2 = page.locator('tr', { hasText: 'QA Test Student Alpha' })
+      .filter({ hasText: /Pending Review/i }).first();
+    await expect(pendingRow2).toBeVisible({ timeout: 10000 });
+    await pendingRow2.locator('button[onclick*="openReviewModal"]').click();
     await expect(modal).toBeVisible();
 
-    // Transition 1: pending_review -> reviewed
     await modal.locator('select[name="new_review_status"]').selectOption('reviewed');
     await modal.locator('textarea[name="teacher_remarks"]').fill('First review complete');
     await modal.locator('[data-testid="review-status-submit"]').click();
     await page.waitForLoadState('networkidle');
     await expect(page.locator('body')).toContainText(/updated|Reviewed|successfully/i);
 
-    // Transition 2: reviewed -> finalized
-    const reviewedRow = page.locator('tr', { hasText: 'QA Test Student Alpha' }).filter({ hasText: 'Reviewed' }).first();
+    // ── TRANSITION 2: reviewed → finalized ──
+    const reviewedRow = page.locator('tr', { hasText: 'QA Test Student Alpha' })
+      .filter({ hasText: /Reviewed/i }).first();
+    await expect(reviewedRow).toBeVisible({ timeout: 10000 });
     await reviewedRow.locator('button[onclick*="openReviewModal"]').click();
     await expect(modal).toBeVisible();
     await modal.locator('select[name="new_review_status"]').selectOption('finalized');
@@ -210,34 +243,40 @@ test.describe('QuestBank Capstone End-to-End Production Verification Suite', () 
     await page.waitForLoadState('networkidle');
     await expect(page.locator('body')).toContainText(/updated|Finalized|successfully/i);
 
-    // Transition 3: finalized -> published
-    const finalizedRow = page.locator('tr', { hasText: 'QA Test Student Alpha' }).filter({ hasText: 'Finalized' }).first();
+    // ── TRANSITION 3: finalized → published ──
+    const finalizedRow = page.locator('tr', { hasText: 'QA Test Student Alpha' })
+      .filter({ hasText: /Finalized/i }).first();
+    await expect(finalizedRow).toBeVisible({ timeout: 10000 });
     await finalizedRow.locator('button[onclick*="openReviewModal"]').click();
     await expect(modal).toBeVisible();
     await modal.locator('select[name="new_review_status"]').selectOption('published');
     await modal.locator('textarea[name="teacher_remarks"]').fill('Approved and published to student');
     await modal.locator('[data-testid="review-status-submit"]').click();
     await page.waitForLoadState('networkidle');
-
     await expect(page.locator('body')).toContainText(/updated|Published|successfully/i);
+
+    // Verify published row exists
+    const publishedRow = page.locator('tr', { hasText: 'QA Test Student Alpha' })
+      .filter({ hasText: /Published/i }).first();
+    await expect(publishedRow).toBeVisible({ timeout: 10000 });
   });
 
-  /**
-   * WORKFLOW 4: REAL STUDENT-TO-STUDENT IDOR ENFORCEMENT
-   */
-  test('Workflow 4: Student Privacy Enforcement and Direct URL IDOR Block', async ({ page }) => {
-    // 1. Student A Login using test_state fixture
+  // ──────────────────────────────────────────────────────────────────────────
+  // WORKFLOW 4: TASK 5 — True Student-to-Student IDOR Enforcement
+  // ──────────────────────────────────────────────────────────────────────────
+  test('Workflow 4: Student-to-Student IDOR Block & Privacy Enforcement', async ({ page }) => {
+    // 1. Student A Login using fixture
     await page.goto('/index.php');
     await page.fill('input[name="email"]', testState.student_a.email);
     await page.fill('input[name="password"]', testState.student_a.password);
     await page.click('#login-box button[type="submit"]');
     await page.waitForURL(/.*student\/dashboard\.php/);
 
-    // 2. Direct access to teacher reports endpoint while logged in as student must be redirected
+    // 2. Student A attempts teacher-only page — must be redirected
     await page.goto('/teacher/reports.php');
     expect(page.url()).not.toContain('/teacher/reports.php');
 
-    // 3. Student A accesses own published PDF export -> 200 OK inside browser session
+    // 3. Student A accesses OWN published PDF → 200 OK
     const ownSubId = testState.submissions.student_a_published;
     const ownPdfStatus = await page.evaluate(async (subId) => {
       const res = await fetch(`/student/export_pdf.php?id=${subId}`);
@@ -245,45 +284,60 @@ test.describe('QuestBank Capstone End-to-End Production Verification Suite', () 
     }, ownSubId);
     expect(ownPdfStatus).toBe(200);
 
-    // 4. Student A attempts to access Student B's published PDF export -> 403 Forbidden inside browser session
+    // 4. TASK 5: Student A attempts Student B's published PDF → 403 Forbidden
     const otherSubId = testState.submissions.student_b_published;
     const idorPdfStatus = await page.evaluate(async (subId) => {
       const res = await fetch(`/student/export_pdf.php?id=${subId}`);
       return res.status;
     }, otherSubId);
     expect(idorPdfStatus).toBe(403);
+
+    // 5. Student A attempts Student B's result page via API → 403
+    const idorApiStatus = await page.evaluate(async (subId) => {
+      const res = await fetch(`/student/export_pdf.php?id=${subId}`);
+      const text = await res.text();
+      return { status: res.status, hasStudentBData: text.includes('QA Test Student Beta') };
+    }, otherSubId);
+    expect(idorApiStatus.status).toBe(403);
+    expect(idorApiStatus.hasStudentBData).toBe(false);
+
+    // 6. Verify Student A's own result remains accessible
+    await page.goto('/student/dashboard.php');
+    await expect(page.locator('body')).toContainText(/Student Portal|Dashboard|Welcome/i);
   });
 
-  /**
-   * WORKFLOW 5: DASHBOARD ANALYTICS ACCURACY & TELEMETRY VERIFICATION
-   */
-  test('Workflow 5: System Analytics Telemetry Verification', async ({ page }) => {
-    // 1. Teacher Dashboard & Reports Analytics Accuracy using testState.analytics_exam
+  // ──────────────────────────────────────────────────────────────────────────
+  // WORKFLOW 5: TASK 6 — Analytics Verification with Deterministic Values
+  // ──────────────────────────────────────────────────────────────────────────
+  test('Workflow 5: Analytics Dashboard Telemetry Verification', async ({ page }) => {
+    // 1. Teacher Login
     await page.goto('/index.php');
     await page.fill('input[name="email"]', testState.teacher_a.email);
     await page.fill('input[name="password"]', testState.teacher_a.password);
     await page.click('#login-box button[type="submit"]');
     await page.waitForURL(/.*teacher\/dashboard\.php/);
 
-    // Open Reports and select QA Analytics Benchmark Exam from dropdown
+    // 2. Open Reports and select QA Analytics Benchmark Exam
     await page.goto('/teacher/reports.php');
     await page.selectOption('select[name="exam_title"]', testState.analytics_exam.title);
     await page.waitForLoadState('domcontentloaded');
-    
-    // Assert deterministic analytics: Total=4, Passed=2, Failed=2, Pass Rate=50.0%, Average=75.0%
+
+    // TASK 6: Assert deterministic analytics values
     const reportsText = await page.locator('body').innerText();
+
+    // Expected: Pass Rate = 50.0%, Average = 75.0%
     expect(reportsText).toContain(`${testState.analytics_exam.expected_pass_rate}.0%`);
     expect(reportsText).toContain(`${testState.analytics_exam.expected_avg_percentage}.0%`);
 
-    // Filter by empty/nonexistent exam
+    // 3. Filter by nonexistent exam → zero/empty state
     await page.goto('/teacher/reports.php?exam_title=NonExistentExamTitle');
     const emptyReportsText = await page.locator('body').innerText();
     expect(emptyReportsText).toContain('0.0%');
 
-    // 2. Logout teacher
+    // 4. Logout teacher
     await page.goto('/logout.php');
 
-    // 3. Admin Dashboard Telemetry Verification using testState.admin
+    // 5. Admin Dashboard verification — no fabricated percentages
     await page.goto('/index.php');
     await page.fill('input[name="email"]', testState.admin.email);
     await page.fill('input[name="password"]', testState.admin.password);
@@ -293,13 +347,14 @@ test.describe('QuestBank Capstone End-to-End Production Verification Suite', () 
     await expect(page.locator('body')).toContainText(/Administrator|Command Console/i);
 
     const adminText = await page.locator('body').innerText();
+    // Must not contain hardcoded fake analytics
     expect(adminText).not.toContain('+4.2%');
     expect(adminText).not.toContain('94.8%');
   });
 
-  /**
-   * WORKFLOW 6: MOBILE RESPONSIVE UI VIEWPORT AUDIT
-   */
+  // ──────────────────────────────────────────────────────────────────────────
+  // WORKFLOW 6: Mobile Responsive UI Viewport Audit
+  // ──────────────────────────────────────────────────────────────────────────
   test('Workflow 6: Mobile Responsive Layout Verification', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto('/index.php');
@@ -307,9 +362,7 @@ test.describe('QuestBank Capstone End-to-End Production Verification Suite', () 
     await page.fill('input[name="password"]', testState.student_a.password);
     await page.click('#login-box button[type="submit"]');
     await page.waitForURL(/.*student\/dashboard\.php/);
-
     await expect(page.locator('body')).toBeVisible();
   });
 
 });
-

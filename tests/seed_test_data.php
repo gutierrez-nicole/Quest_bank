@@ -147,7 +147,7 @@ $stateData = [
     'teacher_b' => ['id' => 3, 'username' => 'qa_teacher_b', 'email' => 'qa_teacher_b@questbank.test', 'password' => 'Password123!'],
     'student_a' => ['id' => 4, 'username' => 'qa_student_a', 'email' => 'qa_student_a@questbank.test', 'password' => 'Password123!'],
     'student_b' => ['id' => 5, 'username' => 'qa_student_b', 'email' => 'qa_student_b@questbank.test', 'password' => 'Password123!'],
-    'exam' => ['id' => 1, 'title' => 'QA Civil Engineering Fundamentals Exam', 'subject' => 'Structural Engineering', 'passing_percentage' => 75.00],
+    'exam' => ['id' => 1, 'title' => 'QA Civil Engineering Fundamentals Exam', 'subject' => 'Structural Engineering', 'passing_percentage' => 75.00, 'expected_total_points' => 2, 'expected_percentage' => 100, 'expected_pass_fail' => 'Pass'],
     'questions' => [
         ['id' => 1, 'text' => 'What is the formula for Stopping Sight Distance (SSD)?', 'type' => 'multiple_choice', 'correct_answer' => 'a', 'points' => 1.00],
         ['id' => 2, 'text' => 'Flexible pavement design uses CBR structural number.', 'type' => 'true_false', 'correct_answer' => 'true', 'points' => 1.00]
