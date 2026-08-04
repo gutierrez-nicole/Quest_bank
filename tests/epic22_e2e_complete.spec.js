@@ -13,8 +13,8 @@ test.describe('Epic 2.2 Final E2E and Test Infrastructure Suite', () => {
     test.beforeEach(async ({ page }) => {
         // Login as Teacher A (russel)
         await page.goto('/index.php');
-        await page.fill('input[name="username"]', 'russel');
-        await page.fill('input[name="password"]', 'Password123!');
+        await page.fill('#login_email', 'russel@questbank.edu.ph');
+        await page.fill('#login_password', 'Password123!');
         await page.click('button[type="submit"]');
         await expect(page).toHaveURL(/.*teacher\/dashboard\.php/);
     });

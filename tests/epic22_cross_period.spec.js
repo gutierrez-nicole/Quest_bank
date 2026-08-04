@@ -6,8 +6,8 @@ test.describe('Epic 2.2 Cross-Period Lesson Pool Playwright End-to-End Workflow'
     test('Complete Teacher Cross-Period Generation & Traceability Workflow', async ({ page }) => {
         // Step 1: Login as Teacher A
         await page.goto('/index.php');
-        await page.fill('input[name="username"]', 'russel');
-        await page.fill('input[name="password"]', 'Password123!');
+        await page.fill('#login_email', 'russel@questbank.edu.ph');
+        await page.fill('#login_password', 'Password123!');
         await page.click('button[type="submit"]');
         await expect(page).toHaveURL(/.*teacher\/dashboard\.php/);
 

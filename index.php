@@ -25,8 +25,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $password = trim($_POST['password'] ?? '');
 
         if (!empty($email) && !empty($password)) {
-            $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ?");
-            $stmt->execute([$email]);
+            $stmt = $pdo->prepare("SELECT * FROM users WHERE email = ? OR username = ?");
+            $stmt->execute([$email, $email]);
             $user = $stmt->fetch();
 
             if ($user && password_verify($password, $user['password'])) {
