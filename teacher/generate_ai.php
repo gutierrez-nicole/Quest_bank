@@ -230,7 +230,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
                 $generation_source_type = count($associated_periods) > 1 ? 'cross_period_lessons' : 'single_period_lessons';
             }
         } else {
-            $error_msg = "Please select at least one valid lesson material.";
+            $error_msg = !empty($validation_errors) ? implode(" ", $validation_errors) : "Please select at least one valid lesson material.";
         }
     } else {
         $final_lesson_content = $lesson_text;
