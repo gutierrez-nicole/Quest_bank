@@ -188,6 +188,30 @@ try {
         $pending_exams = [];
     }
 
+    // Epic 2.1 Student Qualifying Examinations List
+    $qualifying_exams_list = [];
+    try {
+        $stmtQList = $pdo->prepare("
+            SELECT e.*, 
+                   (SELECT COUNT(*) FROM exam_submissions WHERE student_id = ? AND exam_id = e.id) as attempts_taken,
+                   (SELECT qualification_status FROM exam_submissions WHERE student_id = ? AND exam_id = e.id ORDER BY id DESC LIMIT 1) as latest_qual_status,
+                   (SELECT percentage FROM exam_submissions WHERE student_id = ? AND exam_id = e.id ORDER BY id DESC LIMIT 1) as latest_percentage
+            FROM exams e
+            WHERE e.exam_category = 'qualifying'
+            ORDER BY e.id DESC
+        ");
+        $stmtQList->execute([$student_id, $student_id, $student_id]);
+        $rawQualExams = $stmtQList->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($rawQualExams as $qex) {
+            $elig = ExamService::checkStudentEligibility($student_id, $qex['id']);
+            $qex['eligibility_info'] = $elig;
+            $qualifying_exams_list[] = $qex;
+        }
+    } catch (PDOException $e) {
+        $qualifying_exams_list = [];
+    }
+
     
     $chart_subjects = [];
     $chart_scores = [];
@@ -657,6 +681,93 @@ try {
                                 <h4 class="font-extrabold text-emerald-800 dark:text-emerald-300 text-sm">All Examination Papers Completed!</h4>
                                 <p class="text-xs text-stone-500 dark:text-stone-400">Great job! You have no pending active exams at this time. All completed examination transcripts can be reviewed below.</p>
                             </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+
+                <!-- Epic 2.1 Student Qualifying Examinations Panel -->
+                <div class="bg-white dark:bg-stone-900 border border-orange-200 dark:border-orange-950 rounded-2xl p-6 shadow-sm space-y-4">
+                    <div class="flex items-center justify-between border-b border-stone-100 dark:border-stone-800 pb-3">
+                        <h3 class="text-sm font-extrabold text-stone-800 dark:text-stone-100 flex items-center gap-2">
+                            <i class="fa-solid fa-award text-orange-500"></i> Institutional Qualifying Examinations
+                        </h3>
+                        <span class="text-xs bg-orange-100 text-orange-700 font-bold px-2.5 py-0.5 rounded-full">
+                            <?php echo count($qualifying_exams_list); ?> Module(s)
+                        </span>
+                    </div>
+                    
+                    <div class="space-y-3">
+                        <?php if (!empty($qualifying_exams_list)): ?>
+                            <?php foreach ($qualifying_exams_list as $qex): ?>
+                                <?php 
+                                    $elig = $qex['eligibility_info'];
+                                    $attemptsTaken = intval($qex['attempts_taken']);
+                                    $maxAttempts = intval($qex['qualifying_max_attempts'] ?? 1);
+                                    $remainingAttempts = max(0, $maxAttempts - $attemptsTaken);
+                                    $qualStatus = $qex['latest_qual_status'] ?? null;
+                                ?>
+                                <div class="border border-stone-200 dark:border-stone-800 p-4 rounded-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-stone-50/50 dark:bg-stone-800/30">
+                                    <div class="space-y-1.5 flex-1">
+                                        <div class="flex items-center gap-2 flex-wrap">
+                                            <span class="bg-orange-600 text-white text-[9px] font-black px-2.5 py-0.5 rounded-md uppercase">QUALIFYING EXAM</span>
+                                            <span class="bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-300 text-[10px] font-bold px-2.5 py-0.5 rounded-md">Passing: <?php echo number_format($qex['qualifying_passing_percentage'] ?? 80, 1); ?>%</span>
+                                            <span class="bg-stone-200 dark:bg-stone-800 text-stone-700 dark:text-stone-300 text-[10px] font-bold px-2.5 py-0.5 rounded-md">Attempts: <?php echo $attemptsTaken; ?> / <?php echo $maxAttempts; ?></span>
+
+                                            <!-- Qualification Result Badge -->
+                                            <?php if ($qualStatus === 'qualified'): ?>
+                                                <span class="bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-black px-2.5 py-0.5 rounded-md flex items-center gap-1">
+                                                    <i class="fa-solid fa-circle-check"></i> QUALIFIED
+                                                </span>
+                                            <?php elseif ($qualStatus === 'not_qualified'): ?>
+                                                <span class="bg-rose-100 text-rose-800 border border-rose-300 text-[10px] font-black px-2.5 py-0.5 rounded-md flex items-center gap-1">
+                                                    <i class="fa-solid fa-circle-xmark"></i> NOT QUALIFIED
+                                                </span>
+                                            <?php elseif ($qualStatus === 'pending'): ?>
+                                                <span class="bg-amber-100 text-amber-800 border border-amber-300 text-[10px] font-black px-2.5 py-0.5 rounded-md flex items-center gap-1">
+                                                    <i class="fa-solid fa-hourglass-half"></i> PENDING REVIEW
+                                                </span>
+                                            <?php else: ?>
+                                                <span class="bg-stone-100 text-stone-600 border border-stone-300 text-[10px] font-bold px-2.5 py-0.5 rounded-md">
+                                                    NOT ATTEMPTED
+                                                </span>
+                                            <?php endif; ?>
+                                        </div>
+
+                                        <h4 class="font-extrabold text-stone-800 dark:text-stone-100 text-sm"><?php echo htmlspecialchars($qex['title']); ?></h4>
+                                        <p class="text-xs text-stone-500 dark:text-stone-400">
+                                            Subject: <strong class="text-stone-700 dark:text-stone-200"><?php echo htmlspecialchars($qex['subject']); ?></strong> |
+                                            Program: <span class="font-semibold"><?php echo htmlspecialchars($qex['qualifying_program'] ?? 'All Programs'); ?></span> |
+                                            Year Level: <span class="font-semibold"><?php echo htmlspecialchars($qex['qualifying_year_level'] ?? 'All Year Levels'); ?></span>
+                                        </p>
+
+                                        <?php if (!empty($qex['qualifying_deadline'])): ?>
+                                            <p class="text-[11px] text-orange-600 font-semibold">
+                                                <i class="fa-regular fa-clock"></i> Deadline: <?php echo date('M d, Y h:i A', strtotime($qex['qualifying_deadline'])); ?>
+                                            </p>
+                                        <?php endif; ?>
+
+                                        <?php if (!$elig['eligible']): ?>
+                                            <div class="p-2 bg-rose-50 border border-rose-200 rounded-lg text-xs font-semibold text-rose-700 mt-1">
+                                                <i class="fa-solid fa-triangle-exclamation mr-1"></i> <?php echo htmlspecialchars($elig['reason']); ?>
+                                            </div>
+                                        <?php endif; ?>
+                                    </div>
+
+                                    <div>
+                                        <?php if ($elig['eligible']): ?>
+                                            <button onclick="startExamSession(<?php echo $qex['id']; ?>)" class="w-full sm:w-auto bg-orange-600 hover:bg-orange-700 text-white font-extrabold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5">
+                                                Start Qualifying Exam <i class="fa-solid fa-arrow-right"></i>
+                                            </button>
+                                        <?php else: ?>
+                                            <button disabled class="w-full sm:w-auto bg-stone-200 text-stone-400 cursor-not-allowed font-bold text-xs px-5 py-2.5 rounded-xl flex items-center justify-center gap-1.5">
+                                                Ineligible / Locked <i class="fa-solid fa-lock"></i>
+                                            </button>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <p class="text-xs text-stone-400 text-center py-4">No qualifying examinations configured at this time.</p>
                         <?php endif; ?>
                     </div>
                 </div>

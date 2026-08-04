@@ -205,6 +205,34 @@ try {
         $recent_submissions = [];
     }
 
+    // Epic 2.1 Qualifying Examination Metrics
+    $total_qualifying_exams = 0;
+    $total_qualified_students = 0;
+    $total_not_qualified_students = 0;
+    $total_pending_qualifying = 0;
+
+    try {
+        $stmtQEx = $pdo->prepare("SELECT COUNT(*) FROM exams WHERE teacher_id = ? AND exam_category = 'qualifying'");
+        $stmtQEx->execute([$teacher_id]);
+        $total_qualifying_exams = (int)$stmtQEx->fetchColumn();
+
+        $stmtQRes = $pdo->prepare("
+            SELECT qualification_status, COUNT(*) as cnt 
+            FROM exam_submissions es 
+            JOIN exams e ON es.exam_id = e.id 
+            WHERE e.teacher_id = ? AND e.exam_category = 'qualifying'
+            GROUP BY qualification_status
+        ");
+        $stmtQRes->execute([$teacher_id]);
+        while ($r = $stmtQRes->fetch(PDO::FETCH_ASSOC)) {
+            if ($r['qualification_status'] === 'qualified') $total_qualified_students = (int)$r['cnt'];
+            elseif ($r['qualification_status'] === 'not_qualified') $total_not_qualified_students = (int)$r['cnt'];
+            elseif ($r['qualification_status'] === 'pending') $total_pending_qualifying = (int)$r['cnt'];
+        }
+    } catch (PDOException $e) {
+        // Fail-safe defaults
+    }
+
 } catch (PDOException $e) {
     die("Database error: " . $e->getMessage());
 }
@@ -319,6 +347,45 @@ try {
                         </p>
                     </div>
                     <div class="p-3 bg-emerald-100 text-emerald-600 rounded-xl"><i class="fa-solid fa-chart-line text-lg"></i></div>
+                </div>
+            </div>
+
+            <!-- Epic 2.1 Qualifying Examination Summary Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-gradient-to-br from-orange-500 to-amber-600 text-white p-4 rounded-xl shadow-sm flex items-center justify-between">
+                    <div>
+                        <p class="text-[10px] uppercase tracking-wider font-extrabold opacity-80">Qualifying Exams</p>
+                        <h3 class="text-2xl font-black mt-1"><?php echo number_format($total_qualifying_exams); ?></h3>
+                        <p class="text-[9px] font-semibold mt-1 opacity-90"><i class="fa-solid fa-award"></i> Active Modules</p>
+                    </div>
+                    <div class="p-3 bg-white/20 rounded-xl"><i class="fa-solid fa-award text-xl"></i></div>
+                </div>
+
+                <div class="bg-white p-4 border border-emerald-200 rounded-xl flex items-center justify-between shadow-sm">
+                    <div>
+                        <p class="text-[10px] uppercase tracking-wider font-bold text-emerald-700">Qualified Students</p>
+                        <h3 class="text-2xl font-black text-emerald-600 mt-1"><?php echo number_format($total_qualified_students); ?></h3>
+                        <p class="text-[9px] text-emerald-600 font-semibold mt-1"><i class="fa-solid fa-circle-check"></i> Passed Criteria</p>
+                    </div>
+                    <div class="p-3 bg-emerald-100 text-emerald-600 rounded-xl"><i class="fa-solid fa-user-check text-lg"></i></div>
+                </div>
+
+                <div class="bg-white p-4 border border-rose-200 rounded-xl flex items-center justify-between shadow-sm">
+                    <div>
+                        <p class="text-[10px] uppercase tracking-wider font-bold text-rose-700">Not Qualified</p>
+                        <h3 class="text-2xl font-black text-rose-600 mt-1"><?php echo number_format($total_not_qualified_students); ?></h3>
+                        <p class="text-[9px] text-rose-600 font-semibold mt-1"><i class="fa-solid fa-circle-xmark"></i> Below Benchmark</p>
+                    </div>
+                    <div class="p-3 bg-rose-100 text-rose-600 rounded-xl"><i class="fa-solid fa-user-xmark text-lg"></i></div>
+                </div>
+
+                <div class="bg-white p-4 border border-amber-200 rounded-xl flex items-center justify-between shadow-sm">
+                    <div>
+                        <p class="text-[10px] uppercase tracking-wider font-bold text-amber-700">Pending Results</p>
+                        <h3 class="text-2xl font-black text-amber-600 mt-1"><?php echo number_format($total_pending_qualifying); ?></h3>
+                        <p class="text-[9px] text-amber-600 font-semibold mt-1"><i class="fa-solid fa-clock"></i> Awaiting Review</p>
+                    </div>
+                    <div class="p-3 bg-amber-100 text-amber-600 rounded-xl"><i class="fa-solid fa-hourglass-half text-lg"></i></div>
                 </div>
             </div>
 

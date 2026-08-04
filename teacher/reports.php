@@ -7,28 +7,51 @@ $pdo = getDBConnection();
 $teacher_id = $_SESSION['user_id'];
 
 $selected_exam = $_GET['exam_title'] ?? 'all';
+$selected_category = $_GET['exam_category'] ?? 'all';
+$selected_qual_status = $_GET['qualification_status'] ?? 'all';
 
-$where = "WHERE teacher_id = ?";
+$where = "WHERE es.teacher_id = ?";
 $params = [$teacher_id];
 
 if ($selected_exam !== 'all') {
-    $where .= " AND exam_title = ?";
+    $where .= " AND es.exam_title = ?";
     $params[] = $selected_exam;
+}
+
+if ($selected_category !== 'all') {
+    $where .= " AND e.exam_category = ?";
+    $params[] = $selected_category;
+}
+
+if ($selected_qual_status !== 'all') {
+    $where .= " AND es.qualification_status = ?";
+    $params[] = $selected_qual_status;
 }
 
 $stmtStats = $pdo->prepare("
     SELECT 
         COUNT(*) as total_students,
-        SUM(CASE WHEN status = 'Pass' THEN 1 ELSE 0 END) as total_pass,
-        SUM(CASE WHEN status = 'Fail' THEN 1 ELSE 0 END) as total_fail,
-        AVG(percentage) as avg_percentage,
-        MAX(percentage) as max_percentage,
-        MIN(percentage) as min_percentage
-    FROM exam_submissions $where
+        SUM(CASE WHEN es.status = 'Pass' THEN 1 ELSE 0 END) as total_pass,
+        SUM(CASE WHEN es.status = 'Fail' THEN 1 ELSE 0 END) as total_fail,
+        SUM(CASE WHEN es.qualification_status = 'qualified' THEN 1 ELSE 0 END) as total_qualified,
+        SUM(CASE WHEN es.qualification_status = 'not_qualified' THEN 1 ELSE 0 END) as total_not_qualified,
+        SUM(CASE WHEN es.qualification_status = 'pending' THEN 1 ELSE 0 END) as total_pending_qual,
+        AVG(es.percentage) as avg_percentage,
+        MAX(es.percentage) as max_percentage,
+        MIN(es.percentage) as min_percentage
+    FROM exam_submissions es
+    LEFT JOIN exams e ON es.exam_id = e.id
+    $where
 ");
 $stmtStats->execute($params);
 
-$stmtList = $pdo->prepare("SELECT * FROM exam_submissions $where ORDER BY id DESC LIMIT 200");
+$stmtList = $pdo->prepare("
+    SELECT es.*, e.exam_category, e.qualifying_passing_percentage, e.qualifying_max_attempts
+    FROM exam_submissions es
+    LEFT JOIN exams e ON es.exam_id = e.id
+    $where 
+    ORDER BY es.id DESC LIMIT 200
+");
 $stmtList->execute($params);
 
 $stats = $stmtStats->fetch(PDO::FETCH_ASSOC);
@@ -128,15 +151,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rerun_ocr_ai'])) {
                 <p class="text-xs text-stone-400">Statistical breakdown of OCR scanned papers and student scores.</p>
             </div>
 
-            <form method="GET" action="reports.php" class="flex items-center gap-2">
-                <label class="text-xs font-bold text-stone-600">Filter Exam:</label>
-                <select name="exam_title" onchange="this.form.submit()" class="bg-white border border-stone-200 text-xs font-bold rounded-xl px-4 py-2 outline-none cursor-pointer focus:border-orange-500 shadow-sm">
+            <form method="GET" action="reports.php" class="flex items-center gap-2 flex-wrap">
+                <select name="exam_title" onchange="this.form.submit()" class="bg-white border border-stone-200 text-xs font-bold rounded-xl px-3 py-2 outline-none cursor-pointer focus:border-orange-500 shadow-sm">
                     <option value="all" <?php echo $selected_exam === 'all' ? 'selected' : ''; ?>>All Evaluated Exams</option>
                     <?php foreach ($exam_options as $ex): ?>
                         <option value="<?php echo htmlspecialchars($ex); ?>" <?php echo $selected_exam === $ex ? 'selected' : ''; ?>>
                             <?php echo htmlspecialchars($ex); ?>
                         </option>
                     <?php endforeach; ?>
+                </select>
+
+                <select name="exam_category" onchange="this.form.submit()" class="bg-white border border-stone-200 text-xs font-bold rounded-xl px-3 py-2 outline-none cursor-pointer focus:border-orange-500 shadow-sm">
+                    <option value="all" <?php echo $selected_category === 'all' ? 'selected' : ''; ?>>All Categories</option>
+                    <option value="regular" <?php echo $selected_category === 'regular' ? 'selected' : ''; ?>>Regular Exams</option>
+                    <option value="qualifying" <?php echo $selected_category === 'qualifying' ? 'selected' : ''; ?>>Qualifying Exams</option>
+                </select>
+
+                <select name="qualification_status" onchange="this.form.submit()" class="bg-white border border-stone-200 text-xs font-bold rounded-xl px-3 py-2 outline-none cursor-pointer focus:border-orange-500 shadow-sm">
+                    <option value="all" <?php echo $selected_qual_status === 'all' ? 'selected' : ''; ?>>All Qual Results</option>
+                    <option value="qualified" <?php echo $selected_qual_status === 'qualified' ? 'selected' : ''; ?>>Qualified Only</option>
+                    <option value="not_qualified" <?php echo $selected_qual_status === 'not_qualified' ? 'selected' : ''; ?>>Not Qualified Only</option>
+                    <option value="pending" <?php echo $selected_qual_status === 'pending' ? 'selected' : ''; ?>>Pending Qualification</option>
                 </select>
             </form>
         </div>
@@ -197,6 +232,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rerun_ocr_ai'])) {
                             <tr class="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase font-bold text-[10px]">
                                 <th class="p-3">Student Name</th>
                                 <th class="p-3">Exam Title</th>
+                                <th class="p-3">Category & Qualification</th>
                                 <th class="p-3">Format</th>
                                 <th class="p-3 text-center">Score (Correct / Total)</th>
                                 <th class="p-3 text-center">Percentage</th>
@@ -219,6 +255,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rerun_ocr_ai'])) {
                                 <tr class="hover:bg-stone-50/50 transition-all">
                                     <td class="p-3 font-bold text-stone-800"><?php echo htmlspecialchars($sub['student_name']); ?></td>
                                     <td class="p-3"><?php echo htmlspecialchars($sub['exam_title']); ?></td>
+                                    <td class="p-3">
+                                        <?php if (($sub['exam_category'] ?? 'regular') === 'qualifying'): ?>
+                                            <span class="bg-orange-100 text-orange-800 text-[10px] font-black px-2 py-0.5 rounded uppercase">Qualifying</span>
+                                            <?php if (($sub['qualification_status'] ?? '') === 'qualified'): ?>
+                                                <span class="bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded text-[10px] ml-1">Qualified</span>
+                                            <?php elseif (($sub['qualification_status'] ?? '') === 'not_qualified'): ?>
+                                                <span class="bg-rose-100 text-rose-800 font-bold px-2 py-0.5 rounded text-[10px] ml-1">Not Qualified</span>
+                                            <?php else: ?>
+                                                <span class="bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded text-[10px] ml-1">Pending</span>
+                                            <?php endif; ?>
+                                        <?php else: ?>
+                                            <span class="bg-stone-100 text-stone-600 text-[10px] font-bold px-2 py-0.5 rounded uppercase">Regular</span>
+                                        <?php endif; ?>
+                                    </td>
                                     <td class="p-3">
                                         <span class="bg-stone-100 text-stone-600 font-bold px-2 py-0.5 rounded text-[10px] uppercase">
                                             <?php echo htmlspecialchars($sub['upload_type']); ?>

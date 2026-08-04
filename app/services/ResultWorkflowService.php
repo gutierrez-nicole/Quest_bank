@@ -330,18 +330,25 @@ class ResultWorkflowService {
             $newTotalPossible = floatval($tot['total_possible']) ?: 1.0;
             $newPercentage = round(($newTotalAwarded / $newTotalPossible) * 100, 2);
 
-            $stmtExam = $pdo->prepare("SELECT passing_percentage FROM exams WHERE id = ?");
+            $stmtExam = $pdo->prepare("SELECT passing_percentage, exam_category, qualifying_passing_percentage FROM exams WHERE id = ?");
             $stmtExam->execute([$sub['exam_id']]);
-            $passPct = floatval($stmtExam->fetchColumn() ?: 75.00);
+            $examInfo = $stmtExam->fetch(PDO::FETCH_ASSOC);
+            $passPct = floatval($examInfo['passing_percentage'] ?? 75.00);
 
             $newStatus = ($newPercentage >= $passPct) ? 'Pass' : 'Fail';
 
+            $newQualStatus = 'pending';
+            if (($examInfo['exam_category'] ?? 'regular') === 'qualifying') {
+                $qualPct = floatval($examInfo['qualifying_passing_percentage'] ?? 75.00);
+                $newQualStatus = ($newPercentage >= $qualPct) ? 'qualified' : 'not_qualified';
+            }
+
             $stmtUpdSub = $pdo->prepare("
                 UPDATE exam_submissions 
-                SET total_score = ?, percentage = ?, status = ?, correct_count = ?, wrong_count = ? 
+                SET total_score = ?, percentage = ?, status = ?, qualification_status = ?, correct_count = ?, wrong_count = ? 
                 WHERE id = ?
             ");
-            $stmtUpdSub->execute([$newTotalAwarded, $newPercentage, $newStatus, intval($tot['correct_cnt']), intval($tot['wrong_cnt']), $submissionId]);
+            $stmtUpdSub->execute([$newTotalAwarded, $newPercentage, $newStatus, $newQualStatus, intval($tot['correct_cnt']), intval($tot['wrong_cnt']), $submissionId]);
 
             $pdo->commit();
 

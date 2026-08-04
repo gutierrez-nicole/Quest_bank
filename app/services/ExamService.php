@@ -11,26 +11,47 @@ class ExamService {
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public static function createExam($teacherId, $title, $subject, $specialization, $timeLimit, $questions) {
+    public static function createExam($teacherId, $title, $subject, $specialization, $timeLimit, $questions, $qualifyingOptions = []) {
         $pdo = getDBConnection();
         try {
             $pdo->beginTransaction();
 
-            $stmt = $pdo->prepare("INSERT INTO exams (teacher_id, title, subject, specialization, time_limit, total_items) VALUES (?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$teacherId, $title, $subject, $specialization, $timeLimit, count($questions)]);
+            $category = $qualifyingOptions['exam_category'] ?? 'regular';
+            $passingPct = floatval($qualifyingOptions['qualifying_passing_percentage'] ?? 75.00);
+            $maxAttempts = intval($qualifyingOptions['qualifying_max_attempts'] ?? 1);
+            $yearLevel = $qualifyingOptions['qualifying_year_level'] ?? 'All Year Levels';
+            $program = $qualifyingOptions['qualifying_program'] ?? 'All Programs';
+            $isRequired = isset($qualifyingOptions['qualifying_is_required']) ? intval($qualifyingOptions['qualifying_is_required']) : 1;
+            $unlockDate = !empty($qualifyingOptions['qualifying_unlock_date']) ? $qualifyingOptions['qualifying_unlock_date'] : null;
+            $deadline = !empty($qualifyingOptions['qualifying_deadline']) ? $qualifyingOptions['qualifying_deadline'] : null;
+
+            $stmt = $pdo->prepare("
+                INSERT INTO exams (
+                    teacher_id, title, subject, specialization, time_limit, total_items,
+                    exam_category, qualifying_passing_percentage, qualifying_max_attempts,
+                    qualifying_year_level, qualifying_program, qualifying_is_required,
+                    qualifying_unlock_date, qualifying_deadline, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            ");
+            $stmt->execute([
+                $teacherId, $title, $subject, $specialization, $timeLimit, count($questions),
+                $category, $passingPct, $maxAttempts, $yearLevel, $program, $isRequired,
+                $unlockDate, $deadline
+            ]);
             $examId = $pdo->lastInsertId();
 
-            $qStmt = $pdo->prepare("INSERT INTO exam_questions (exam_id, question_text, question_type, option_a, option_b, option_c, option_d, correct_answer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+            $qStmt = $pdo->prepare("INSERT INTO exam_questions (exam_id, question_text, question_type, option_a, option_b, option_c, option_d, correct_answer, points) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
             foreach ($questions as $q) {
                 $qStmt->execute([
                     $examId,
-                    $q['text'],
-                    $q['type'],
-                    $q['opt_a'] ?? null,
-                    $q['opt_b'] ?? null,
-                    $q['opt_c'] ?? null,
-                    $q['opt_d'] ?? null,
-                    $q['correct']
+                    $q['text'] ?? ($q['question_text'] ?? ''),
+                    $q['type'] ?? ($q['question_type'] ?? 'multiple_choice'),
+                    $q['opt_a'] ?? ($q['option_a'] ?? null),
+                    $q['opt_b'] ?? ($q['option_b'] ?? null),
+                    $q['opt_c'] ?? ($q['option_c'] ?? null),
+                    $q['opt_d'] ?? ($q['option_d'] ?? null),
+                    $q['correct'] ?? ($q['correct_answer'] ?? ''),
+                    intval($q['points'] ?? 1)
                 ]);
             }
 
@@ -40,6 +61,99 @@ class ExamService {
             if ($pdo->inTransaction()) $pdo->rollBack();
             return ['error' => $e->getMessage()];
         }
+    }
+
+    public static function checkStudentEligibility($studentId, $examId) {
+        $pdo = getDBConnection();
+        
+        $stmtEx = $pdo->prepare("SELECT * FROM exams WHERE id = ?");
+        $stmtEx->execute([$examId]);
+        $exam = $stmtEx->fetch(PDO::FETCH_ASSOC);
+
+        if (!$exam) {
+            return ['eligible' => false, 'reason' => 'Exam not found.'];
+        }
+
+        if (($exam['status'] ?? 'active') !== 'active') {
+            return ['eligible' => false, 'reason' => 'This examination is currently inactive.'];
+        }
+
+        // Count student attempts
+        $stmtAtt = $pdo->prepare("SELECT COUNT(*) FROM exam_submissions WHERE student_id = ? AND exam_id = ?");
+        $stmtAtt->execute([$studentId, $examId]);
+        $attemptCount = intval($stmtAtt->fetchColumn());
+
+        // Check if qualifying exam
+        $category = $exam['exam_category'] ?? 'regular';
+        if ($category === 'qualifying') {
+            $maxAttempts = intval($exam['qualifying_max_attempts'] ?? 1);
+            if ($attemptCount >= $maxAttempts) {
+                return [
+                    'eligible' => false,
+                    'reason' => "You have reached the maximum allowed attempts ({$maxAttempts}) for this qualifying examination.",
+                    'attempt_count' => $attemptCount,
+                    'max_attempts' => $maxAttempts,
+                    'remaining_attempts' => 0
+                ];
+            }
+
+            // Check student program & year level from student_details
+            $stmtDetails = $pdo->prepare("SELECT course, year_level FROM student_details WHERE user_id = ?");
+            $stmtDetails->execute([$studentId]);
+            $details = $stmtDetails->fetch(PDO::FETCH_ASSOC) ?: ['course' => 'BSCE', 'year_level' => '4th Year'];
+
+            $eligibleProg = $exam['qualifying_program'] ?? 'All Programs';
+            if ($eligibleProg !== 'All Programs' && $eligibleProg !== 'all') {
+                if (stripos($details['course'], $eligibleProg) === false && stripos($eligibleProg, $details['course']) === false) {
+                    return [
+                        'eligible' => false,
+                        'reason' => "This qualifying examination is restricted to {$eligibleProg} students."
+                    ];
+                }
+            }
+
+            $eligibleYear = $exam['qualifying_year_level'] ?? 'All Year Levels';
+            if ($eligibleYear !== 'All Year Levels' && $eligibleYear !== 'all') {
+                // Standardize string comparison
+                $stuYearStr = (string)$details['year_level'];
+                if (stripos($stuYearStr, (string)$eligibleYear) === false && stripos((string)$eligibleYear, $stuYearStr) === false) {
+                    return [
+                        'eligible' => false,
+                        'reason' => "This qualifying examination is restricted to {$eligibleYear} students."
+                    ];
+                }
+            }
+
+            // Check unlock date
+            if (!empty($exam['qualifying_unlock_date'])) {
+                if (time() < strtotime($exam['qualifying_unlock_date'])) {
+                    return [
+                        'eligible' => false,
+                        'reason' => "This qualifying examination unlocks on " . date('M d, Y h:i A', strtotime($exam['qualifying_unlock_date']))
+                    ];
+                }
+            }
+
+            // Check deadline
+            if (!empty($exam['qualifying_deadline'])) {
+                if (time() > strtotime($exam['qualifying_deadline'])) {
+                    return [
+                        'eligible' => false,
+                        'reason' => "The deadline for this qualifying examination passed on " . date('M d, Y h:i A', strtotime($exam['qualifying_deadline']))
+                    ];
+                }
+            }
+
+            $remaining = max(0, $maxAttempts - $attemptCount);
+            return [
+                'eligible' => true,
+                'attempt_count' => $attemptCount,
+                'max_attempts' => $maxAttempts,
+                'remaining_attempts' => $remaining
+            ];
+        }
+
+        return ['eligible' => true, 'attempt_count' => $attemptCount, 'remaining_attempts' => 999];
     }
 
     public static function getRecentSubmissions($limit = 10) {

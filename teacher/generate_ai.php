@@ -72,6 +72,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
     $subject = trim(sanitizeInput($_POST['save_subject'] ?? ''));
     $specialization = trim(sanitizeInput($_POST['save_specialization'] ?? 'Structural Engineering'));
     $difficulty = trim($_POST['save_difficulty'] ?? 'medium');
+    $exam_category = trim($_POST['save_exam_category'] ?? 'regular');
+    $qualifying_passing_percentage = floatval($_POST['save_qualifying_passing_percentage'] ?? 80.00);
+    $qualifying_max_attempts = intval($_POST['save_qualifying_max_attempts'] ?? 1);
+    $qualifying_year_level = trim($_POST['save_qualifying_year_level'] ?? 'All Year Levels');
+    $qualifying_program = trim($_POST['save_qualifying_program'] ?? 'All Programs');
+    $qualifying_is_required = intval($_POST['save_qualifying_is_required'] ?? 1);
+    $qualifying_unlock_date = !empty($_POST['save_qualifying_unlock_date']) ? $_POST['save_qualifying_unlock_date'] : null;
+    $qualifying_deadline = !empty($_POST['save_qualifying_deadline']) ? $_POST['save_qualifying_deadline'] : null;
     $questions = $_POST['questions'] ?? [];
     $meta_json = $_POST['save_ai_metadata'] ?? '{}';
     $lesson_ids_str = $_POST['save_lesson_ids'] ?? '';
@@ -82,8 +90,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
 
             $stmt = $pdo->prepare("
                 INSERT INTO exams 
-                (teacher_id, title, subject, specialization, difficulty, time_limit, total_items, ai_metadata, lesson_ids) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (teacher_id, title, subject, specialization, difficulty, time_limit, total_items, ai_metadata, lesson_ids,
+                 exam_category, qualifying_passing_percentage, qualifying_max_attempts, qualifying_year_level,
+                 qualifying_program, qualifying_is_required, qualifying_unlock_date, qualifying_deadline) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
             $stmt->execute([
                 $teacher_id, 
@@ -94,7 +104,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
                 60, 
                 count($questions),
                 $meta_json,
-                $lesson_ids_str
+                $lesson_ids_str,
+                $exam_category,
+                $qualifying_passing_percentage,
+                $qualifying_max_attempts,
+                $qualifying_year_level,
+                $qualifying_program,
+                $qualifying_is_required,
+                $qualifying_unlock_date,
+                $qualifying_deadline
             ]);
             $exam_id = $pdo->lastInsertId();
 

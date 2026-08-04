@@ -12,7 +12,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_exam'])) {
     $title = trim($_POST['title']);
     $subject = trim($_POST['subject']);
     $specialization = trim($_POST['specialization'] ?? 'Structural Engineering');
-    $time_limit = intval($_POST['time_limit']);
+    $exam_category = trim($_POST['exam_category'] ?? 'regular');
+    $qualifying_passing_percentage = floatval($_POST['qualifying_passing_percentage'] ?? 80.00);
+    $qualifying_max_attempts = intval($_POST['qualifying_max_attempts'] ?? 1);
+    $qualifying_year_level = trim($_POST['qualifying_year_level'] ?? 'All Year Levels');
+    $qualifying_program = trim($_POST['qualifying_program'] ?? 'All Programs');
+    $qualifying_is_required = intval($_POST['qualifying_is_required'] ?? 1);
+    $qualifying_unlock_date = !empty($_POST['qualifying_unlock_date']) ? $_POST['qualifying_unlock_date'] : null;
+    $qualifying_deadline = !empty($_POST['qualifying_deadline']) ? $_POST['qualifying_deadline'] : null;
     
     $questions = $_POST['questions'] ?? [];
 
@@ -20,9 +27,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_exam'])) {
         try {
             $pdo->beginTransaction();
 
-            
-            $stmt = $pdo->prepare("INSERT INTO exams (teacher_id, title, subject, specialization, time_limit, total_items) VALUES (?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$_SESSION['user_id'], $title, $subject, $specialization, $time_limit, count($questions)]);
+            $stmt = $pdo->prepare("
+                INSERT INTO exams (
+                    teacher_id, title, subject, specialization, time_limit, total_items,
+                    exam_category, qualifying_passing_percentage, qualifying_max_attempts,
+                    qualifying_year_level, qualifying_program, qualifying_is_required,
+                    qualifying_unlock_date, qualifying_deadline
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+            $stmt->execute([
+                $_SESSION['user_id'], $title, $subject, $specialization, $time_limit, count($questions),
+                $exam_category, $qualifying_passing_percentage, $qualifying_max_attempts,
+                $qualifying_year_level, $qualifying_program, $qualifying_is_required,
+                $qualifying_unlock_date, $qualifying_deadline
+            ]);
             $exam_id = $pdo->lastInsertId();
 
             
@@ -134,7 +152,6 @@ unset($ex);
                         </div>
 
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            
                             <div class="space-y-1">
                                 <label class="text-xs font-bold text-stone-600">Civil Engineering Branch</label>
                                 <select name="specialization" required class="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs outline-none focus:border-orange-500">
@@ -146,6 +163,70 @@ unset($ex);
                             <div class="space-y-1">
                                 <label class="text-xs font-bold text-stone-600">Time Limit (Minutes)</label>
                                 <input type="number" name="time_limit" value="60" required class="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs outline-none focus:border-orange-500">
+                            </div>
+                        </div>
+
+                        <div class="space-y-1">
+                            <label class="text-xs font-bold text-stone-600">Exam Category</label>
+                            <select name="exam_category" id="exam_category_select" onchange="toggleQualifyingFields(this.value)" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs outline-none focus:border-orange-500 font-semibold text-stone-800">
+                                <option value="regular">Regular Exam</option>
+                                <option value="quiz">Quiz</option>
+                                <option value="prelim">Prelim</option>
+                                <option value="midterm">Midterm</option>
+                                <option value="finals">Finals</option>
+                                <option value="qualifying">Qualifying Exam</option>
+                            </select>
+                        </div>
+
+                        <!-- Qualifying Exam Parameters Panel -->
+                        <div id="qualifying_config_panel" class="hidden p-4 bg-orange-50/60 border border-orange-200 rounded-xl space-y-4">
+                            <div class="flex items-center gap-2 border-b border-orange-200 pb-2">
+                                <i class="fa-solid fa-award text-orange-600"></i>
+                                <h4 class="text-xs font-extrabold text-orange-900 uppercase">Qualifying Examination Configuration</h4>
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label class="text-xs font-bold text-stone-700">Qualifying Passing Score (%)</label>
+                                    <input type="number" step="0.01" name="qualifying_passing_percentage" value="80.00" min="1" max="100" class="w-full bg-white border border-stone-200 rounded-xl px-3 py-1.5 text-xs font-semibold">
+                                </div>
+                                <div>
+                                    <label class="text-xs font-bold text-stone-700">Maximum Allowed Attempts</label>
+                                    <input type="number" name="qualifying_max_attempts" value="1" min="1" max="10" class="w-full bg-white border border-stone-200 rounded-xl px-3 py-1.5 text-xs font-semibold">
+                                </div>
+                                <div>
+                                    <label class="text-xs font-bold text-stone-700">Eligible Year Level</label>
+                                    <select name="qualifying_year_level" class="w-full bg-white border border-stone-200 rounded-xl px-3 py-1.5 text-xs font-semibold">
+                                        <option value="All Year Levels">All Year Levels</option>
+                                        <option value="1st Year">1st Year</option>
+                                        <option value="2nd Year">2nd Year</option>
+                                        <option value="3rd Year">3rd Year</option>
+                                        <option value="4th Year">4th Year</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="text-xs font-bold text-stone-700">Eligible Program</label>
+                                    <select name="qualifying_program" class="w-full bg-white border border-stone-200 rounded-xl px-3 py-1.5 text-xs font-semibold">
+                                        <option value="All Programs">All Programs</option>
+                                        <option value="BSCE">BSCE (Civil Engineering)</option>
+                                        <option value="BSCS">BSCS (Computer Science)</option>
+                                        <option value="BSIT">BSIT (Information Tech)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="text-xs font-bold text-stone-700">Requirement Status</label>
+                                    <select name="qualifying_is_required" class="w-full bg-white border border-stone-200 rounded-xl px-3 py-1.5 text-xs font-semibold">
+                                        <option value="1">Mandatory / Required</option>
+                                        <option value="0">Optional / Voluntary</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="text-xs font-bold text-stone-700">Start / Unlock Date</label>
+                                    <input type="datetime-local" name="qualifying_unlock_date" class="w-full bg-white border border-stone-200 rounded-xl px-3 py-1.5 text-xs">
+                                </div>
+                                <div class="sm:col-span-2">
+                                    <label class="text-xs font-bold text-stone-700">Deadline Date</label>
+                                    <input type="datetime-local" name="qualifying_deadline" class="w-full bg-white border border-stone-200 rounded-xl px-3 py-1.5 text-xs">
+                                </div>
                             </div>
                         </div>
 
@@ -238,6 +319,17 @@ unset($ex);
 
     <script>
         let questionCount = 0;
+
+        function toggleQualifyingFields(val) {
+            const panel = document.getElementById('qualifying_config_panel');
+            if (panel) {
+                if (val === 'qualifying') {
+                    panel.classList.remove('hidden');
+                } else {
+                    panel.classList.add('hidden');
+                }
+            }
+        }
 
         function addQuestion() {
             questionCount++;

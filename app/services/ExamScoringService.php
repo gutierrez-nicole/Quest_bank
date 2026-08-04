@@ -210,17 +210,34 @@ class ExamScoringService {
                 if ($uName) $studentName = $uName;
             }
 
+            // Calculate attempt_number & qualification_status for Epic 2.1
+            $attemptNumber = 1;
+            if ($studentIdDb) {
+                $stmtCount = $pdo->prepare("SELECT COUNT(*) FROM exam_submissions WHERE exam_id = ? AND student_id = ?");
+                $stmtCount->execute([$examId, $studentIdDb]);
+                $attemptNumber = intval($stmtCount->fetchColumn()) + 1;
+            }
+
+            $qualificationStatus = 'pending';
+            $examCategory = $exam['exam_category'] ?? 'regular';
+            if ($examCategory === 'qualifying') {
+                $qualThreshold = floatval($exam['qualifying_passing_percentage'] ?? 75.00);
+                $qualificationStatus = ($percentage >= $qualThreshold) ? 'qualified' : 'not_qualified';
+            }
+
             $stmt = $pdo->prepare("
                 INSERT INTO exam_submissions (
                     exam_id, student_id, teacher_id, student_name, exam_title, upload_type,
                     correct_count, wrong_count, total_score, total_possible_score, total_items,
                     percentage, status, ocr_text, ocr_confidence, ocr_status, suggested_manual_review,
-                    page_count, evaluation_result, review_status, file_path, original_filename, created_at
+                    page_count, evaluation_result, review_status, file_path, original_filename,
+                    qualification_status, attempt_number, created_at
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?,
                     ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, NOW()
+                    ?, ?, ?, ?, ?,
+                    ?, ?, NOW()
                 )
             ");
 
@@ -246,7 +263,9 @@ class ExamScoringService {
                 json_encode($itemResults),
                 $reviewStatus,
                 $fileMeta['file_path'] ?? null,
-                $fileMeta['original_filename'] ?? null
+                $fileMeta['original_filename'] ?? null,
+                $qualificationStatus,
+                $attemptNumber
             ]);
 
             $submissionId = $pdo->lastInsertId();

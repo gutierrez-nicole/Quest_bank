@@ -83,8 +83,18 @@ addColumn($pdo, 'exams', 'prompt_version', "VARCHAR(20) DEFAULT 'v1.0'");
 addColumn($pdo, 'exams', 'ai_model', "VARCHAR(100) DEFAULT NULL");
 addColumn($pdo, 'exams', 'created_by', "INT(11) DEFAULT NULL");
 
+// Epic 2.1 Qualifying Examination Columns
+addColumn($pdo, 'exams', 'exam_category', "VARCHAR(30) NOT NULL DEFAULT 'regular'");
+addColumn($pdo, 'exams', 'qualifying_passing_percentage', "DECIMAL(5,2) DEFAULT 75.00");
+addColumn($pdo, 'exams', 'qualifying_max_attempts', "INT(11) DEFAULT 1");
+addColumn($pdo, 'exams', 'qualifying_year_level', "VARCHAR(50) DEFAULT 'All Year Levels'");
+addColumn($pdo, 'exams', 'qualifying_program', "VARCHAR(100) DEFAULT 'All Programs'");
+addColumn($pdo, 'exams', 'qualifying_is_required', "TINYINT(1) DEFAULT 1");
+addColumn($pdo, 'exams', 'qualifying_unlock_date', "DATETIME DEFAULT NULL");
+addColumn($pdo, 'exams', 'qualifying_deadline', "DATETIME DEFAULT NULL");
+
 // ============================================
-// EXAM_SUBMISSIONS — OCR, Review, File Storage, Upload Type
+// EXAM_SUBMISSIONS — OCR, Review, File Storage, Upload Type, Qualification Status
 // ============================================
 echo "\n--- exam_submissions ---\n";
 $pdo->exec("ALTER TABLE `exam_submissions` MODIFY COLUMN `upload_type` VARCHAR(30) NOT NULL DEFAULT 'scanned'");
@@ -116,6 +126,10 @@ addColumn($pdo, 'exam_submissions', 'published_at', "DATETIME DEFAULT NULL");
 addColumn($pdo, 'exam_submissions', 'file_path', "VARCHAR(500) DEFAULT NULL");
 addColumn($pdo, 'exam_submissions', 'original_filename', "VARCHAR(255) DEFAULT NULL");
 addColumn($pdo, 'exam_submissions', 'uploaded_file_hash', "VARCHAR(64) DEFAULT NULL");
+
+// Epic 2.1 Qualification Submission Columns
+addColumn($pdo, 'exam_submissions', 'qualification_status', "VARCHAR(30) NOT NULL DEFAULT 'pending'");
+addColumn($pdo, 'exam_submissions', 'attempt_number', "INT(11) NOT NULL DEFAULT 1");
 
 // ============================================
 // SUBJECTS & DEPARTMENTS TABLES
