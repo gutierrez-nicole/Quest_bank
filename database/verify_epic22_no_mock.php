@@ -60,10 +60,20 @@ try {
 
     // --- TEST 5: Explicit Test Mock Works ONLY in Testing Mode ---
     putenv('APP_ENV=testing');
-    GroqService::$testMode = true;
-    $res5 = GroqService::generateQuestions($sampleLessonText, 5, 'Soil Mechanics', 'Test Exam', 'Geotechnical', 'multiple_choice', 'medium', 'TEST_MOCK_KEY');
-    GroqService::$testMode = false;
+    putenv('TEST_BOOTSTRAP_ACTIVE=1');
+    $_ENV['APP_ENV'] = 'testing';
+    $_ENV['TEST_BOOTSTRAP_ACTIVE'] = '1';
+    $_SERVER['APP_ENV'] = 'testing';
+    $_SERVER['TEST_BOOTSTRAP_ACTIVE'] = '1';
+    require __DIR__ . '/../app/testing_bootstrap.php';
+    $res5 = GroqService::generateQuestions("Lesson ID: 101\n" . $sampleLessonText, 5, 'Soil Mechanics', 'Test Exam', 'Geotechnical', 'multiple_choice', 'medium', 'TEST_MOCK_KEY');
     putenv('APP_ENV=production');
+    putenv('TEST_BOOTSTRAP_ACTIVE=0');
+    $_ENV['APP_ENV'] = 'production';
+    $_ENV['TEST_BOOTSTRAP_ACTIVE'] = '0';
+    $_SERVER['APP_ENV'] = 'production';
+    $_SERVER['TEST_BOOTSTRAP_ACTIVE'] = '0';
+    require __DIR__ . '/../app/testing_bootstrap.php';
     $pass5 = (isset($res5['success']) && $res5['success'] === true) && count($res5['questions'] ?? []) === 5;
     logTest("TEST 5: Explicit Test Mock Works ONLY in Testing Mode", $pass5, "Generated " . count($res5['questions'] ?? []) . " questions under testMode=true");
 

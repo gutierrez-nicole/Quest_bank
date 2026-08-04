@@ -129,6 +129,23 @@ Access the application at `http://localhost:8000`.
 
 ---
 
+## 🧪 Testing & Automated E2E QA
+
+For detailed instructions on running automated tests, starting the safe test server, configuring environment variables, and verifying mock security rules, see [TESTING.md](TESTING.md).
+
+```bash
+# Safe Test Server Startup:
+npm run test:server
+
+# Automated Playwright E2E Suite:
+npm run test
+
+# Test-Mode Architecture Verification Script:
+php database/verify_epic22_test_architecture.php
+```
+
+---
+
 ## ⚠️ Known OCR & System Limitations
 
 1. **Low Quality Scans:** Extremely low resolution or heavily skewed phone photographs may result in lower OCR confidence scores (<75%), automatically flagging the submission for teacher review.

@@ -17,4 +17,4 @@ require_once __DIR__ . '/services/LessonExtractionService.php';
 require_once __DIR__ . '/services/OcrService.php';
 require_once __DIR__ . '/services/ResultWorkflowService.php';
 require_once __DIR__ . '/services/FileValidationService.php';
-
+require_once __DIR__ . '/testing_bootstrap.php';

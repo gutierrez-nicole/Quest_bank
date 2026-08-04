@@ -5,11 +5,13 @@ require_once __DIR__ . '/../config/config.php';
 class GroqService {
 
     public static $testMode = false;
+    public static $testBootstrapActive = false;
 
     private static function sendRequest($payload, $apiKey = null) {
-        // Final Blocker 2: Mock provider executes ONLY IF APP_ENV === 'testing' AND self::$testMode === true
-        $currentEnv = getenv('APP_ENV') ?: (defined('APP_ENV') ? APP_ENV : 'production');
-        $isTestEnvMode = ($currentEnv === 'testing') && (self::$testMode === true);
+        // Final Blocker 2: Mock provider executes ONLY IF APP_ENV === 'testing', testMode === true, AND testBootstrapActive === true
+        $env = getenv('APP_ENV') ?: ($_ENV['APP_ENV'] ?? ($_SERVER['APP_ENV'] ?? ''));
+        $currentEnv = (!empty($env)) ? $env : (defined('APP_ENV') ? APP_ENV : 'production');
+        $isTestEnvMode = ($currentEnv === 'testing') && (self::$testMode === true) && (self::$testBootstrapActive === true);
         if ($isTestEnvMode && ($apiKey === 'TEST_MOCK_KEY' || empty($apiKey) || $apiKey === 'YOUR_GROQ_API_KEY_HERE')) {
             $userPrompt = $payload['messages'][0]['content'] ?? '';
             $targetCount = 5;
@@ -360,10 +362,8 @@ class GroqService {
                             $srcLessonIds = is_array($q['source_lesson_ids'] ?? null) ? array_map('intval', $q['source_lesson_ids']) : [];
                             $srcConfidence = $q['source_confidence'] ?? 'high';
 
-                            if (empty($srcLessonIds)) {
-                                if (count($chunkLessonIds) === 1) {
-                                    $srcLessonIds = $chunkLessonIds;
-                                } else {
+                            if (empty($srcLessonIds) || $srcConfidence === 'review_required') {
+                                if ($srcConfidence === 'review_required' || empty($srcLessonIds)) {
                                     $srcLessonIds = [];
                                     $srcConfidence = 'review_required';
                                 }

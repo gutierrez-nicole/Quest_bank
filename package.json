@@ -5,7 +5,8 @@
   "main": "index.php",
   "scripts": {
     "test": "npx playwright test",
-    "test:epic22": "npx playwright test"
+    "test:epic22": "npx playwright test",
+    "test:server": "APP_ENV=testing TEST_BOOTSTRAP_ACTIVE=1 php -S localhost:8000 -t ."
   },
   "devDependencies": {
     "@playwright/test": "^1.40.0"
