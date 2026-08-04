@@ -5,19 +5,32 @@ require_once __DIR__ . '/../../includes/security.php';
 
 class ResultWorkflowService {
 
+    // Normal forward workflow transitions for teachers
     const ALLOWED_TRANSITIONS = [
         'pending_review' => ['reviewed'],
-        'reviewed'       => ['finalized', 'pending_review'],
-        'finalized'      => ['published', 'reviewed'],
-        'published'      => ['archived', 'finalized'],
-        'archived'       => ['published']
+        'reviewed'       => ['finalized'],
+        'finalized'      => ['published'],
+        'published'      => ['archived'],
+        'archived'       => []
     ];
 
     /**
-     * Validate and transition submission review status server-side
+     * Validate and transition submission review status server-side.
+     * Role authorization is strictly retrieved from the database using $reviewerId.
      */
-    public static function transitionStatus($submissionId, $targetStatus, $reviewerId, $remarks = '', $actorRole = 'teacher') {
+    public static function transitionStatus($submissionId, $targetStatus, $reviewerId, $remarks = '') {
         $pdo = getDBConnection();
+
+        // Load actor from database to prevent role parameter spoofing
+        $stmtUser = $pdo->prepare("SELECT id, role, status FROM users WHERE id = ?");
+        $stmtUser->execute([$reviewerId]);
+        $actor = $stmtUser->fetch(PDO::FETCH_ASSOC);
+
+        if (!$actor || ($actor['status'] ?? 'active') !== 'active') {
+            throw new SecurityException("Unauthorized or inactive user #{$reviewerId}.");
+        }
+
+        $actorRole = strtolower(trim($actor['role'] ?? ''));
 
         $stmt = $pdo->prepare("SELECT * FROM exam_submissions WHERE id = ?");
         $stmt->execute([$submissionId]);
@@ -30,17 +43,15 @@ class ResultWorkflowService {
         $currentStatus = $sub['review_status'] ?? 'pending_review';
         $targetStatus = strtolower(trim($targetStatus));
 
-        // Backward transition check: Only administrators may reopen results
-        $backwardTransitions = ['reviewed' => 'pending_review', 'finalized' => 'reviewed', 'published' => 'finalized'];
+        // Ordinary teachers are strictly prohibited from backward transitions
+        $backwardTransitions = ['reviewed' => 'pending_review', 'finalized' => 'reviewed', 'published' => 'finalized', 'archived' => 'published'];
         if (isset($backwardTransitions[$currentStatus]) && $backwardTransitions[$currentStatus] === $targetStatus) {
-            if ($actorRole !== 'admin') {
-                throw new SecurityException("Unauthorized: Only administrators may reopen or perform backward transitions on finalized or published results.");
-            }
+            throw new SecurityException("Unauthorized: Teachers cannot perform backward transitions or reopen results. Use the administrative reopen workflow instead.");
         }
 
-        // Check if transition is valid
+        // Check if transition is valid in the forward workflow map
         if (!isset(self::ALLOWED_TRANSITIONS[$currentStatus]) || !in_array($targetStatus, self::ALLOWED_TRANSITIONS[$currentStatus])) {
-            throw new InvalidArgumentException("Illegal status transition from '{$currentStatus}' to '{$targetStatus}'. Direct skipped transitions are strictly rejected.");
+            throw new InvalidArgumentException("Illegal status transition from '{$currentStatus}' to '{$targetStatus}'. Skipped or backward transitions are strictly rejected.");
         }
 
         // Validate finalization blockers
@@ -82,7 +93,6 @@ class ResultWorkflowService {
             ");
             $stmtUpd->execute([$targetStatus, $reviewerId, $remarks, $reviewedAt, $publishedAt, $submissionId]);
 
-            // Audit status transition in activity_logs or dedicated table
             logActivity("Workflow Transition: Submission #{$submissionId} moved from '{$currentStatus}' to '{$targetStatus}' by User #{$reviewerId} ({$actorRole}). Remarks: '{$remarks}'", $reviewerId);
 
             $pdo->commit();
@@ -104,10 +114,83 @@ class ResultWorkflowService {
     }
 
     /**
-     * Override item score or answer by teacher with full audit logging and total score recalculation
+     * Separate explicit Administrative Reopen Workflow for backward transitions.
+     * Requires DB-verified admin user and mandatory reason.
+     */
+    public static function reopenSubmission($submissionId, $adminId, $targetStatus, $reason) {
+        $pdo = getDBConnection();
+
+        if (empty(trim($reason))) {
+            throw new InvalidArgumentException("Reopen reason is mandatory.");
+        }
+
+        $stmtUser = $pdo->prepare("SELECT id, role, status FROM users WHERE id = ?");
+        $stmtUser->execute([$adminId]);
+        $actor = $stmtUser->fetch(PDO::FETCH_ASSOC);
+
+        if (!$actor || strtolower(trim($actor['role'] ?? '')) !== 'admin' || ($actor['status'] ?? 'active') !== 'active') {
+            throw new SecurityException("Unauthorized: Only active administrators may reopen submissions.");
+        }
+
+        $stmt = $pdo->prepare("SELECT * FROM exam_submissions WHERE id = ?");
+        $stmt->execute([$submissionId]);
+        $sub = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$sub) {
+            throw new Exception("Submission #{$submissionId} not found.");
+        }
+
+        $currentStatus = $sub['review_status'] ?? 'pending_review';
+        $targetStatus = strtolower(trim($targetStatus));
+        $allowedReopenTargets = ['pending_review', 'reviewed', 'finalized'];
+
+        if (!in_array($targetStatus, $allowedReopenTargets)) {
+            throw new InvalidArgumentException("Invalid reopen target status '{$targetStatus}'. Allowed reopen targets: pending_review, reviewed, finalized.");
+        }
+
+        $pdo->beginTransaction();
+
+        try {
+            $stmtUpd = $pdo->prepare("
+                UPDATE exam_submissions 
+                SET review_status = ?, published_at = NULL, teacher_remarks = ?
+                WHERE id = ?
+            ");
+            $stmtUpd->execute([$targetStatus, "Reopened by Admin #{$adminId}: {$reason}", $submissionId]);
+
+            logActivity("Administrative Reopen: Submission #{$submissionId} reopened from '{$currentStatus}' to '{$targetStatus}' by Admin #{$adminId}. Reason: '{$reason}'", $adminId);
+
+            $pdo->commit();
+
+            return [
+                'success' => true,
+                'submission_id' => $submissionId,
+                'previous_status' => $currentStatus,
+                'new_status' => $targetStatus,
+                'reopened_by' => $adminId,
+                'reason' => $reason
+            ];
+
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Override item score or answer by teacher with full audit logging, validation, and total score recalculation
      */
     public static function overrideScore($submissionId, $questionId, $newPoints, $teacherId, $reason = '', $newAnswer = null) {
         $pdo = getDBConnection();
+
+        if (empty(trim($reason))) {
+            throw new InvalidArgumentException("Override reason is required.");
+        }
+
+        $newPoints = floatval($newPoints);
+        if ($newPoints < 0) {
+            throw new InvalidArgumentException("Awarded points cannot be negative.");
+        }
 
         $stmtSub = $pdo->prepare("SELECT * FROM exam_submissions WHERE id = ?");
         $stmtSub->execute([$submissionId]);
@@ -115,6 +198,10 @@ class ResultWorkflowService {
 
         if (!$sub) {
             throw new Exception("Submission #{$submissionId} not found.");
+        }
+
+        if (in_array($sub['review_status'], ['finalized', 'published'])) {
+            throw new LogicException("Cannot override scores on finalized or published results without an administrative reopen workflow.");
         }
 
         // Authorization check: Verify ownership via AuthorizationService
@@ -131,8 +218,12 @@ class ResultWorkflowService {
             throw new Exception("Answer record for submission #{$submissionId}, question #{$questionId} not found.");
         }
 
+        $maxPoints = floatval($ans['max_points'] ?? 1.0);
+        if ($newPoints > $maxPoints) {
+            throw new InvalidArgumentException("Awarded points ({$newPoints}) cannot exceed question maximum points ({$maxPoints}).");
+        }
+
         $oldPoints = floatval($ans['awarded_points']);
-        $newPoints = floatval($newPoints);
         $oldAnswer = $ans['student_answer'];
         $updatedAnswer = ($newAnswer !== null) ? trim($newAnswer) : $oldAnswer;
         $evalStatus = ($newPoints > 0) ? 'correct' : 'incorrect';

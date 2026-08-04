@@ -16,10 +16,24 @@
 
 ## 🚀 Database Setup & Test Execution
 
-### 1. Database Schema Migration
-Run the idempotent schema migration script:
+### 1. Authoritative Database Clean Installation Path
+Follow this exact sequence for a clean installation:
+
 ```bash
+# Step 1: Create target database
+mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS bankquest_db;"
+
+# Step 2: Import base schema tables
+mysql -u root -p bankquest_db < database/bankquest_db.sql
+
+# Step 3: Run schema migrations & seed QA test accounts
 php database/migrate.php
+
+# Step 4: Verify schema integrity
+php database/verify_schema.php
+
+# Step 5: Check system dependencies
+php tests/check_dependencies.php
 ```
 
 ### 2. Run Automated Unit Test Suites

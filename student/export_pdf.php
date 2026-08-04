@@ -32,6 +32,24 @@ try {
     $params = [];
 
     if ($single_id > 0) {
+        $stmtCheck = $pdo->prepare("SELECT student_id, review_status FROM exam_submissions WHERE id = ?");
+        $stmtCheck->execute([$single_id]);
+        $subRecord = $stmtCheck->fetch(PDO::FETCH_ASSOC);
+
+        if (!$subRecord) {
+            http_response_code(404);
+            header('Content-Type: text/plain');
+            echo "404 Not Found: Submission record #{$single_id} does not exist.";
+            exit;
+        }
+
+        if (intval($subRecord['student_id']) !== intval($student_id) || $subRecord['review_status'] !== 'published') {
+            http_response_code(403);
+            header('Content-Type: text/plain');
+            echo "403 Forbidden: Unauthorized access to submission record #{$single_id}.";
+            exit;
+        }
+
         $where[] = "es.id = ? AND es.student_id = ?";
         $params[] = $single_id;
         $params[] = $student_id;

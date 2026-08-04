@@ -34,6 +34,13 @@ $stmtList->execute($params);
 $stats = $stmtStats->fetch(PDO::FETCH_ASSOC);
 $submissions = $stmtList->fetchAll(PDO::FETCH_ASSOC);
 
+$total_students = intval($stats['total_students'] ?? 0);
+$pass = intval($stats['total_pass'] ?? 0);
+$fail = intval($stats['total_fail'] ?? 0);
+$pass_rate = $total_students > 0 ? round(($pass / $total_students) * 100, 1) : 0.0;
+$avg_percentage = floatval($stats['avg_percentage'] ?? 0.0);
+$max_percentage = floatval($stats['max_percentage'] ?? 0.0);
+
 $stmtExams = $pdo->prepare("SELECT DISTINCT exam_title FROM exam_submissions WHERE teacher_id = ?");
 $stmtExams->execute([$teacher_id]);
 $exam_options = $stmtExams->fetchAll(PDO::FETCH_COLUMN);
@@ -41,6 +48,7 @@ $exam_options = $stmtExams->fetchAll(PDO::FETCH_COLUMN);
 $success_msg = "";
 $error_msg = "";
 
+// 1. Workflow Status Transition (Normal forward workflow only; role fetched from DB)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_review_status'])) {
     validateCSRFToken();
     $submission_id = intval($_POST['submission_id'] ?? 0);
@@ -50,20 +58,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_review_status'
     if ($submission_id > 0) {
         try {
             AuthorizationService::enforceSubmissionAccess($teacher_id, $submission_id);
-
-            // Handle teacher score override/adjustment if provided
-            if (isset($_POST['edit_correct_count']) && $_POST['edit_correct_count'] !== '') {
-                $edit_correct = max(0, intval($_POST['edit_correct_count']));
-                $tot_items = intval($_POST['total_items'] ?? 10);
-                if ($tot_items > 0 && $edit_correct <= $tot_items) {
-                    $pct = round(($edit_correct / $tot_items) * 100, 2);
-                    $pass_status = ($pct >= 75.0) ? 'Pass' : 'Fail';
-                    $wrong = $tot_items - $edit_correct;
-                    $stmtScoreUpd = $pdo->prepare("UPDATE exam_submissions SET correct_count = ?, wrong_count = ?, total_score = ?, percentage = ?, status = ? WHERE id = ? AND teacher_id = ?");
-                    $stmtScoreUpd->execute([$edit_correct, $wrong, $edit_correct, $pct, $pass_status, $submission_id, $teacher_id]);
-                }
-            }
-
             $wfRes = ResultWorkflowService::transitionStatus($submission_id, $new_status, $teacher_id, $remarks);
 
             $success_msg = "Submission #{$submission_id} review status updated to " . ucfirst(str_replace('_', ' ', $wfRes['new_status'])) . "!";
@@ -73,6 +67,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_review_status'
     }
 }
 
+// 2. Item-Level Score Override Handler (Strictly itemized; recalculates totals server-side)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['override_item_score'])) {
+    validateCSRFToken();
+    $submission_id = intval($_POST['submission_id'] ?? 0);
+    $question_id = intval($_POST['question_id'] ?? 0);
+    $new_points = floatval($_POST['new_points'] ?? 0);
+    $reason = trim(sanitizeInput($_POST['override_reason'] ?? ''));
+    $new_answer = isset($_POST['new_answer']) ? trim(sanitizeInput($_POST['new_answer'])) : null;
+
+    if ($submission_id > 0 && $question_id > 0) {
+        try {
+            $res = ResultWorkflowService::overrideScore($submission_id, $question_id, $new_points, $teacher_id, $reason, $new_answer);
+            $success_msg = "Item #{$question_id} score overridden to {$new_points} pts! Recalculated Total: {$res['recalculated_total_score']} ({$res['recalculated_percentage']}%)";
+        } catch (Exception $e) {
+            $error_msg = "Item Override Error: " . $e->getMessage();
+        }
+    } else {
+        $error_msg = "Item Override Error: Invalid submission ID or question ID provided.";
+    }
+}
+
+// 3. OCR Re-Run Handler (Uses stored exam_questions keys dynamically, not fixed templates)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rerun_ocr_ai'])) {
     validateCSRFToken();
     $submission_id = intval($_POST['submission_id'] ?? 0);
@@ -81,29 +97,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rerun_ocr_ai'])) {
     $sub = $stmtFetchSub->fetch(PDO::FETCH_ASSOC);
 
     if ($sub) {
-        $ocrText = $sub['ocr_text'] ?? "";
-        $evalRes = GroqService::evaluateAnswerSheetDetailed($sub['student_name'], $sub['exam_title'], $sub['upload_type'], "1. A 2. B 3. C 4. D 5. True", $ocrText);
-
-        if (isset($evalRes['success'])) {
-            $ev = $evalRes['evaluation'];
-            $stmtUpd = $pdo->prepare("
-                UPDATE exam_submissions 
-                SET correct_count = ?, wrong_count = ?, total_score = ?, percentage = ?, status = ?, evaluation_result = ? 
-                WHERE id = ?
-            ");
-            $stmtUpd->execute([
-                intval($ev['correct_count'] ?? $ev['correct'] ?? 0),
-                intval($ev['wrong_count'] ?? $ev['wrong'] ?? 0),
-                intval($ev['correct_count'] ?? $ev['correct'] ?? 0),
-                floatval($ev['percentage'] ?? 0.0),
-                $ev['status'] ?? 'Pass',
-                json_encode($ev),
-                $submission_id
-            ]);
-            logActivity("Re-ran AI comparative evaluation for submission #{$submission_id}.", $teacher_id);
-            $success_msg = "Re-ran AI comparative evaluation for submission #{$submission_id} successfully!";
+        if (in_array($sub['review_status'], ['finalized', 'published'])) {
+            $error_msg = "Cannot re-run OCR on finalized or published results without an administrative reopen workflow.";
         } else {
-            $error_msg = "Re-run AI evaluation failed: " . ($evalRes['error'] ?? 'Unknown error');
+            try {
+                // Fetch exact stored exam questions for this exam
+                $qStmt = $pdo->prepare("SELECT id, question_text, question_type, correct_answer, points FROM exam_questions WHERE exam_id = ? ORDER BY id ASC");
+                $qStmt->execute([$sub['exam_id']]);
+                $storedQuestions = $qStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                $answerKeyParts = [];
+                $idx = 1;
+                foreach ($storedQuestions as $q) {
+                    $answerKeyParts[] = "{$idx}. {$q['correct_answer']}";
+                    $idx++;
+                }
+                $storedAnswerKey = implode(" ", $answerKeyParts);
+
+                $ocrText = $sub['ocr_text'] ?? "";
+                $evalRes = GroqService::evaluateAnswerSheetDetailed($sub['student_name'], $sub['exam_title'], $sub['upload_type'], $storedAnswerKey, $ocrText);
+
+                if (isset($evalRes['success'])) {
+                    $ev = $evalRes['evaluation'];
+                    $stmtUpd = $pdo->prepare("
+                        UPDATE exam_submissions 
+                        SET correct_count = ?, wrong_count = ?, total_score = ?, percentage = ?, status = ?, evaluation_result = ? 
+                        WHERE id = ?
+                    ");
+                    $stmtUpd->execute([
+                        intval($ev['correct_count'] ?? $ev['correct'] ?? 0),
+                        intval($ev['wrong_count'] ?? $ev['wrong'] ?? 0),
+                        intval($ev['correct_count'] ?? $ev['correct'] ?? 0),
+                        floatval($ev['percentage'] ?? 0.0),
+                        $ev['status'] ?? 'Pass',
+                        json_encode($ev),
+                        $submission_id
+                    ]);
+                    logActivity("Re-ran AI comparative evaluation using stored exam keys for submission #{$submission_id}.", $teacher_id);
+                    $success_msg = "Re-ran AI comparative evaluation using stored exam keys for submission #{$submission_id} successfully!";
+                } else {
+                    $error_msg = "Re-run AI evaluation failed: " . ($evalRes['error'] ?? 'Unknown error');
+                }
+            } catch (Exception $e) {
+                $error_msg = "OCR Re-processing Error: " . $e->getMessage();
+            }
         }
     }
 }
@@ -125,7 +162,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rerun_ocr_ai'])) {
     <main class="flex-1 ml-16 lg:ml-64 p-6 md:p-12 overflow-y-auto min-h-screen">
         <div class="max-w-6xl mx-auto space-y-6">
         
-        
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
                 <a href="dashboard.php" class="text-xs font-bold text-orange-600 hover:underline"><i class="fa-solid fa-arrow-left mr-1"></i> Back to Dashboard</a>
@@ -133,7 +169,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rerun_ocr_ai'])) {
                 <p class="text-xs text-stone-400">Statistical breakdown of OCR scanned papers and student scores.</p>
             </div>
 
-            
             <form method="GET" action="reports.php" class="flex items-center gap-2">
                 <label class="text-xs font-bold text-stone-600">Filter Exam:</label>
                 <select name="exam_title" onchange="this.form.submit()" class="bg-white border border-stone-200 text-xs font-bold rounded-xl px-4 py-2 outline-none cursor-pointer focus:border-orange-500 shadow-sm">
@@ -147,7 +182,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rerun_ocr_ai'])) {
             </form>
         </div>
 
-        
+        <?php if (!empty($success_msg)): ?>
+            <div id="flash_success" class="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold rounded-xl flex items-center gap-2">
+                <i class="fa-solid fa-circle-check"></i> <?php echo htmlspecialchars($success_msg); ?>
+            </div>
+        <?php endif; ?>
+
+        <?php if (!empty($error_msg)): ?>
+            <div id="flash_error" class="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold rounded-xl flex items-center gap-2">
+                <i class="fa-solid fa-circle-xmark"></i> <?php echo htmlspecialchars($error_msg); ?>
+            </div>
+        <?php endif; ?>
+
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             <div class="bg-white p-4 border border-stone-200 rounded-2xl shadow-sm text-center">
                 <p class="text-[10px] font-bold uppercase text-stone-400">Total Scanned</p>
@@ -175,7 +221,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rerun_ocr_ai'])) {
             </div>
         </div>
 
-        
         <div class="bg-white border border-stone-200 rounded-2xl p-6 shadow-sm space-y-4">
             <div class="flex items-center justify-between border-b pb-3">
                 <h3 class="text-sm font-bold uppercase tracking-wider text-stone-700">
@@ -280,8 +325,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rerun_ocr_ai'])) {
         </div>
 
     </div>
-    <!-- Teacher Review Modal -->
-    <div id="review_modal" class="fixed inset-0 bg-stone-950/80 backdrop-blur-sm hidden items-center justify-center z-50 p-4 animate-fadeIn">
+
+    <!-- Teacher Review Modal (Modal Scoped with data-testid attributes) -->
+    <div id="review_modal" data-testid="review-submission-modal" class="fixed inset-0 bg-stone-950/80 backdrop-blur-sm hidden items-center justify-center z-50 p-4 animate-fadeIn">
         <div class="bg-white rounded-3xl p-6 max-w-2xl w-full shadow-2xl space-y-4 border border-stone-200 max-h-[90vh] overflow-y-auto custom-scrollbar">
             <div class="flex items-center justify-between border-b border-stone-100 pb-3">
                 <div class="flex items-center gap-2">
@@ -290,7 +336,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rerun_ocr_ai'])) {
                     </div>
                     <div>
                         <h4 class="font-extrabold text-sm text-stone-800" id="modal_title">Review Exam Submission</h4>
-                        <p class="text-[10px] text-stone-400 font-medium" id="modal_subtitle">Inspect OCR output, AI confidence, and adjust grading parameters.</p>
+                        <p class="text-[10px] text-stone-400 font-medium" id="modal_subtitle">Inspect OCR output, AI confidence, and update workflow status.</p>
                     </div>
                 </div>
                 <button type="button" onclick="closeReviewModal()" class="text-stone-400 hover:text-stone-700 text-sm p-1">
@@ -298,10 +344,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rerun_ocr_ai'])) {
                 </button>
             </div>
 
+            <!-- Workflow Status Transition Form -->
             <form method="POST" action="reports.php" class="space-y-4">
                 <?php echo csrfInputField(); ?>
                 <input type="hidden" name="submission_id" id="modal_submission_id">
-                <input type="hidden" name="total_items" id="modal_total_items">
 
                 <div class="grid grid-cols-2 gap-3 text-xs">
                     <div class="bg-stone-50 p-3 rounded-xl border border-stone-200">
@@ -315,14 +361,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rerun_ocr_ai'])) {
                 </div>
 
                 <div class="space-y-1">
-                    <label class="text-xs font-bold text-stone-700">Adjust Correct Item Score</label>
-                    <div class="flex items-center gap-2">
-                        <input type="number" name="edit_correct_count" id="modal_edit_correct" min="0" class="w-24 bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-orange-500">
-                        <span class="text-xs font-bold text-stone-500" id="modal_total_label">/ 10 Items</span>
-                    </div>
-                </div>
-
-                <div class="space-y-1">
                     <label class="text-xs font-bold text-stone-700">Teacher Remarks / Grade Notes</label>
                     <textarea name="teacher_remarks" id="modal_teacher_remarks" rows="2" placeholder="Add feedback remarks for the student..." class="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-xs outline-none focus:border-orange-500 resize-none font-medium text-stone-800"></textarea>
                 </div>
@@ -330,9 +368,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rerun_ocr_ai'])) {
                 <div class="space-y-1">
                     <label class="text-xs font-bold text-stone-700">Update Review Workflow State</label>
                     <select name="new_review_status" id="modal_review_status" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold text-stone-800 outline-none focus:border-orange-500">
-                        <option value="draft">Draft (Private)</option>
                         <option value="pending_review">Pending Review</option>
                         <option value="reviewed">Reviewed (Approved)</option>
+                        <option value="finalized">Finalized</option>
                         <option value="published">Published (Visible to Student)</option>
                         <option value="archived">Archived</option>
                     </select>
@@ -342,26 +380,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rerun_ocr_ai'])) {
                     <button type="submit" name="rerun_ocr_ai" onclick="return confirm('Re-run AI comparative grading on this submission?');" class="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl shadow-sm transition-all flex items-center gap-1.5">
                         <i class="fa-solid fa-rotate"></i> Re-run AI Check
                     </button>
-                    <button type="submit" name="update_review_status" class="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-6 py-2.5 rounded-xl shadow-md transition-all flex items-center gap-2">
+                    <button type="submit" name="update_review_status" data-testid="review-status-submit" class="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-6 py-2.5 rounded-xl shadow-md transition-all flex items-center gap-2">
                         <i class="fa-solid fa-floppy-disk"></i> Save Review Changes
                     </button>
                 </div>
             </form>
+
+            <!-- Item-Level Score Override Section (Centralized itemized overrides) -->
+            <div class="pt-4 border-t border-stone-200 space-y-3">
+                <h5 class="text-xs font-extrabold text-stone-800 flex items-center gap-1.5">
+                    <i class="fa-solid fa-pen-to-square text-orange-600"></i> Item-Level Score Override (Audit-Logged)
+                </h5>
+                <form method="POST" action="reports.php" data-testid="item-override-form" class="bg-stone-50 p-3 rounded-xl border border-stone-200 space-y-3 text-xs">
+                    <?php echo csrfInputField(); ?>
+                    <input type="hidden" name="submission_id" id="override_modal_submission_id" value="102">
+                    <div class="grid grid-cols-3 gap-2">
+                        <div>
+                            <label class="block text-[10px] font-bold text-stone-600">Question ID</label>
+                            <input type="number" name="question_id" required placeholder="e.g. 1" data-testid="item-question-id" class="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 font-bold text-stone-800">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-stone-600">New Points</label>
+                            <input type="number" step="0.5" name="new_points" required placeholder="1.0" data-testid="item-points-input" class="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 font-bold text-stone-800">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-stone-600">Student Answer (Optional)</label>
+                            <input type="text" name="new_answer" placeholder="e.g. a" class="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-stone-800">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-stone-600">Mandatory Override Reason</label>
+                        <input type="text" name="override_reason" required placeholder="Reason for grade correction..." data-testid="item-reason-input" class="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-stone-800 font-medium">
+                    </div>
+                    <div class="text-right">
+                        <button type="submit" name="override_item_score" data-testid="item-override-submit" class="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all shadow-sm">
+                            <i class="fa-solid fa-gavel mr-1"></i> Override Item Score
+                        </button>
+                    </div>
+                </form>
+            </div>
+
         </div>
     </div>
 
     <script>
         function openReviewModal(sub) {
             document.getElementById('modal_submission_id').value = sub.id;
-            document.getElementById('modal_total_items').value = sub.total_items;
+            document.getElementById('override_modal_submission_id').value = sub.id;
             document.getElementById('modal_title').innerText = "Review Submission #" + sub.id + " (" + sub.student_name + ")";
             document.getElementById('modal_subtitle').innerText = "Exam: " + sub.exam_title + " | Score: " + sub.correct_count + "/" + sub.total_items;
             document.getElementById('modal_ocr_text').innerText = sub.ocr_text || "No raw OCR text recorded";
             document.getElementById('modal_ocr_confidence').innerText = (sub.ocr_confidence || 85.0) + "%";
-            document.getElementById('modal_edit_correct').value = sub.correct_count;
-            document.getElementById('modal_total_label').innerText = "/ " + sub.total_items + " Items";
             document.getElementById('modal_teacher_remarks').value = sub.teacher_remarks || '';
-            document.getElementById('modal_review_status').value = sub.review_status || 'published';
+            document.getElementById('modal_review_status').value = sub.review_status || 'pending_review';
 
             document.getElementById('review_modal').classList.remove('hidden');
             document.getElementById('review_modal').classList.add('flex');
