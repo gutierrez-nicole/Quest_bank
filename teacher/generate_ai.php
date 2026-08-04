@@ -65,6 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
     $generation_source_type = 'manual';
     $generation_warnings = [];
     $validation_errors = [];
+    $structured_conflicts = [];
 
     if ($input_source === 'extracted' && !empty($selected_lesson_ids)) {
         $selected_lesson_ids = array_filter($selected_lesson_ids, function($id) { return $id !== 'all'; });
@@ -82,49 +83,107 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
             $stmtFetchSel->execute($params);
             $selLessons = $stmtFetchSel->fetchAll(PDO::FETCH_ASSOC);
 
-            // Repair Prompt 2: Security & Authorization ID injection check
+            // Security & Authorization ID injection check
             $returnedIds = array_column($selLessons, 'id');
             $unauthorizedIds = array_diff($selected_lesson_ids, $returnedIds);
             if (!empty($unauthorizedIds)) {
                 $validation_errors[] = "Access denied: Lesson ID(s) [" . implode(', ', $unauthorizedIds) . "] are unauthorized or do not exist.";
             }
 
-            $lessonIndex = 1;
-            foreach ($selLessons as $sl) {
-                // Strict validation checks
-                if ($sl['processing_status'] !== 'completed') {
-                    $validation_errors[] = "Lesson '{$sl['title']}' (ID: {$sl['id']}) cannot be used: extraction status is '{$sl['processing_status']}'.";
-                    continue;
+            if (!empty($selLessons)) {
+                $firstLesson = $selLessons[0];
+                $lessonIndex = 1;
+
+                foreach ($selLessons as $sl) {
+                    // Extraction & empty checks
+                    if ($sl['processing_status'] !== 'completed') {
+                        $validation_errors[] = "Lesson '{$sl['title']}' (ID: {$sl['id']}) cannot be used: extraction status is '{$sl['processing_status']}'.";
+                        continue;
+                    }
+                    if (empty(trim($sl['lesson_text'] ?? ''))) {
+                        $validation_errors[] = "Lesson '{$sl['title']}' (ID: {$sl['id']}) cannot be used: extracted content is empty.";
+                        continue;
+                    }
+
+                    // 1. Subject check vs requested exam subject
+                    if (!empty($subject) && strcasecmp(trim($sl['subject']), trim($subject)) !== 0) {
+                        $structured_conflicts[] = [
+                            'title' => $sl['title'],
+                            'field' => 'Subject',
+                            'expected' => $subject,
+                            'actual' => $sl['subject'] ?? 'Unspecified'
+                        ];
+                    }
+
+                    // 2. Subject check across selected pool
+                    if (strcasecmp(trim($sl['subject']), trim($firstLesson['subject'])) !== 0) {
+                        $structured_conflicts[] = [
+                            'title' => $sl['title'],
+                            'field' => 'Subject (Pool Mismatch)',
+                            'expected' => $firstLesson['subject'],
+                            'actual' => $sl['subject'] ?? 'Unspecified'
+                        ];
+                    }
+
+                    // 3. Program check across selected pool (if present)
+                    if (!empty($sl['program']) && !empty($firstLesson['program']) && strcasecmp(trim($sl['program']), trim($firstLesson['program'])) !== 0) {
+                        $structured_conflicts[] = [
+                            'title' => $sl['title'],
+                            'field' => 'Program',
+                            'expected' => $firstLesson['program'],
+                            'actual' => $sl['program']
+                        ];
+                    }
+
+                    // 4. Year Level check across selected pool (if present)
+                    if (!empty($sl['year_level']) && !empty($firstLesson['year_level']) && strcasecmp(trim($sl['year_level']), trim($firstLesson['year_level'])) !== 0) {
+                        $structured_conflicts[] = [
+                            'title' => $sl['title'],
+                            'field' => 'Year Level',
+                            'expected' => $firstLesson['year_level'],
+                            'actual' => $sl['year_level']
+                        ];
+                    }
+
+                    // 5. Semester check across selected pool (if present)
+                    if (!empty($sl['semester']) && !empty($firstLesson['semester']) && strcasecmp(trim($sl['semester']), trim($firstLesson['semester'])) !== 0) {
+                        $structured_conflicts[] = [
+                            'title' => $sl['title'],
+                            'field' => 'Semester',
+                            'expected' => $firstLesson['semester'],
+                            'actual' => $sl['semester']
+                        ];
+                    }
+
+                    // 6. School Year check across selected pool (if present)
+                    if (!empty($sl['school_year']) && !empty($firstLesson['school_year']) && strcasecmp(trim($sl['school_year']), trim($firstLesson['school_year'])) !== 0) {
+                        $structured_conflicts[] = [
+                            'title' => $sl['title'],
+                            'field' => 'School Year',
+                            'expected' => $firstLesson['school_year'],
+                            'actual' => $sl['school_year']
+                        ];
+                    }
+
+                    $associated_subjects[] = $sl['subject'];
+                    $associated_lesson_titles[] = $sl['title'];
+
+                    $final_lesson_content .= "\n\nSOURCE LESSON {$lessonIndex}\n";
+                    $final_lesson_content .= "Lesson ID: {$sl['id']}\n";
+                    $final_lesson_content .= "Period: " . ucfirst($sl['academic_period']) . "\n";
+                    $final_lesson_content .= "Title: {$sl['title']}\n";
+                    $final_lesson_content .= "Subject: {$sl['subject']}\n";
+                    $final_lesson_content .= "Content:\n" . $sl['lesson_text'];
+
+                    $associated_lesson_ids[] = (int)$sl['id'];
+                    $associated_periods[] = $sl['academic_period'];
+                    $total_selected_words += (int)($sl['word_count'] ?? str_word_count($sl['lesson_text']));
+                    $lessonIndex++;
                 }
-                if (empty(trim($sl['lesson_text'] ?? ''))) {
-                    $validation_errors[] = "Lesson '{$sl['title']}' (ID: {$sl['id']}) cannot be used: extracted content is empty.";
-                    continue;
-                }
-
-                $associated_subjects[] = $sl['subject'];
-                $associated_lesson_titles[] = $sl['title'];
-
-                $final_lesson_content .= "\n\nSOURCE LESSON {$lessonIndex}\n";
-                $final_lesson_content .= "Lesson ID: {$sl['id']}\n";
-                $final_lesson_content .= "Period: " . ucfirst($sl['academic_period']) . "\n";
-                $final_lesson_content .= "Title: {$sl['title']}\n";
-                $final_lesson_content .= "Subject: {$sl['subject']}\n";
-                $final_lesson_content .= "Content:\n" . $sl['lesson_text'];
-
-                $associated_lesson_ids[] = (int)$sl['id'];
-                $associated_periods[] = $sl['academic_period'];
-                $total_selected_words += (int)($sl['word_count'] ?? str_word_count($sl['lesson_text']));
-                $lessonIndex++;
             }
 
-            // Repair Prompt 2: Check mixed subject consistency
-            $uniqueSubjects = array_unique(array_filter($associated_subjects));
-            if (count($uniqueSubjects) > 1) {
-                $validation_errors[] = "Conflicting subjects selected: [" . implode(', ', $uniqueSubjects) . "]. Lessons must match one target subject.";
-            }
-
-            if (!empty($validation_errors) && !$allow_partial) {
-                $error_msg = "Validation failed for selected lesson pool:\n• " . implode("\n• ", $validation_errors);
+            if (!empty($structured_conflicts) || !empty($validation_errors)) {
+                $error_msg = "Academic Context Conflict Detected. Please resolve metadata mismatches before generating.";
             } else {
                 $associated_periods = array_unique($associated_periods);
                 $generation_source_type = count($associated_periods) > 1 ? 'cross_period_lessons' : 'single_period_lessons';
@@ -419,6 +478,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
                 <div class="bg-rose-50 border-l-4 border-rose-500 p-4 rounded-xl text-xs font-semibold text-rose-800 flex items-center justify-between shadow-sm animate-fadeIn">
                     <span class="flex items-center gap-2"><i class="fa-solid fa-circle-exclamation text-rose-600 text-sm"></i> <?php echo $error_msg; ?></span>
                     <button onclick="this.parentElement.remove();" class="text-rose-500 hover:text-rose-800"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+            <?php endif; ?>
+
+            <?php if (!empty($structured_conflicts)): ?>
+                <div class="bg-rose-50 border border-rose-200 rounded-2xl p-4 shadow-sm space-y-3 animate-fadeIn" data-testid="academic-context-conflicts">
+                    <div class="flex items-center gap-2 text-rose-800 font-extrabold text-xs">
+                        <i class="fa-solid fa-triangle-exclamation text-rose-600 text-sm"></i>
+                        <span>Academic Context Conflict Validation Summary</span>
+                    </div>
+                    <p class="text-[11px] text-rose-700 font-medium">The selected lessons contain conflicting metadata fields or mismatch the requested exam context. Please align your lesson pool before proceeding.</p>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs text-rose-900 border-collapse">
+                            <thead>
+                                <tr class="bg-rose-100/70 text-[10px] font-extrabold uppercase text-rose-800 border-b border-rose-200">
+                                    <th class="p-2">Lesson Title</th>
+                                    <th class="p-2">Conflicting Field</th>
+                                    <th class="p-2">Expected Value</th>
+                                    <th class="p-2">Actual Value</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-rose-200/60 font-medium">
+                                <?php foreach ($structured_conflicts as $conflict): ?>
+                                    <tr class="hover:bg-rose-100/40">
+                                        <td class="p-2 font-bold" data-testid="conflict-title"><?php echo htmlspecialchars($conflict['title']); ?></td>
+                                        <td class="p-2" data-testid="conflict-field"><span class="bg-rose-200/60 text-rose-900 px-1.5 py-0.5 rounded font-extrabold text-[10px]"><?php echo htmlspecialchars($conflict['field']); ?></span></td>
+                                        <td class="p-2 font-bold text-emerald-800" data-testid="conflict-expected"><?php echo htmlspecialchars($conflict['expected']); ?></td>
+                                        <td class="p-2 font-bold text-rose-700" data-testid="conflict-actual"><?php echo htmlspecialchars($conflict['actual']); ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             <?php endif; ?>
 
