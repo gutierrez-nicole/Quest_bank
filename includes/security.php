@@ -144,3 +144,72 @@ function verifyPartialToken($tokenString, $expectedTeacherId, $secretKey, $conte
 
     return $payload;
 }
+
+function generateIncompleteAckToken($teacherId, $batchId, $failedChunkCount, array $affectedLessonIds, $requestedCount, $generatedCount, array $warnings, $secretKey) {
+    $timestamp = time();
+    $nonce = bin2hex(random_bytes(16));
+    $payload = [
+        'teacher_id' => (int)$teacherId,
+        'generation_batch_id' => (string)$batchId,
+        'failed_chunk_count' => (int)$failedChunkCount,
+        'affected_lesson_ids' => array_values(array_map('intval', $affectedLessonIds)),
+        'requested_question_count' => (int)$requestedCount,
+        'generated_question_count' => (int)$generatedCount,
+        'warnings' => array_values($warnings),
+        'timestamp' => $timestamp,
+        'nonce' => $nonce
+    ];
+    $sig = hash_hmac('sha256', json_encode($payload), $secretKey);
+    return base64_encode(json_encode(['payload' => $payload, 'sig' => $sig]));
+}
+
+function verifyIncompleteAckToken($tokenString, $expectedTeacherId, $secretKey, $expectedBatchId = null, $maxAgeSeconds = 900) {
+    if (empty($tokenString)) return false;
+    $decoded = json_decode(base64_decode($tokenString), true);
+    if (!is_array($decoded) || empty($decoded['payload']) || empty($decoded['sig'])) {
+        return false;
+    }
+    $payload = $decoded['payload'];
+    $sig = $decoded['sig'];
+
+    // HMAC signature verification
+    $expectedSig = hash_hmac('sha256', json_encode($payload), $secretKey);
+    if (!hash_equals($expectedSig, $sig)) {
+        return false;
+    }
+
+    if (intval($payload['teacher_id']) !== intval($expectedTeacherId)) {
+        return false;
+    }
+
+    if (!empty($expectedBatchId) && strcasecmp(trim($payload['generation_batch_id']), trim($expectedBatchId)) !== 0) {
+        return false;
+    }
+
+    if (time() - intval($payload['timestamp']) > $maxAgeSeconds) {
+        return false;
+    }
+
+    if (empty($payload['nonce']) || !is_string($payload['nonce'])) {
+        return false;
+    }
+
+    // Fail-Closed Replay check via used_confirmation_tokens
+    try {
+        $pdo = getDBConnection();
+        if (!$pdo) return false;
+        $tokenHash = hash('sha256', $tokenString);
+        $stmtCheck = $pdo->prepare("SELECT COUNT(*) FROM used_confirmation_tokens WHERE token_hash = ?");
+        $stmtCheck->execute([$tokenHash]);
+        if ($stmtCheck->fetchColumn() > 0) {
+            return false;
+        }
+
+        $stmtMark = $pdo->prepare("INSERT INTO used_confirmation_tokens (token_hash, teacher_id, used_at, expires_at) VALUES (?, ?, NOW(), FROM_UNIXTIME(?))");
+        $stmtMark->execute([$tokenHash, $expectedTeacherId, intval($payload['timestamp']) + $maxAgeSeconds]);
+    } catch (Throwable $e) {
+        return false;
+    }
+
+    return $payload;
+}

@@ -267,15 +267,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
 
             $batchStatus = $result['metadata']['batch_status'] ?? ($failedQuestionCount > 0 ? 'incomplete' : 'completed');
             $failedChunkCount = intval($result['metadata']['failed_chunk_count'] ?? 0);
-            $affectedLessonIdsStr = json_encode($result['metadata']['affected_lesson_ids'] ?? []);
+            $affectedLessonIdsArr = $result['metadata']['affected_lesson_ids'] ?? [];
+            $affectedLessonIdsStr = json_encode($affectedLessonIdsArr);
             $failureMessagesStr = json_encode($result['metadata']['generation_warnings'] ?? []);
 
-            // Final Repair 6: Persist generation audit record with failed chunk metadata & batch_status
+            $signed_incomplete_ack_token = null;
+            if ($batchStatus === 'incomplete') {
+                $signed_incomplete_ack_token = generateIncompleteAckToken(
+                    $teacher_id,
+                    $generation_batch_id,
+                    $failedChunkCount,
+                    $affectedLessonIdsArr,
+                    $num_questions,
+                    count($generated_questions),
+                    $result['metadata']['generation_warnings'] ?? [],
+                    $secretKey
+                );
+                $ai_meta_output['ack_token'] = $signed_incomplete_ack_token;
+            }
+
+            // Final Repair 6 & 10: Persist generation audit record with failed chunk metadata & batch_status
             try {
                 $stmtBatch = $pdo->prepare("
                     INSERT INTO ai_generation_batches 
-                    (generation_batch_id, teacher_id, selected_lesson_ids, selected_lesson_titles, selected_periods, selected_subject, semester, school_year, year_level, program, total_selected_words, estimated_tokens, ai_model, generation_duration, requested_question_count, generated_question_count, failed_question_count, warnings, batch_status, failed_chunk_count, affected_lesson_ids, failure_messages, teacher_acknowledged_at, teacher_acknowledged_by)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?)
+                    (generation_batch_id, teacher_id, selected_lesson_ids, selected_lesson_titles, selected_periods, selected_subject, semester, school_year, year_level, program, total_selected_words, estimated_tokens, ai_model, generation_duration, requested_question_count, generated_question_count, failed_question_count, warnings, batch_status, failed_chunk_count, affected_lesson_ids, failure_messages)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
                 $stmtBatch->execute([
                     $generation_batch_id,
@@ -299,8 +315,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
                     $batchStatus,
                     $failedChunkCount,
                     $affectedLessonIdsStr,
-                    $failureMessagesStr,
-                    $teacher_id
+                    $failureMessagesStr
                 ]);
             } catch (PDOException $e) {
                 // Keep generation working even if batch audit logging encounters non-fatal error
@@ -347,11 +362,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
 
     $batchStatus = $metaData['batch_status'] ?? 'completed';
     $ackReason = trim(sanitizeInput($_POST['acknowledgement_reason'] ?? ''));
+    $ackTokenInput = $_POST['ack_token'] ?? ($metaData['ack_token'] ?? '');
 
-    // Final Blocker 4: Saving incomplete batch without explicit teacher acknowledgement must fail
-    if ($batchStatus === 'incomplete' && empty($ackReason) && empty($metaData['teacher_acknowledged_at'])) {
-        $error_msg = "Cannot save exam: Incomplete AI generation batch requires explicit teacher acknowledgement and reason before saving.";
-    } elseif (!empty($title) && !empty($subject) && !empty($questions)) {
+    // Final Repair 10: Incomplete generation save requires verified signed acknowledgement token
+    if ($batchStatus === 'incomplete') {
+        $ackTokenData = verifyIncompleteAckToken($ackTokenInput, $teacher_id, $secretKey, $save_generation_batch_id);
+        if (!$ackTokenData) {
+            $error_msg = "Cannot save exam: Invalid, expired, replayed, or tampered incomplete batch acknowledgement token.";
+        } elseif (empty($ackReason)) {
+            $error_msg = "Cannot save exam: Incomplete AI generation batch requires an explicit teacher acknowledgement reason.";
+        }
+    }
+
+    if (empty($error_msg) && !empty($title) && !empty($subject) && !empty($questions)) {
         try {
             $pdo->beginTransaction();
 
@@ -1137,6 +1160,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
                             <input type="hidden" name="save_difficulty" value="<?php echo htmlspecialchars($difficulty ?? 'medium'); ?>">
                             <input type="hidden" name="save_ai_metadata" value="<?php echo htmlspecialchars(json_encode($ai_meta_output ?? [])); ?>">
                             <input type="hidden" name="save_lesson_ids" value="<?php echo htmlspecialchars(implode(',', $ai_meta_output['lesson_ids'] ?? [])); ?>">
+                            <input type="hidden" name="ack_token" value="<?php echo htmlspecialchars($ai_meta_output['ack_token'] ?? ''); ?>">
 
                             <?php if (($ai_meta_output['batch_status'] ?? '') === 'incomplete'): ?>
                                 <div class="bg-amber-50 border border-amber-300 rounded-xl p-3 space-y-2" data-testid="incomplete-batch-acknowledgement-block">

@@ -1,10 +1,67 @@
 <?php
 /**
- * Deterministic Database & Lesson Seeder for E2E Tests
+ * ==============================================================================
+ * QUESTBANK SECURITY NOTICE & DATABASE SEEDER INSTRUCTIONS
+ * ==============================================================================
+ * WARNING: THIS SCRIPT IS A TEST-ONLY FIXTURE SEEDER FOR E2E & INTEGRATION TESTS.
+ * IT MUST NEVER BE EXECUTED ON PRODUCTION DATABASES OR exposed TO THE PUBLIC WEB.
+ * 
+ * SECURITY RESTRICTIONS ENFORCED AT RUNTIME:
+ * 1. APP_ENV MUST BE SET TO 'testing' (getenv or config constant).
+ * 2. EXECUTION IS RESTRICTED TO CLI (php_sapi_name() === 'cli') OR AUTHORIZED INTERNAL TEST REQUESTS.
+ * 3. DIRECT BROWSER / PUBLIC WEB ACCESS RETURNS HTTP 403 FORBIDDEN.
+ * ==============================================================================
  */
+
 require_once __DIR__ . '/../app/bootstrap.php';
 
+// Helper function for exiting safely when included vs CLI main script
+if (!function_exists('terminateSeeder')) {
+    function terminateSeeder($statusCode = 1) {
+        if (basename($_SERVER['PHP_SELF'] ?? '') === 'seed_e2e_fixtures.php' || php_sapi_name() !== 'cli') {
+            exit($statusCode);
+        }
+        return;
+    }
+}
+
+// 1. Environment Scoping Check
+$appEnv = getenv('APP_ENV') ?: (defined('APP_ENV') ? APP_ENV : 'production');
+if ($appEnv !== 'testing') {
+    if (php_sapi_name() !== 'cli' && !headers_sent()) {
+        http_response_code(403);
+    }
+    echo json_encode([
+        'error' => 'Forbidden: Database seeder is strictly restricted to testing environment.',
+        'environment' => $appEnv
+    ]);
+    return;
+}
+
+// 2. CLI / Authorized Internal Route Check
+$isCLI = (php_sapi_name() === 'cli');
+$internalKey = $_SERVER['HTTP_X_INTERNAL_TEST_KEY'] ?? $_SERVER['HTTP_X_TEST_KEY'] ?? '';
+$isAuthorizedTestRoute = ($internalKey === 'questbank_internal_e2e_secret');
+
+if (!$isCLI && !$isAuthorizedTestRoute) {
+    if (!headers_sent()) {
+        http_response_code(403);
+    }
+    echo json_encode([
+        'error' => 'Forbidden: Direct browser access to database seeder is prohibited. Access via CLI or internal test runner only.'
+    ]);
+    return;
+}
+
 $pdo = getDBConnection();
+if (!$pdo) {
+    if (php_sapi_name() !== 'cli') {
+        http_response_code(500);
+    }
+    header('Content-Type: application/json');
+    echo json_encode(['error' => 'Database connection failed']);
+    exit(1);
+}
 
 // Fetch teacher russel ID
 $stmtT = $pdo->prepare("SELECT id FROM users WHERE username = 'russel' LIMIT 1");
@@ -38,9 +95,12 @@ foreach ($periods as $p) {
     $createdIds[$p] = (int)$pdo->lastInsertId();
 }
 
-header('Content-Type: application/json');
+if (!headers_sent()) {
+    header('Content-Type: application/json');
+}
 echo json_encode([
     'success' => true,
     'teacher_id' => (int)$teacherId,
     'lesson_ids' => $createdIds
 ]);
+exit(0);

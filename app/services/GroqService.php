@@ -333,12 +333,73 @@ class GroqService {
                 }
             }
 
+            // Final Repair 11: Controlled Refill Generation for Question Shortfall
+            $shortfall = $numQuestions - count($validQuestions);
+            if ($shortfall > 0 && !empty($chunks[0])) {
+                $refillPrompt = "You are an expert Civil Engineering professor specializing in {$specialization}. "
+                              . "Generate exactly {$shortfall} ADDITIONAL non-duplicate examination questions for the subject '{$subject}' (Specialization: {$specialization}) titled '{$examTitle}'. "
+                              . "Target Difficulty Level: '{$difficulty}'. Target Question Type: '{$questionType}'. "
+                              . "based strictly on: \"{$chunks[0]}\". "
+                              . "Format response strictly as a JSON array of objects without markdown code blocks.";
+                
+                $refillPayload = [
+                    'model' => GROQ_DEFAULT_MODEL,
+                    'messages' => [['role' => 'user', 'content' => $refillPrompt]],
+                    'temperature' => 0.3
+                ];
+                $refillRes = self::sendRequest($refillPayload, $apiKey);
+                if (isset($refillRes['data']['choices'][0]['message']['content'])) {
+                    $refillContent = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', trim($refillRes['data']['choices'][0]['message']['content']));
+                    $refillJson = json_decode(trim($refillContent), true);
+                    if (is_array($refillJson)) {
+                        foreach ($refillJson as $rq) {
+                            if (count($validQuestions) >= $numQuestions) break;
+                            if (!is_array($rq)) continue;
+                            $rqText = trim($rq['question'] ?? '');
+                            $rqCorrect = trim($rq['correct_answer'] ?? '');
+                            if (empty($rqText) || empty($rqCorrect)) continue;
+
+                            $dedupKey = mb_strtolower(preg_replace('/\s+/', ' ', $rqText));
+                            if (isset($seen[$dedupKey])) continue;
+                            $seen[$dedupKey] = true;
+
+                            $validQuestions[] = [
+                                'question' => $rqText,
+                                'type' => trim($rq['type'] ?? $questionType),
+                                'opt_a' => $rq['opt_a'] ?? null,
+                                'opt_b' => $rq['opt_b'] ?? null,
+                                'opt_c' => $rq['opt_c'] ?? null,
+                                'opt_d' => $rq['opt_d'] ?? null,
+                                'correct_answer' => $rqCorrect,
+                                'formula_latex' => $rq['formula_latex'] ?? null,
+                                'matching_pairs' => $rq['matching_pairs'] ?? null,
+                                'explanation' => $rq['explanation'] ?? '',
+                                'points' => intval($rq['points'] ?? 1),
+                                'difficulty' => $difficulty,
+                                'topic' => $rq['source_topic'] ?? $subject,
+                                'source_lesson_ids' => is_array($rq['source_lesson_ids'] ?? null) ? array_map('intval', $rq['source_lesson_ids']) : [],
+                                'source_topic' => $rq['source_topic'] ?? $subject,
+                                'source_academic_period' => strtolower($rq['source_academic_period'] ?? 'general'),
+                                'source_confidence' => $rq['source_confidence'] ?? 'high'
+                            ];
+                        }
+                    }
+                }
+            }
+
             if (empty($validQuestions)) {
                 return ['error' => 'Chunked AI generation produced no valid questions. Warnings: ' . implode('; ', $generationWarnings)];
             }
 
-            // Repair Prompt 4: Enforce exact question count ceiling (never return more than requested)
+            // Enforce exact question count ceiling (never return more than requested)
             $validQuestions = array_slice($validQuestions, 0, $numQuestions);
+            $finalGeneratedCount = count($validQuestions);
+            $shortfallCount = max(0, $numQuestions - $finalGeneratedCount);
+            $batchStatus = ($failedChunkCount > 0 || $shortfallCount > 0) ? 'incomplete' : 'completed';
+
+            if ($shortfallCount > 0) {
+                $generationWarnings[] = "Generation shortfall: Requested {$numQuestions} questions, but only {$finalGeneratedCount} unique valid items could be generated.";
+            }
 
             $executionTime = round((microtime(true) - $startTime) * 1000, 2);
 
@@ -353,8 +414,12 @@ class GroqService {
                     'estimated_tokens' => $estimatedTokens,
                     'chunked' => true,
                     'chunk_count' => count($chunks),
-                    'batch_status' => $failedChunkCount > 0 ? 'incomplete' : 'completed',
+                    'batch_status' => $batchStatus,
                     'failed_chunk_count' => $failedChunkCount,
+                    'requested_question_count' => $numQuestions,
+                    'generated_question_count' => $finalGeneratedCount,
+                    'failed_question_count' => max($failedChunkCount, $shortfallCount),
+                    'shortfall_count' => $shortfallCount,
                     'affected_lesson_ids' => array_values(array_unique($affectedLessonIds)),
                     'generation_warnings' => $generationWarnings,
                     'difficulty' => $difficulty

@@ -414,6 +414,7 @@ addColumn($pdo, 'ai_generation_batches', 'failure_messages', "TEXT DEFAULT NULL"
 addColumn($pdo, 'ai_generation_batches', 'teacher_acknowledged_at', "TIMESTAMP NULL DEFAULT NULL");
 addColumn($pdo, 'ai_generation_batches', 'teacher_acknowledged_by', "INT(11) DEFAULT NULL");
 addColumn($pdo, 'ai_generation_batches', 'acknowledgement_reason', "TEXT DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'acknowledgement_token_hash', "VARCHAR(64) DEFAULT NULL");
 
 $defaultPassHash = password_hash('Password123!', PASSWORD_DEFAULT);
 
