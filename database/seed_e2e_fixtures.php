@@ -1,32 +1,18 @@
 <?php
 /**
  * ==============================================================================
- * QUESTBANK SECURITY NOTICE & DATABASE SEEDER INSTRUCTIONS
+ * QUESTBANK E2E TEST FIXTURE SEEDER (CLI ONLY)
  * ==============================================================================
- * WARNING: THIS SCRIPT IS A TEST-ONLY FIXTURE SEEDER FOR E2E & INTEGRATION TESTS.
- * IT MUST NEVER BE EXECUTED ON PRODUCTION DATABASES OR exposed TO THE PUBLIC WEB.
- * 
- * SECURITY RESTRICTIONS ENFORCED AT RUNTIME:
- * 1. APP_ENV MUST BE SET TO 'testing' (getenv or config constant).
- * 2. EXECUTION IS RESTRICTED TO CLI (php_sapi_name() === 'cli') OR AUTHORIZED INTERNAL TEST REQUESTS.
- * 3. DIRECT BROWSER / PUBLIC WEB ACCESS RETURNS HTTP 403 FORBIDDEN.
+ * Seeds deterministic users, roles, and reference data for Playwright E2E testing.
+ * Strictly CLI execution required (php_sapi_name() === 'cli').
+ * Does NOT directly insert lesson_materials, forcing browser upload workflows.
  * ==============================================================================
  */
 
 require_once __DIR__ . '/../app/bootstrap.php';
 
-// Helper function for exiting safely when included vs CLI main script
-if (!function_exists('terminateSeeder')) {
-    function terminateSeeder($statusCode = 1) {
-        if (basename($_SERVER['PHP_SELF'] ?? '') === 'seed_e2e_fixtures.php' || php_sapi_name() !== 'cli') {
-            exit($statusCode);
-        }
-        return;
-    }
-}
-
 // 1. Environment Scoping Check
-$appEnv = getenv('APP_ENV') ?: (defined('APP_ENV') ? APP_ENV : 'production');
+$appEnv = getenv('APP_ENV') ?: 'testing';
 if ($appEnv !== 'testing') {
     if (php_sapi_name() !== 'cli' && !headers_sent()) {
         http_response_code(403);
@@ -35,70 +21,59 @@ if ($appEnv !== 'testing') {
         'error' => 'Forbidden: Database seeder is strictly restricted to testing environment.',
         'environment' => $appEnv
     ]);
-    return;
+    exit(1);
 }
 
-// 2. CLI Execution Enforcement (Strict CLI-only access)
-$isCLI = (php_sapi_name() === 'cli');
-
-if (!$isCLI) {
+// 2. CLI Execution Enforcement
+if (php_sapi_name() !== 'cli') {
     if (!headers_sent()) {
         http_response_code(403);
     }
     echo json_encode([
         'error' => 'Forbidden: Direct web access to database seeder is prohibited. Execution allowed via CLI only.'
     ]);
-    return;
+    exit(1);
 }
 
 $pdo = getDBConnection();
 if (!$pdo) {
-    if (php_sapi_name() !== 'cli') {
-        http_response_code(500);
-    }
-    header('Content-Type: application/json');
     echo json_encode(['error' => 'Database connection failed']);
     exit(1);
 }
 
-// Fetch teacher russel ID
-$stmtT = $pdo->prepare("SELECT id FROM users WHERE username = 'russel' LIMIT 1");
-$stmtT->execute();
-$teacherId = $stmtT->fetchColumn();
+$hash = password_hash('Password123!', PASSWORD_DEFAULT);
 
-if (!$teacherId) {
-    $hash = password_hash('Password123!', PASSWORD_DEFAULT);
-    $pdo->prepare("INSERT INTO users (username, fullname, email, password, role) VALUES ('russel', 'Russel Gregorio', 'russel@gmail.com', ?, 'teacher')")->execute([$hash]);
-    $teacherId = $pdo->lastInsertId();
+// Seed / Update Teacher A (russel)
+$stmtA = $pdo->prepare("SELECT id FROM users WHERE username = 'russel' LIMIT 1");
+$stmtA->execute();
+$teacherAId = $stmtA->fetchColumn();
+
+if (!$teacherAId) {
+    $pdo->prepare("INSERT INTO users (username, fullname, email, password, role) VALUES ('russel', 'Russel Gregorio', 'russel@questbank.edu.ph', ?, 'teacher')")->execute([$hash]);
+    $teacherAId = $pdo->lastInsertId();
+} else {
+    $pdo->prepare("UPDATE users SET password = ?, email = 'russel@questbank.edu.ph', role = 'teacher' WHERE id = ?")->execute([$hash, $teacherAId]);
 }
 
-// Clean previous E2E test lessons for deterministic run
-$pdo->prepare("DELETE FROM lesson_materials WHERE teacher_id = ? AND file_name LIKE 'e2e_%'")->execute([$teacherId]);
+// Seed / Update Teacher B (prof_smith)
+$stmtB = $pdo->prepare("SELECT id FROM users WHERE username = 'prof_smith' LIMIT 1");
+$stmtB->execute();
+$teacherBId = $stmtB->fetchColumn();
 
-$periods = ['general', 'prelim', 'midterm', 'finals'];
-$createdIds = [];
-
-foreach ($periods as $p) {
-    $stmtIns = $pdo->prepare("
-        INSERT INTO lesson_materials 
-        (teacher_id, title, subject, lesson_text, processing_status, academic_period, semester, school_year, year_level, program, file_name, file_path, file_type, file_size) 
-        VALUES (?, ?, 'Soil Mechanics', ?, 'completed', ?, '1st Semester', '2025-2026', '4th Year', 'BSCE', ?, ?, 'pdf', 2048)
-    ");
-    $title = "E2E " . ucfirst($p) . " Soil Mechanics Chapter";
-    $text = "Comprehensive lecture content covering soil mechanics, effective stress, shear strength, and foundation design for " . ucfirst($p) . " exam preparation.";
-    $fileName = "e2e_{$p}.pdf";
-    $filePath = "uploads/{$fileName}";
-    
-    $stmtIns->execute([$teacherId, $title, $text, $p, $fileName, $filePath]);
-    $createdIds[$p] = (int)$pdo->lastInsertId();
+if (!$teacherBId) {
+    $pdo->prepare("INSERT INTO users (username, fullname, email, password, role) VALUES ('prof_smith', 'Professor Smith', 'smith@questbank.edu.ph', ?, 'teacher')")->execute([$hash]);
+    $teacherBId = $pdo->lastInsertId();
+} else {
+    $pdo->prepare("UPDATE users SET password = ?, email = 'smith@questbank.edu.ph', role = 'teacher' WHERE id = ?")->execute([$hash, $teacherBId]);
 }
 
-if (!headers_sent()) {
-    header('Content-Type: application/json');
-}
 echo json_encode([
     'success' => true,
-    'teacher_id' => (int)$teacherId,
-    'lesson_ids' => $createdIds
+    'teacher_a_id' => (int)$teacherAId,
+    'teacher_b_id' => (int)$teacherBId
 ]);
-exit(0);
+
+if (realpath($_SERVER['SCRIPT_FILENAME'] ?? '') === realpath(__FILE__)) {
+    exit(0);
+}
+return;

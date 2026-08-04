@@ -349,8 +349,15 @@ class GroqService {
                             $seen[$dedupKey] = true;
 
                             $srcLessonIds = is_array($q['source_lesson_ids'] ?? null) ? array_map('intval', $q['source_lesson_ids']) : [];
+                            $srcConfidence = $q['source_confidence'] ?? 'high';
+
                             if (empty($srcLessonIds)) {
-                                $srcLessonIds = $chunkLessonIds;
+                                if (count($chunkLessonIds) === 1) {
+                                    $srcLessonIds = $chunkLessonIds;
+                                } else {
+                                    $srcLessonIds = [];
+                                    $srcConfidence = 'review_required';
+                                }
                             }
 
                             $srcPeriod = strtolower(trim($q['source_academic_period'] ?? ''));
@@ -531,8 +538,15 @@ class GroqService {
                                 $seen[$dedupKey] = true;
 
                                 $srcLessonIds = is_array($rq['source_lesson_ids'] ?? null) ? array_map('intval', $rq['source_lesson_ids']) : [];
+                                $srcConfidence = $rq['source_confidence'] ?? 'high';
+
                                 if (empty($srcLessonIds)) {
-                                    $srcLessonIds = $targetChunkLessonIds;
+                                    if (count($targetChunkLessonIds) === 1) {
+                                        $srcLessonIds = $targetChunkLessonIds;
+                                    } else {
+                                        $srcLessonIds = [];
+                                        $srcConfidence = 'review_required';
+                                    }
                                 }
 
                                 $srcPeriod = strtolower(trim($rq['source_academic_period'] ?? ''));

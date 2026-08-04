@@ -16,7 +16,6 @@ if (!$pdo) {
 }
 
 if ($action === 'seed') {
-    // Run CLI seeder
     require_once __DIR__ . '/../../database/seed_e2e_fixtures.php';
     exit(0);
 }
@@ -56,6 +55,7 @@ if ($action === 'verify_exam_saved') {
         'batch' => $batch,
         'exam' => $exam,
         'questions_count' => count($questions),
+        'questions' => $questions,
         'sources_count' => count($sources),
         'sources' => $sources
     ]);
@@ -63,12 +63,37 @@ if ($action === 'verify_exam_saved') {
 }
 
 if ($action === 'get_uploaded_lessons') {
-    $teacherId = intval($argv[2] ?? 10);
-    $stmt = $pdo->prepare("SELECT id, title, academic_period, extracted_text FROM lesson_materials WHERE teacher_id = ? ORDER BY id DESC");
-    $stmt->execute([$teacherId]);
+    $identifier = $argv[2] ?? '';
+    if (numeric_check($identifier)) {
+        $stmt = $pdo->prepare("SELECT id, title, academic_period, lesson_text, processing_status, subject, teacher_id FROM lesson_materials WHERE teacher_id = ? ORDER BY id DESC");
+        $stmt->execute([intval($identifier)]);
+    } else {
+        $stmt = $pdo->prepare("
+            SELECT lm.id, lm.title, lm.academic_period, lm.lesson_text, lm.processing_status, lm.subject, lm.teacher_id 
+            FROM lesson_materials lm
+            JOIN users u ON lm.teacher_id = u.id
+            WHERE u.username = ? OR u.email = ?
+            ORDER BY lm.id DESC
+        ");
+        $stmt->execute([$identifier, $identifier]);
+    }
+    
     $lessons = $stmt->fetchAll(PDO::FETCH_ASSOC);
     echo json_encode(['success' => true, 'lessons' => $lessons]);
     exit(0);
+}
+
+if ($action === 'get_teacher_id') {
+    $username = $argv[2] ?? 'russel';
+    $stmt = $pdo->prepare("SELECT id FROM users WHERE username = ? OR email = ?");
+    $stmt->execute([$username, $username]);
+    $tid = $stmt->fetchColumn();
+    echo json_encode(['success' => true, 'teacher_id' => intval($tid)]);
+    exit(0);
+}
+
+function numeric_check($val) {
+    return is_numeric($val);
 }
 
 echo json_encode(['error' => 'Unknown action']);

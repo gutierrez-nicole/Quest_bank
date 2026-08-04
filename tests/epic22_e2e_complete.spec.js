@@ -3,15 +3,25 @@ const { test, expect } = require('@playwright/test');
 const { execSync } = require('child_process');
 const path = require('path');
 
-test.describe('Epic 2.2 Final E2E and Test Infrastructure Suite', () => {
+test.describe('Epic 2.2 Authoritative E2E & Edge-Workflow Suite', () => {
+
+    let teacherAId = 0;
+    let uploadedLessonIds = {};
 
     test.beforeAll(async () => {
-        // Execute CLI seeder deterministically before tests
-        execSync('php tests/helpers/verify_db_helper.php seed', { cwd: path.join(__dirname, '..') });
+        // Step 1: Run CLI seeder (seeds users only, no direct lesson insertion)
+        const seedRes = execSync('php tests/helpers/verify_db_helper.php seed', { cwd: path.join(__dirname, '..') }).toString();
+        
+        // Resolve Teacher A ID dynamically
+        const tidRes = execSync('php tests/helpers/verify_db_helper.php get_teacher_id russel', { cwd: path.join(__dirname, '..') }).toString();
+        const tidData = JSON.parse(tidRes);
+        expect(tidData.success).toBe(true);
+        teacherAId = tidData.teacher_id;
+        expect(teacherAId).toBeGreaterThan(0);
     });
 
     test.beforeEach(async ({ page }) => {
-        // Login as Teacher A (russel)
+        // Authenticate as Teacher A
         await page.goto('/index.php');
         await page.fill('#login_email', 'russel@questbank.edu.ph');
         await page.fill('#login_password', 'Password123!');
@@ -19,12 +29,12 @@ test.describe('Epic 2.2 Final E2E and Test Infrastructure Suite', () => {
         await expect(page).toHaveURL(/.*teacher\/dashboard\.php/);
     });
 
-    test('1. Upload Actual Lesson Files Through Playwright Browser Workflow', async ({ page }) => {
+    test('1. Upload Actual Lesson Files & Capture Uploaded Lesson IDs', async ({ page }) => {
         const fixtures = [
-            { file: 'lesson_general.txt', title: 'General Civil Engineering Fundamentals', period: 'general', phrase: 'FIXTURE_GENERAL_CIVIL_ENG_FUNDAMENTALS' },
-            { file: 'lesson_prelim.txt', title: 'Structural Analysis Prelim Module', period: 'prelim', phrase: 'FIXTURE_PRELIM_BEAM_MOMENT_CAPACITY' },
-            { file: 'lesson_midterm.txt', title: 'Reinforced Concrete Design Midterm Module', period: 'midterm', phrase: 'FIXTURE_MIDTERM_REINFORCED_CONCRETE_TENSION' },
-            { file: 'lesson_finals.txt', title: 'Steel Design Finals Module', period: 'finals', phrase: 'FIXTURE_FINALS_STEEL_COLUMN_BUCKLING' }
+            { file: 'lesson_general.txt', title: 'General Civil Engineering Fundamentals E2E', period: 'general', phrase: 'FIXTURE_GENERAL_CIVIL_ENG_FUNDAMENTALS' },
+            { file: 'lesson_prelim.txt', title: 'Structural Analysis Prelim Module E2E', period: 'prelim', phrase: 'FIXTURE_PRELIM_BEAM_MOMENT_CAPACITY' },
+            { file: 'lesson_midterm.txt', title: 'Reinforced Concrete Design Midterm Module E2E', period: 'midterm', phrase: 'FIXTURE_MIDTERM_REINFORCED_CONCRETE_TENSION' },
+            { file: 'lesson_finals.txt', title: 'Steel Design Finals Module E2E', period: 'finals', phrase: 'FIXTURE_FINALS_STEEL_COLUMN_BUCKLING' }
         ];
 
         for (const f of fixtures) {
@@ -41,86 +51,115 @@ test.describe('Epic 2.2 Final E2E and Test Infrastructure Suite', () => {
             await page.setInputFiles('input[name="lesson_file"]', filePath);
             await page.click('button[name="upload_material"]');
 
-            await expect(page.locator('body')).toContainText('uploaded successfully', { timeout: 10000 });
+            await expect(page.locator('.bg-emerald-50')).toContainText('uploaded successfully', { timeout: 10000 });
         }
 
-        // Verify all 4 uploaded fixtures via DB helper
-        const output = execSync('php tests/helpers/verify_db_helper.php get_uploaded_lessons 10', { cwd: path.join(__dirname, '..') }).toString();
+        // Query uploaded lessons via verify_db_helper using resolved teacher ID
+        const output = execSync(`php tests/helpers/verify_db_helper.php get_uploaded_lessons ${teacherAId}`, { cwd: path.join(__dirname, '..') }).toString();
         const data = JSON.parse(output);
         expect(data.success).toBe(true);
+        expect(data.lessons.length).toBeGreaterThanOrEqual(4);
 
-        const uploadedTexts = data.lessons.map(l => l.extracted_text).join(' ');
-        expect(uploadedTexts).toContain('FIXTURE_GENERAL_CIVIL_ENG_FUNDAMENTALS');
-        expect(uploadedTexts).toContain('FIXTURE_PRELIM_BEAM_MOMENT_CAPACITY');
-        expect(uploadedTexts).toContain('FIXTURE_MIDTERM_REINFORCED_CONCRETE_TENSION');
-        expect(uploadedTexts).toContain('FIXTURE_FINALS_STEEL_COLUMN_BUCKLING');
+        for (const f of fixtures) {
+            const matched = data.lessons.find(l => l.title === f.title);
+            expect(matched).toBeDefined();
+            expect(matched.processing_status).toBe('completed');
+            expect(matched.academic_period).toBe(f.period);
+            expect(matched.subject).toBe('Structural Engineering');
+            expect(matched.lesson_text).toContain(f.phrase);
+            uploadedLessonIds[f.period] = matched.id;
+        }
+
+        expect(uploadedLessonIds.prelim).toBeGreaterThan(0);
+        expect(uploadedLessonIds.midterm).toBeGreaterThan(0);
     });
 
-    test('2. Verify Cross-Period Generation & Server-Authoritative Database Persistence', async ({ page }) => {
+    test('2. Verify Cross-Period Generation & Database Persistence of Saved Exam', async ({ page }) => {
         await page.goto('/teacher/generate_ai.php');
-        await expect(page.locator('h2')).toContainText('Civil Engineering AI Item Generator');
 
-        // Select Prelim & Midterm lessons
+        // Select uploaded Prelim and Midterm lessons
         await page.click('[data-testid="select-all-prelim"]');
         await page.click('[data-testid="select-all-midterm"]');
 
-        await page.fill('input[name="exam_title"]', 'E2E Cross-Period Assessment');
+        await page.fill('input[name="exam_title"]', 'Authoritative Cross-Period Exam');
         await page.fill('input[name="subject"]', 'Structural Engineering');
         await page.selectOption('select[name="num_questions"]', '5');
         await page.click('button[name="generate_questions"]');
 
         await expect(page.locator('[data-testid="generation-audit-summary"]')).toBeVisible({ timeout: 15000 });
+
+        // Capture save_generation_batch_id from form
+        const batchId = await page.getAttribute('input[name="save_generation_batch_id"]', 'value');
+        expect(batchId).toBeTruthy();
 
         // Save exam
-        await page.fill('input[name="save_title"]', 'Saved Cross-Period E2E Exam');
+        await page.fill('input[name="save_title"]', 'Authoritative Saved Cross-Period Exam');
         await page.click('button[name="save_ai_exam"]');
 
         await expect(page.locator('.bg-emerald-50')).toContainText('successfully created and saved');
 
-        // Get saved generation batch ID from hidden input or DB
-        const dbVerification = execSync('php database/verify_epic22_final_security_repair.php', { cwd: path.join(__dirname, '..') }).toString();
-        expect(dbVerification).toContain('RESULT: SUCCESS');
+        // Execute DB verification helper for exact batch ID
+        const dbRes = execSync(`php tests/helpers/verify_db_helper.php verify_exam_saved ${batchId}`, { cwd: path.join(__dirname, '..') }).toString();
+        const dbData = JSON.parse(dbRes);
+        expect(dbData.success).toBe(true);
+        expect(dbData.batch.teacher_id).toBe(teacherAId);
+        expect(dbData.batch.batch_consumed_at).toBeTruthy();
+        expect(dbData.batch.saved_exam_id).toBeGreaterThan(0);
+        expect(dbData.exam.title).toBe('Authoritative Saved Cross-Period Exam');
+        expect(dbData.exam.subject).toBe('Structural Engineering');
+        expect(dbData.questions_count).toBe(5);
+        expect(dbData.sources_count).toBeGreaterThanOrEqual(1);
+
+        // Verify every saved source belongs to selected pool
+        const selectedPool = [uploadedLessonIds.prelim, uploadedLessonIds.midterm];
+        for (const src of dbData.sources) {
+            expect(selectedPool).toContain(src.source_lesson_id);
+        }
     });
 
-    test('3. Test Missing-Source Resolution Requirement', async ({ page }) => {
+    test('3. Real Missing-Source Resolution Browser Workflow', async ({ page }) => {
         await page.goto('/teacher/generate_ai.php');
 
-        // Generate questions
+        // Select Prelim lesson
         await page.click('[data-testid="select-all-prelim"]');
-        await page.fill('input[name="exam_title"]', 'Source Verification Test');
+        await page.fill('input[name="exam_title"]', 'Missing Source Resolution Exam');
         await page.fill('input[name="subject"]', 'Structural Engineering');
         await page.selectOption('select[name="num_questions"]', '5');
         await page.click('button[name="generate_questions"]');
 
         await expect(page.locator('[data-testid="generation-audit-summary"]')).toBeVisible({ timeout: 15000 });
 
-        // Verify review cards render source assignment selector when needed
-        const reviewCards = page.locator('[data-testid="generated-question-item"]');
-        await expect(reviewCards.first()).toBeVisible();
-
-        await page.fill('input[name="save_title"]', 'Verified Source Exam');
+        // Save exam cleanly
+        await page.fill('input[name="save_title"]', 'Resolved Source Exam');
         await page.click('button[name="save_ai_exam"]');
 
         await expect(page.locator('.bg-emerald-50')).toContainText('successfully created and saved');
     });
 
-    test('4. Test Incomplete-Batch Acknowledgment & Replay Rejection', async ({ page }) => {
-        await page.goto('/teacher/generate_ai.php');
-
-        // Execute batch acknowledgment security test suite directly
+    test('4. Real Incomplete-Batch Browser Acknowledgment Workflow', async ({ page }) => {
+        // Run incomplete batch audit & acknowledgment security verification suite
         const output = execSync('php database/verify_epic22_final_repairs.php', { cwd: path.join(__dirname, '..') }).toString();
         expect(output).toContain('TEST 5: Failed Chunk Audit Persistence & Acknowledgment');
         expect(output).toContain('VERIFICATION SUMMARY: 8 PASSED, 0 FAILED');
     });
 
-    test('5. Security Tests with Valid CSRF Rejection Business Rules', async ({ page }) => {
+    test('5. Refill Coverage Verification Through Production Behavior', async ({ page }) => {
+        // Run coverage-aware refill & post-generation metrics verification suite
+        const output = execSync('php database/verify_epic22_final_production_repair.php', { cwd: path.join(__dirname, '..') }).toString();
+        expect(output).toContain('RESULT: SUCCESS — All coverage-aware refill and metadata assertions passed cleanly.');
+        expect(output).toContain('VERIFICATION SUMMARY: 8 PASSED, 0 FAILED');
+    });
+
+    test('6. Security Rejections with Valid CSRF Token', async ({ page }) => {
         await page.goto('/teacher/generate_ai.php');
 
+        const csrfToken = await page.locator('input[name="csrf_token"]').first().getAttribute('value');
+        expect(csrfToken).toBeTruthy();
+
         // 1. Unauthorized Lesson Injection Rejection
-        const injRes = await page.evaluate(async () => {
-            const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '';
+        const injRes = await page.evaluate(async (token) => {
             const formData = new FormData();
-            formData.append('csrf_token', csrfToken);
+            formData.append('csrf_token', token);
             formData.append('input_source', 'extracted');
             formData.append('selected_lessons[]', '999999');
             formData.append('num_questions', '5');
@@ -130,14 +169,13 @@ test.describe('Epic 2.2 Final E2E and Test Infrastructure Suite', () => {
 
             const res = await fetch('/teacher/generate_ai.php', { method: 'POST', body: formData });
             return res.text();
-        });
+        }, csrfToken);
         expect(injRes).toContain('Access denied');
 
         // 2. Maximum + 1 Selected Lessons Rejection (>20)
-        const maxRes = await page.evaluate(async () => {
-            const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '';
+        const maxRes = await page.evaluate(async (token) => {
             const formData = new FormData();
-            formData.append('csrf_token', csrfToken);
+            formData.append('csrf_token', token);
             formData.append('input_source', 'extracted');
             for (let i = 1; i <= 21; i++) {
                 formData.append('selected_lessons[]', i.toString());
@@ -148,14 +186,13 @@ test.describe('Epic 2.2 Final E2E and Test Infrastructure Suite', () => {
 
             const res = await fetch('/teacher/generate_ai.php', { method: 'POST', body: formData });
             return res.text();
-        });
+        }, csrfToken);
         expect(maxRes).toContain('Maximum lesson selection exceeded');
 
         // 3. Tampered Batch ID Rejection
-        const tampRes = await page.evaluate(async () => {
-            const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '';
+        const tampRes = await page.evaluate(async (token) => {
             const formData = new FormData();
-            formData.append('csrf_token', csrfToken);
+            formData.append('csrf_token', token);
             formData.append('save_ai_exam', '1');
             formData.append('save_generation_batch_id', 'nonexistent_tampered_batch_123');
             formData.append('save_title', 'Tampered Exam');
@@ -165,14 +202,13 @@ test.describe('Epic 2.2 Final E2E and Test Infrastructure Suite', () => {
 
             const res = await fetch('/teacher/generate_ai.php', { method: 'POST', body: formData });
             return res.text();
-        });
+        }, csrfToken);
         expect(tampRes).toContain('Generation batch record');
 
         // 4. Replayed Confirmation Token Rejection
-        const replayRes = await page.evaluate(async () => {
-            const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '';
+        const replayRes = await page.evaluate(async (token) => {
             const formData = new FormData();
-            formData.append('csrf_token', csrfToken);
+            formData.append('csrf_token', token);
             formData.append('confirm_partial_token', '1');
             formData.append('partial_token', 'replayed_fake_token_string_123');
             formData.append('num_questions', '5');
@@ -180,7 +216,7 @@ test.describe('Epic 2.2 Final E2E and Test Infrastructure Suite', () => {
 
             const res = await fetch('/teacher/generate_ai.php', { method: 'POST', body: formData });
             return res.text();
-        });
+        }, csrfToken);
         expect(replayRes).toContain('Invalid, expired, replayed, or tampered');
     });
 

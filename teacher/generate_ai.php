@@ -364,8 +364,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
     $qualifying_deadline = !empty($_POST['save_qualifying_deadline']) ? $_POST['save_qualifying_deadline'] : null;
     $questions = $_POST['questions'] ?? [];
 
-    // Server-Authoritative: Accept ONLY a stable generation_batch_id from POST
-    $save_generation_batch_id = trim($_POST['save_generation_batch_id'] ?? $_POST['generation_batch_id'] ?? '');
+    // Server-Authoritative: Accept ONLY a stable save_generation_batch_id from POST
+    $save_generation_batch_id = trim($_POST['save_generation_batch_id'] ?? '');
 
     if (empty($save_generation_batch_id)) {
         $error_msg = "Cannot save exam: Generation batch ID is missing.";

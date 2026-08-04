@@ -5,6 +5,7 @@
  */
 putenv('APP_ENV=testing');
 require_once __DIR__ . '/../app/bootstrap.php';
+require_once __DIR__ . '/../includes/security.php';
 
 $passed = 0;
 $failed = 0;
@@ -45,22 +46,16 @@ try {
 
     // --- TEST 1: FINAL REPAIR 9 — Harden E2E Seeder Security ---
     // 1a. Direct web execution without APP_ENV=testing or headers -> HTTP 403 rejection
-    putenv('APP_ENV=production');
-    ob_start();
-    include __DIR__ . '/seed_e2e_fixtures.php';
-    $seederProdOut = ob_get_clean();
-    putenv('APP_ENV=testing');
+    $seederProdOut = shell_exec("APP_ENV=production php " . escapeshellarg(__DIR__ . '/seed_e2e_fixtures.php'));
     $seederProdRes = json_decode($seederProdOut, true);
     $pass1a = isset($seederProdRes['error']) && strpos($seederProdRes['error'], 'Forbidden') !== false;
     logTest("TEST 1a (Repair 9): Seeder Web Production Rejection (403)", $pass1a, "Production environment access cleanly rejected with 403");
 
     // 1b. Testing environment CLI execution -> Success
-    ob_start();
-    include __DIR__ . '/seed_e2e_fixtures.php';
-    $seederCliOut = ob_get_clean();
+    $seederCliOut = shell_exec("APP_ENV=testing php " . escapeshellarg(__DIR__ . '/seed_e2e_fixtures.php'));
     $seederCliRes = json_decode($seederCliOut, true);
-    $pass1b = isset($seederCliRes['success']) && $seederCliRes['success'] === true && count($seederCliRes['lesson_ids'] ?? []) === 4;
-    logTest("TEST 1b (Repair 9): Seeder Testing CLI Execution Success", $pass1b, "Seeder generated 4 period fixtures cleanly under testing mode");
+    $pass1b = isset($seederCliRes['success']) && $seederCliRes['success'] === true && !empty($seederCliRes['teacher_a_id']);
+    logTest("TEST 1b (Repair 9): Seeder Testing CLI Execution Success", $pass1b, "Seeder initialized test users teacher_a_id={$seederCliRes['teacher_a_id']} under testing mode");
 
     // --- TEST 2: FINAL REPAIR 10 — Signed Acknowledgement for Incomplete Generation ---
     $batchId10 = bin2hex(random_bytes(16));

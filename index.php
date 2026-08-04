@@ -239,7 +239,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <label class="text-[10px] font-bold uppercase tracking-wider text-stone-600 dark:text-stone-400">Email Address</label>
                     <div class="flex items-center bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-xl px-3.5 py-2.5 focus-within:border-orange-500 transition-all">
                         <i class="fa-solid fa-envelope text-stone-400 text-xs mr-3"></i>
-                        <input type="email" name="email" id="login_email" required placeholder="you@questbank.edu.ph" class="w-full bg-transparent outline-none text-stone-800 dark:text-stone-100 text-xs">
+                        <input type="text" name="email" id="login_email" required placeholder="you@questbank.edu.ph or username" class="w-full bg-transparent outline-none text-stone-800 dark:text-stone-100 text-xs">
                     </div>
                 </div>
 
