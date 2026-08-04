@@ -323,6 +323,8 @@ if (!tableExists($pdo, 'generated_question_sources')) {
             `question_id` INT(11) NOT NULL,
             `lesson_id` INT(11) NOT NULL,
             `academic_period` VARCHAR(20) DEFAULT NULL,
+            `source_topic` VARCHAR(150) DEFAULT NULL,
+            `source_confidence` VARCHAR(50) DEFAULT 'high',
             `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (`id`),
             KEY `question_id` (`question_id`),
@@ -333,6 +335,41 @@ if (!tableExists($pdo, 'generated_question_sources')) {
     echo "  [+] Created table generated_question_sources\n";
 } else {
     echo "  [=] Table generated_question_sources already exists\n";
+}
+addColumn($pdo, 'generated_question_sources', 'source_topic', "VARCHAR(150) DEFAULT NULL");
+addColumn($pdo, 'generated_question_sources', 'source_confidence', "VARCHAR(50) DEFAULT 'high'");
+
+if (!tableExists($pdo, 'ai_generation_batches')) {
+    $pdo->exec("
+        CREATE TABLE `ai_generation_batches` (
+            `id` INT(11) NOT NULL AUTO_INCREMENT,
+            `generation_batch_id` VARCHAR(64) NOT NULL,
+            `teacher_id` INT(11) NOT NULL,
+            `selected_lesson_ids` TEXT DEFAULT NULL,
+            `selected_lesson_titles` TEXT DEFAULT NULL,
+            `selected_periods` VARCHAR(255) DEFAULT NULL,
+            `selected_subject` VARCHAR(150) DEFAULT NULL,
+            `semester` VARCHAR(50) DEFAULT NULL,
+            `school_year` VARCHAR(50) DEFAULT NULL,
+            `year_level` VARCHAR(50) DEFAULT NULL,
+            `program` VARCHAR(100) DEFAULT NULL,
+            `total_selected_words` INT(11) DEFAULT 0,
+            `estimated_tokens` INT(11) DEFAULT 0,
+            `ai_model` VARCHAR(100) DEFAULT NULL,
+            `generation_duration` FLOAT DEFAULT 0,
+            `requested_question_count` INT(11) DEFAULT 0,
+            `generated_question_count` INT(11) DEFAULT 0,
+            `failed_question_count` INT(11) DEFAULT 0,
+            `warnings` TEXT DEFAULT NULL,
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `uq_batch_id` (`generation_batch_id`),
+            KEY `teacher_id` (`teacher_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+    ");
+    echo "  [+] Created table ai_generation_batches\n";
+} else {
+    echo "  [=] Table ai_generation_batches already exists\n";
 }
 
 $defaultPassHash = password_hash('Password123!', PASSWORD_DEFAULT);

@@ -44,6 +44,11 @@ define('GROQ_API_ENDPOINT', 'https://api.groq.com/openai/v1/chat/completions');
 define('GROQ_DEFAULT_MODEL', 'llama-3.3-70b-versatile');
 define('GROQ_FAST_MODEL', 'llama-3.1-8b-instant');
 
+define('AI_MAX_CONTEXT_TOKENS', 32000);
+define('AI_SAFE_INPUT_TOKENS', 24000);
+define('AI_CHUNK_SIZE', 12000);
+define('AI_MAX_SELECTED_LESSONS', 20);
+
 define('APP_NAME', 'QuestBank');
 define('APP_INSTITUTION', 'Holy Cross College - Pampanga');
 

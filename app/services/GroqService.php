@@ -203,6 +203,126 @@ class GroqService {
             return ['error' => 'Question count must be at least 1.'];
         }
 
+        $charLength = strlen($lessonText);
+        $wordCount = str_word_count($lessonText);
+        $estimatedTokens = (int)ceil($charLength / 4);
+
+        $chunkLimit = defined('AI_SAFE_INPUT_TOKENS') ? (AI_SAFE_INPUT_TOKENS * 4) : 96000;
+        $generationWarnings = [];
+        $rawChunkResponses = [];
+
+        if ($charLength > $chunkLimit) {
+            // Large lesson-pool handling: Split into safe chunks along SOURCE LESSON boundaries
+            preg_match_all('/(SOURCE LESSON \d+[\s\S]*?)(?=(?:SOURCE LESSON \d+|\z))/i', $lessonText, $matches);
+            $lessonBlocks = !empty($matches[1]) ? $matches[1] : explode("\n\n", $lessonText);
+
+            $chunks = [];
+            $currentChunk = "";
+            foreach ($lessonBlocks as $block) {
+                if (strlen($currentChunk) + strlen($block) > $chunkLimit && !empty($currentChunk)) {
+                    $chunks[] = $currentChunk;
+                    $currentChunk = $block;
+                } else {
+                    $currentChunk .= ($currentChunk ? "\n\n" : "") . $block;
+                }
+            }
+            if (!empty($currentChunk)) {
+                $chunks[] = $currentChunk;
+            }
+
+            $validQuestions = [];
+            $seen = [];
+            $totalChunks = count($chunks);
+
+            foreach ($chunks as $chunkIdx => $chunkContent) {
+                $chunkShare = max(1, (int)round(($numQuestions / $totalChunks)));
+                $chunkPrompt = "You are an expert Civil Engineering professor specializing in {$specialization} and academic assessment creation. "
+                             . "Generate exactly {$chunkShare} high-quality Civil Engineering examination questions for the subject '{$subject}' (Specialization: {$specialization}) titled '{$examTitle}'. "
+                             . "Target Difficulty Level: '{$difficulty}'. "
+                             . "Target Question Type Format: '{$questionType}'. "
+                             . "based strictly on the following lesson chunk (" . ($chunkIdx + 1) . " of {$totalChunks}): \"{$chunkContent}\". "
+                             . "Do NOT invent facts outside the lesson content. "
+                             . "Format response strictly as a JSON array of objects without markdown code blocks. "
+                             . "Each object MUST have: \"question\" (string), \"type\" (string), \"opt_a\" (string or null), \"opt_b\" (string or null), \"opt_c\" (string or null), \"opt_d\" (string or null), "
+                             . "\"correct_answer\" (string), \"formula_latex\" (string or null), \"matching_pairs\" (object or null), \"explanation\" (string), \"points\" (int), "
+                             . "\"source_lesson_ids\" (array of integers, e.g. [12]), \"source_topic\" (string), \"source_academic_period\" (string), \"source_confidence\" (string: 'high', 'medium', or 'review_required').";
+
+                $payload = [
+                    'model' => GROQ_DEFAULT_MODEL,
+                    'messages' => [['role' => 'user', 'content' => $chunkPrompt]],
+                    'temperature' => 0.3
+                ];
+
+                $res = self::sendRequest($payload, $apiKey);
+                if (isset($res['error'])) {
+                    $generationWarnings[] = "Chunk " . ($chunkIdx + 1) . " skipped due to API response: " . $res['error'];
+                    continue;
+                }
+
+                $content = $res['data']['choices'][0]['message']['content'] ?? '';
+                $cleanContent = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', trim($content));
+                $cleanJson = json_decode(trim($cleanContent), true);
+
+                if (is_array($cleanJson)) {
+                    foreach ($cleanJson as $q) {
+                        if (!is_array($q)) continue;
+                        $qText = trim($q['question'] ?? '');
+                        $qCorrect = trim($q['correct_answer'] ?? '');
+                        if (empty($qText) || empty($qCorrect)) continue;
+
+                        $dedupKey = mb_strtolower(preg_replace('/\s+/', ' ', $qText));
+                        if (isset($seen[$dedupKey])) continue;
+                        $seen[$dedupKey] = true;
+
+                        $srcLessonIds = is_array($q['source_lesson_ids'] ?? null) ? array_map('intval', $q['source_lesson_ids']) : [];
+
+                        $validQuestions[] = [
+                            'question' => $qText,
+                            'type' => trim($q['type'] ?? $questionType),
+                            'opt_a' => $q['opt_a'] ?? null,
+                            'opt_b' => $q['opt_b'] ?? null,
+                            'opt_c' => $q['opt_c'] ?? null,
+                            'opt_d' => $q['opt_d'] ?? null,
+                            'correct_answer' => $qCorrect,
+                            'formula_latex' => $q['formula_latex'] ?? null,
+                            'matching_pairs' => $q['matching_pairs'] ?? null,
+                            'explanation' => $q['explanation'] ?? '',
+                            'points' => intval($q['points'] ?? 1),
+                            'difficulty' => $difficulty,
+                            'topic' => $q['source_topic'] ?? $subject,
+                            'source_lesson_ids' => $srcLessonIds,
+                            'source_topic' => $q['source_topic'] ?? $subject,
+                            'source_academic_period' => strtolower($q['source_academic_period'] ?? 'general'),
+                            'source_confidence' => $q['source_confidence'] ?? 'high'
+                        ];
+                    }
+                }
+            }
+
+            if (empty($validQuestions)) {
+                return ['error' => 'Chunked AI generation produced no valid questions. Warnings: ' . implode('; ', $generationWarnings)];
+            }
+
+            $executionTime = round((microtime(true) - $startTime) * 1000, 2);
+
+            return [
+                'success' => true,
+                'questions' => $validQuestions,
+                'metadata' => [
+                    'model' => GROQ_DEFAULT_MODEL,
+                    'generation_time_ms' => $executionTime,
+                    'token_usage' => $estimatedTokens,
+                    'word_count' => $wordCount,
+                    'estimated_tokens' => $estimatedTokens,
+                    'chunked' => true,
+                    'chunk_count' => count($chunks),
+                    'generation_warnings' => $generationWarnings,
+                    'difficulty' => $difficulty
+                ]
+            ];
+        }
+
+        // Direct single-pass generation
         $prompt = "You are an expert Civil Engineering professor specializing in {$specialization} and academic assessment creation. "
                 . "Generate exactly {$numQuestions} high-quality Civil Engineering examination questions for the subject '{$subject}' (Specialization: {$specialization}) titled '{$examTitle}'. "
                 . "Target Difficulty Level: '{$difficulty}'. "
@@ -213,7 +333,8 @@ class GroqService {
                 . "Each object MUST have: \"question\" (string), \"type\" (string), "
                 . "\"opt_a\" (string or null), \"opt_b\" (string or null), \"opt_c\" (string or null), \"opt_d\" (string or null), "
                 . "\"correct_answer\" (string), \"formula_latex\" (string or null), \"matching_pairs\" (object or null), "
-                . "and \"explanation\" (string containing detailed solution/concept explanation).";
+                . "and \"explanation\" (string containing detailed solution/concept explanation), "
+                . "\"source_lesson_ids\" (array of integers, e.g. [12]), \"source_topic\" (string), \"source_academic_period\" (string), \"source_confidence\" (string: 'high', 'medium', or 'review_required').";
 
         $payload = [
             'model' => GROQ_DEFAULT_MODEL,
@@ -229,7 +350,7 @@ class GroqService {
         }
 
         $executionTime = round((microtime(true) - $startTime) * 1000, 2);
-        $usage = $res['data']['usage'] ?? ['total_tokens' => 0];
+        $usage = $res['data']['usage'] ?? ['total_tokens' => $estimatedTokens];
 
         $content = $res['data']['choices'][0]['message']['content'] ?? '';
         $cleanContent = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', trim($content));
@@ -239,7 +360,6 @@ class GroqService {
             return ['error' => 'Failed to parse AI response as JSON: ' . json_last_error_msg()];
         }
 
-        
         $validQuestions = [];
         $seen = [];
 
@@ -259,6 +379,8 @@ class GroqService {
             }
             $seen[$dedupKey] = true;
 
+            $srcLessonIds = is_array($q['source_lesson_ids'] ?? null) ? array_map('intval', $q['source_lesson_ids']) : [];
+
             $validQuestions[] = [
                 'question' => $qText,
                 'type' => $qType,
@@ -272,7 +394,11 @@ class GroqService {
                 'explanation' => $q['explanation'] ?? '',
                 'points' => intval($q['points'] ?? 1),
                 'difficulty' => $difficulty,
-                'topic' => $subject
+                'topic' => $q['source_topic'] ?? $subject,
+                'source_lesson_ids' => $srcLessonIds,
+                'source_topic' => $q['source_topic'] ?? $subject,
+                'source_academic_period' => strtolower($q['source_academic_period'] ?? 'general'),
+                'source_confidence' => $q['source_confidence'] ?? 'high'
             ];
         }
 
@@ -286,7 +412,10 @@ class GroqService {
             'metadata' => [
                 'model' => GROQ_DEFAULT_MODEL,
                 'generation_time_ms' => $executionTime,
-                'token_usage' => $usage['total_tokens'] ?? 0,
+                'token_usage' => $usage['total_tokens'] ?? $estimatedTokens,
+                'word_count' => $wordCount,
+                'estimated_tokens' => $estimatedTokens,
+                'chunked' => false,
                 'prompt' => mb_substr($prompt, 0, 500),
                 'difficulty' => $difficulty
             ]

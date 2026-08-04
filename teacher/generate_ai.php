@@ -53,25 +53,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
     $specialization = trim(sanitizeInput($_POST['specialization'] ?? 'Structural Engineering'));
     $question_type = trim($_POST['question_type'] ?? 'multiple_choice');
     $difficulty = trim($_POST['difficulty'] ?? 'medium');
+    $allow_partial = isset($_POST['allow_partial']) && $_POST['allow_partial'] == '1';
 
     $final_lesson_content = "";
     $associated_lesson_ids = [];
+    $associated_lesson_titles = [];
     $associated_periods = [];
+    $associated_subjects = [];
+    $total_selected_words = 0;
     $generation_batch_id = bin2hex(random_bytes(16));
     $generation_source_type = 'manual';
     $generation_warnings = [];
+    $validation_errors = [];
 
     if ($input_source === 'extracted' && !empty($selected_lesson_ids)) {
-        
         $selected_lesson_ids = array_filter($selected_lesson_ids, function($id) { return $id !== 'all'; });
         $selected_lesson_ids = array_unique(array_map('intval', $selected_lesson_ids));
 
         if (!empty($selected_lesson_ids)) {
-            
             $placeholders = implode(',', array_fill(0, count($selected_lesson_ids), '?'));
             $stmtFetchSel = $pdo->prepare("
                 SELECT id, title, subject, lesson_text, COALESCE(academic_period,'general') AS academic_period,
-                       processing_status, word_count
+                       processing_status, word_count, semester, school_year, year_level, program
                 FROM lesson_materials 
                 WHERE id IN ($placeholders) AND teacher_id = ?
             ");
@@ -79,62 +82,110 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
             $stmtFetchSel->execute($params);
             $selLessons = $stmtFetchSel->fetchAll(PDO::FETCH_ASSOC);
 
-            
+            // Repair Prompt 2: Security & Authorization ID injection check
             $returnedIds = array_column($selLessons, 'id');
             $unauthorizedIds = array_diff($selected_lesson_ids, $returnedIds);
             if (!empty($unauthorizedIds)) {
-                $error_msg = "Access denied: one or more selected lesson IDs are unauthorized or do not exist.";
+                $validation_errors[] = "Access denied: Lesson ID(s) [" . implode(', ', $unauthorizedIds) . "] are unauthorized or do not exist.";
             }
 
-            if (empty($error_msg)) {
-                $lessonIndex = 1;
-                foreach ($selLessons as $sl) {
-                    
-                    if ($sl['processing_status'] !== 'completed') {
-                        $generation_warnings[] = "Lesson '{$sl['title']}' skipped: extraction not completed.";
-                        continue;
-                    }
-                    if (empty(trim($sl['lesson_text'] ?? ''))) {
-                        $generation_warnings[] = "Lesson '{$sl['title']}' skipped: empty extracted content.";
-                        continue;
-                    }
-
-                    
-                    $final_lesson_content .= "\n\nSOURCE LESSON {$lessonIndex}\n";
-                    $final_lesson_content .= "Lesson ID: {$sl['id']}\n";
-                    $final_lesson_content .= "Period: " . ucfirst($sl['academic_period']) . "\n";
-                    $final_lesson_content .= "Title: {$sl['title']}\n";
-                    $final_lesson_content .= "Content:\n" . $sl['lesson_text'];
-
-                    $associated_lesson_ids[] = (int)$sl['id'];
-                    $associated_periods[] = $sl['academic_period'];
-                    $lessonIndex++;
+            $lessonIndex = 1;
+            foreach ($selLessons as $sl) {
+                // Strict validation checks
+                if ($sl['processing_status'] !== 'completed') {
+                    $validation_errors[] = "Lesson '{$sl['title']}' (ID: {$sl['id']}) cannot be used: extraction status is '{$sl['processing_status']}'.";
+                    continue;
                 }
+                if (empty(trim($sl['lesson_text'] ?? ''))) {
+                    $validation_errors[] = "Lesson '{$sl['title']}' (ID: {$sl['id']}) cannot be used: extracted content is empty.";
+                    continue;
+                }
+
+                $associated_subjects[] = $sl['subject'];
+                $associated_lesson_titles[] = $sl['title'];
+
+                $final_lesson_content .= "\n\nSOURCE LESSON {$lessonIndex}\n";
+                $final_lesson_content .= "Lesson ID: {$sl['id']}\n";
+                $final_lesson_content .= "Period: " . ucfirst($sl['academic_period']) . "\n";
+                $final_lesson_content .= "Title: {$sl['title']}\n";
+                $final_lesson_content .= "Subject: {$sl['subject']}\n";
+                $final_lesson_content .= "Content:\n" . $sl['lesson_text'];
+
+                $associated_lesson_ids[] = (int)$sl['id'];
+                $associated_periods[] = $sl['academic_period'];
+                $total_selected_words += (int)($sl['word_count'] ?? str_word_count($sl['lesson_text']));
+                $lessonIndex++;
+            }
+
+            // Repair Prompt 2: Check mixed subject consistency
+            $uniqueSubjects = array_unique(array_filter($associated_subjects));
+            if (count($uniqueSubjects) > 1) {
+                $validation_errors[] = "Conflicting subjects selected: [" . implode(', ', $uniqueSubjects) . "]. Lessons must match one target subject.";
+            }
+
+            if (!empty($validation_errors) && !$allow_partial) {
+                $error_msg = "Validation failed for selected lesson pool:\n• " . implode("\n• ", $validation_errors);
+            } else {
                 $associated_periods = array_unique($associated_periods);
                 $generation_source_type = count($associated_periods) > 1 ? 'cross_period_lessons' : 'single_period_lessons';
             }
+        } else {
+            $error_msg = "Please select at least one valid lesson material.";
         }
     } else {
         $final_lesson_content = $lesson_text;
         $generation_source_type = 'manual';
+        $total_selected_words = str_word_count($lesson_text);
     }
 
     if (!empty(trim($final_lesson_content)) && $num_questions > 0 && empty($error_msg)) {
         $result = GroqService::generateQuestions($final_lesson_content, $num_questions, $subject, $exam_title, $specialization, $question_type, $difficulty);
         if (isset($result['success'])) {
             $generated_questions = $result['questions'];
+            $estimatedTokens = (int)ceil(strlen($final_lesson_content) / 4);
+
             $ai_meta_output = array_merge($result['metadata'] ?? [], [
                 'lesson_ids' => $associated_lesson_ids,
                 'covered_periods' => array_values($associated_periods),
                 'generation_batch_id' => $generation_batch_id,
                 'generation_source_type' => $generation_source_type,
                 'source_lesson_count' => count($associated_lesson_ids),
-                'generation_warnings' => $generation_warnings
+                'generation_warnings' => array_merge($generation_warnings, $result['metadata']['generation_warnings'] ?? []),
+                'total_words' => $total_selected_words,
+                'estimated_tokens' => $estimatedTokens
             ]);
+
+            // Repair Prompt 5: Persist generation audit record in ai_generation_batches
+            try {
+                $stmtBatch = $pdo->prepare("
+                    INSERT INTO ai_generation_batches 
+                    (generation_batch_id, teacher_id, selected_lesson_ids, selected_lesson_titles, selected_periods, selected_subject, total_selected_words, estimated_tokens, ai_model, generation_duration, requested_question_count, generated_question_count, failed_question_count, warnings)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ");
+                $stmtBatch->execute([
+                    $generation_batch_id,
+                    $teacher_id,
+                    json_encode($associated_lesson_ids),
+                    json_encode($associated_lesson_titles),
+                    implode(',', $associated_periods),
+                    $subject,
+                    $total_selected_words,
+                    $estimatedTokens,
+                    GROQ_DEFAULT_MODEL,
+                    floatval($result['metadata']['generation_time_ms'] ?? 0) / 1000,
+                    $num_questions,
+                    count($generated_questions),
+                    0,
+                    json_encode($ai_meta_output['generation_warnings'])
+                ]);
+            } catch (PDOException $e) {
+                // Keep generation working even if batch audit logging encounters non-fatal error
+            }
+
             $periodLabel = !empty($associated_periods) ? ' (' . implode(', ', array_map('ucfirst', $associated_periods)) . ')' : '';
             $success_msg = "AI successfully generated " . count($generated_questions) . " question items from " . ($input_source === 'extracted' ? count($associated_lesson_ids) . " extracted lesson(s)" . $periodLabel : "manual text") . "!";
-            if (!empty($generation_warnings)) {
-                $success_msg .= " ⚠ " . count($generation_warnings) . " lesson(s) skipped.";
+            if (!empty($ai_meta_output['generation_warnings'])) {
+                $success_msg .= " ⚠ Warnings: " . implode('; ', $ai_meta_output['generation_warnings']);
             }
         } else {
             $error_msg = $result['error'] ?? "Failed to generate AI questions.";
@@ -162,7 +213,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
     $meta_json = $_POST['save_ai_metadata'] ?? '{}';
     $lesson_ids_str = $_POST['save_lesson_ids'] ?? '';
 
-    
     $metaData = json_decode($meta_json, true) ?? [];
     $save_covered_periods = !empty($metaData['covered_periods']) ? implode(',', $metaData['covered_periods']) : null;
     $save_source_lesson_count = intval($metaData['source_lesson_count'] ?? 0);
@@ -208,7 +258,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
             ]);
             $exam_id = $pdo->lastInsertId();
 
-            
             $saveLessonIds = array_map('intval', array_filter(explode(',', $lesson_ids_str)));
 
             $qStmt = $pdo->prepare("
@@ -217,12 +266,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
 
-            
+            // Repair Prompt 3: Normalized generated_question_sources relation table
             $srcStmt = $pdo->prepare("
-                INSERT IGNORE INTO generated_question_sources (question_id, lesson_id, academic_period) VALUES (?, ?, ?)
+                INSERT IGNORE INTO generated_question_sources (question_id, lesson_id, academic_period, source_topic, source_confidence) VALUES (?, ?, ?, ?, ?)
             ");
 
-            
             $lessonPeriodMap = [];
             if (!empty($saveLessonIds)) {
                 $plc = implode(',', array_fill(0, count($saveLessonIds), '?'));
@@ -244,7 +292,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
                 }
                 $seenQuestions[] = mb_strtolower($qText);
 
-                $qLessonId = intval($q['lesson_id'] ?? $primaryLessonId ?? 0) ?: $primaryLessonId;
+                // Repair Prompt 3: Extract question-specific source lesson IDs
+                $rawQSources = $q['source_lesson_ids'] ?? [];
+                if (is_string($rawQSources)) {
+                    $rawQSources = array_filter(array_map('intval', explode(',', $rawQSources)));
+                }
+                $validQSources = array_intersect($rawQSources, $saveLessonIds);
+
+                $qLessonId = !empty($validQSources) ? reset($validQSources) : (intval($q['lesson_id'] ?? 0) ?: $primaryLessonId);
+
                 $qStmt->execute([
                     $exam_id,
                     $qText,
@@ -259,20 +315,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
                     intval($q['points'] ?? 1),
                     $q['explanation'] ?? null,
                     $difficulty,
-                    $subject,
+                    $q['source_topic'] ?? $subject,
                     $qLessonId
                 ]);
                 $questionId = $pdo->lastInsertId();
                 $savedCount++;
 
-                
-                foreach ($saveLessonIds as $srcLid) {
+                // Repair Prompt 3: Link question ONLY to its specific valid source lesson(s)
+                $targetSourceIds = !empty($validQSources) ? $validQSources : ($qLessonId ? [$qLessonId] : $saveLessonIds);
+                foreach ($targetSourceIds as $srcLid) {
                     $srcPeriod = $lessonPeriodMap[$srcLid] ?? 'general';
-                    $srcStmt->execute([$questionId, $srcLid, $srcPeriod]);
+                    $srcTopic = $q['source_topic'] ?? $subject;
+                    $srcConf = $q['source_confidence'] ?? (!empty($validQSources) ? 'high' : 'review_required');
+                    $srcStmt->execute([$questionId, $srcLid, $srcPeriod, $srcTopic, $srcConf]);
                 }
             }
 
-            
             $stmtUpdateTotal = $pdo->prepare("UPDATE exams SET total_items = ? WHERE id = ?");
             $stmtUpdateTotal->execute([$savedCount, $exam_id]);
 
@@ -762,9 +820,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
                 
                 <div class="lg:col-span-7 space-y-4">
                     <?php if (!empty($generated_questions)): ?>
+                        <!-- Generation Audit Summary View (Repair Prompt 5) -->
+                        <div class="bg-stone-900 text-white border border-stone-800 rounded-2xl p-4 shadow-sm space-y-3" data-testid="generation-audit-summary">
+                            <div class="flex items-center justify-between border-b border-stone-800 pb-2">
+                                <div class="flex items-center gap-2">
+                                    <i class="fa-solid fa-square-poll-vertical text-orange-400 text-sm"></i>
+                                    <span class="text-xs font-black uppercase tracking-wider text-stone-200">AI Batch Audit Summary</span>
+                                </div>
+                                <span class="text-[10px] font-mono bg-stone-800 text-stone-300 px-2 py-0.5 rounded border border-stone-700">
+                                    ID: <?php echo htmlspecialchars(substr($ai_meta_output['generation_batch_id'] ?? '', 0, 12)); ?>
+                                </span>
+                            </div>
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                                <div class="bg-stone-800/60 p-2 rounded-xl border border-stone-700/50">
+                                    <span class="text-[9px] font-bold text-stone-400 block uppercase">Lessons Covered</span>
+                                    <span class="font-extrabold text-orange-400" data-testid="audit-lesson-count"><?php echo count($ai_meta_output['lesson_ids'] ?? []); ?> Materials</span>
+                                </div>
+                                <div class="bg-stone-800/60 p-2 rounded-xl border border-stone-700/50">
+                                    <span class="text-[9px] font-bold text-stone-400 block uppercase">Periods Covered</span>
+                                    <span class="font-extrabold text-stone-200" data-testid="audit-periods"><?php echo htmlspecialchars(implode(', ', array_map('ucfirst', $ai_meta_output['covered_periods'] ?? [])) ?: 'General'); ?></span>
+                                </div>
+                                <div class="bg-stone-800/60 p-2 rounded-xl border border-stone-700/50">
+                                    <span class="text-[9px] font-bold text-stone-400 block uppercase">Context Tokens</span>
+                                    <span class="font-extrabold text-emerald-400" data-testid="audit-tokens"><?php echo number_format($ai_meta_output['estimated_tokens'] ?? 0); ?> Tokens</span>
+                                </div>
+                                <div class="bg-stone-800/60 p-2 rounded-xl border border-stone-700/50">
+                                    <span class="text-[9px] font-bold text-stone-400 block uppercase">Generation Time</span>
+                                    <span class="font-extrabold text-stone-200" data-testid="audit-time"><?php echo number_format(($ai_meta_output['generation_time_ms'] ?? 0) / 1000, 2); ?>s</span>
+                                </div>
+                            </div>
+                            <?php if (!empty($ai_meta_output['generation_warnings'])): ?>
+                                <div class="p-2 bg-amber-950/60 border border-amber-800/60 rounded-xl text-amber-300 text-[10px] space-y-0.5">
+                                    <span class="font-bold flex items-center gap-1"><i class="fa-solid fa-triangle-exclamation"></i> Batch Warnings:</span>
+                                    <ul class="list-disc pl-4 space-y-0.5">
+                                        <?php foreach ($ai_meta_output['generation_warnings'] as $w): ?>
+                                            <li><?php echo htmlspecialchars($w); ?></li>
+                                        <?php endforeach; ?>
+                                    </ul>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+
                         <form action="generate_ai.php" method="POST" class="bg-white border border-stone-200 rounded-2xl p-6 shadow-sm space-y-6 animate-fadeIn">
                             <?php echo csrfInputField(); ?>
-                            
                             
                             <div class="flex items-center justify-between border-b border-stone-100 pb-4">
                                 <div>
@@ -789,16 +887,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
                             <input type="hidden" name="save_lesson_ids" value="<?php echo htmlspecialchars(implode(',', $ai_meta_output['lesson_ids'] ?? [])); ?>">
 
                             <div class="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                                <?php foreach ($generated_questions as $idx => $item): ?>
-                                    <div class="p-4 border border-stone-200 rounded-2xl bg-stone-50/40 space-y-3 hover:border-orange-300 transition-all" data-testid="generated-question-item" data-lesson-id="<?php echo htmlspecialchars($ai_meta_output['lesson_ids'][0] ?? ''); ?>">
-                                        <div class="flex items-center justify-between">
-                                            <span class="font-black text-xs text-stone-800 bg-white px-2.5 py-1 rounded-lg border border-stone-200">Item #<?php echo $idx + 1; ?></span>
-                                            <span class="text-[10px] font-bold uppercase text-stone-400 bg-white px-2 py-0.5 rounded-md" data-testid="question-type"><?php echo htmlspecialchars($item['type']); ?></span>
+                                <?php foreach ($generated_questions as $idx => $item): 
+                                    $itemSrcIds = !empty($item['source_lesson_ids']) ? (array)$item['source_lesson_ids'] : ($ai_meta_output['lesson_ids'] ?? []);
+                                    $itemPeriod = $item['source_academic_period'] ?? ($ai_meta_output['covered_periods'][0] ?? 'general');
+                                    $itemTopic = $item['source_topic'] ?? $_POST['subject'];
+                                    $itemConf = $item['source_confidence'] ?? 'high';
+                                ?>
+                                    <div class="p-4 border border-stone-200 rounded-2xl bg-stone-50/40 space-y-3 hover:border-orange-300 transition-all" data-testid="generated-question-item" data-lesson-id="<?php echo htmlspecialchars($itemSrcIds[0] ?? ''); ?>">
+                                        <div class="flex items-center justify-between flex-wrap gap-2">
+                                            <div class="flex items-center gap-2">
+                                                <span class="font-black text-xs text-stone-800 bg-white px-2.5 py-1 rounded-lg border border-stone-200">Item #<?php echo $idx + 1; ?></span>
+                                                <span class="text-[10px] font-bold uppercase text-stone-400 bg-white px-2 py-0.5 rounded-md" data-testid="question-type"><?php echo htmlspecialchars($item['type']); ?></span>
+                                            </div>
+
+                                            <!-- Repair Prompt 3: Question Attribution Badge -->
+                                            <div class="flex items-center gap-1.5 text-[10px]" data-testid="question-source-attribution">
+                                                <span class="bg-blue-100 text-blue-800 font-extrabold px-2 py-0.5 rounded-full uppercase" data-testid="source-period">
+                                                    <?php echo htmlspecialchars($itemPeriod); ?>
+                                                </span>
+                                                <span class="bg-stone-200 text-stone-700 font-bold px-2 py-0.5 rounded-full truncate max-w-[120px]" data-testid="source-topic">
+                                                    <?php echo htmlspecialchars($itemTopic); ?>
+                                                </span>
+                                                <?php if ($itemConf === 'high'): ?>
+                                                    <span class="bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.5 rounded-full" data-testid="source-confidence">
+                                                        <i class="fa-solid fa-circle-check mr-0.5"></i> High Grounding
+                                                    </span>
+                                                <?php else: ?>
+                                                    <span class="bg-amber-100 text-amber-800 font-extrabold px-1.5 py-0.5 rounded-full" data-testid="source-confidence">
+                                                        <i class="fa-solid fa-triangle-exclamation mr-0.5"></i> Review Required
+                                                    </span>
+                                                <?php endif; ?>
+                                            </div>
                                         </div>
 
                                         <textarea name="questions[<?php echo $idx; ?>][text]" data-testid="question-text" rows="2" class="w-full bg-white border border-stone-200 rounded-lg p-2.5 text-xs outline-none focus:border-orange-500 resize-none font-medium text-stone-800"><?php echo htmlspecialchars($item['question']); ?></textarea>
                                         <input type="hidden" name="questions[<?php echo $idx; ?>][type]" value="<?php echo htmlspecialchars($item['type']); ?>">
                                         <input type="hidden" name="questions[<?php echo $idx; ?>][points]" value="<?php echo htmlspecialchars($item['points'] ?? 1); ?>" data-testid="question-points">
+                                        <input type="hidden" name="questions[<?php echo $idx; ?>][source_lesson_ids]" value="<?php echo htmlspecialchars(implode(',', $itemSrcIds)); ?>">
+                                        <input type="hidden" name="questions[<?php echo $idx; ?>][source_topic]" value="<?php echo htmlspecialchars($itemTopic); ?>">
+                                        <input type="hidden" name="questions[<?php echo $idx; ?>][source_academic_period]" value="<?php echo htmlspecialchars($itemPeriod); ?>">
+                                        <input type="hidden" name="questions[<?php echo $idx; ?>][source_confidence]" value="<?php echo htmlspecialchars($itemConf); ?>">
 
                                         <?php if ($item['type'] === 'multiple_choice'): ?>
                                             <div class="grid grid-cols-2 gap-2 text-xs" data-testid="mcq-options">
