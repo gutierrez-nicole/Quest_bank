@@ -128,12 +128,12 @@ try {
                 es.exam_title as subject,
                 AVG(es.percentage) as avg_score
             FROM exam_submissions es
-            WHERE (es.student_id = ? OR es.student_name LIKE ?) AND es.review_status = 'published'
+            WHERE es.student_id = ? AND es.review_status = 'published'
             GROUP BY es.exam_title
             ORDER BY avg_score DESC
             LIMIT 2
         ");
-        $stmt->execute([$student_id, "%{$student['fullname']}%"]);
+        $stmt->execute([$student_id]);
         $strong_subjects = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (PDOException $e) {
         $strong_subjects = [];
@@ -146,12 +146,12 @@ try {
                 es.exam_title as subject,
                 AVG(es.percentage) as avg_score
             FROM exam_submissions es
-            WHERE (es.student_id = ? OR es.student_name LIKE ?) AND es.review_status = 'published'
+            WHERE es.student_id = ? AND es.review_status = 'published'
             GROUP BY es.exam_title
             ORDER BY avg_score ASC
             LIMIT 2
         ");
-        $stmt->execute([$student_id, "%{$student['fullname']}%"]);
+        $stmt->execute([$student_id]);
         $weak_subjects = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (PDOException $e) {
         $weak_subjects = [];
@@ -170,13 +170,13 @@ try {
                 e.total_items
             FROM exams e
             WHERE e.id NOT IN (
-                SELECT exam_id FROM exam_submissions WHERE (student_id = ? OR student_name LIKE ?) AND exam_id IS NOT NULL
+                SELECT exam_id FROM exam_submissions WHERE student_id = ? AND exam_id IS NOT NULL
             ) AND e.title NOT IN (
-                SELECT exam_title FROM exam_submissions WHERE (student_id = ? OR student_name LIKE ?)
+                SELECT exam_title FROM exam_submissions WHERE student_id = ?
             )
             ORDER BY e.created_at DESC
         ");
-        $stmt->execute([$student_id, "%{$student['fullname']}%", $student_id, "%{$student['fullname']}%"]);
+        $stmt->execute([$student_id, $student_id]);
         $pending_exams = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (PDOException $e) {
         $pending_exams = [];
@@ -193,7 +193,7 @@ try {
                 AVG(es.percentage) as avg_score
             FROM exam_submissions es
             JOIN exams e ON es.exam_id = e.id
-            WHERE es.student_id = ?
+            WHERE es.student_id = ? AND es.review_status = 'published'
             GROUP BY e.id, e.title
             ORDER BY e.created_at ASC
             LIMIT 5
@@ -213,8 +213,8 @@ try {
     
     
     if (empty($chart_subjects)) {
-        $chart_subjects = ['Web Dev', 'Database', 'SysArch', 'Discrete Math', 'DevOps'];
-        $chart_scores = [94, 89, 72, 75, 90];
+        $chart_subjects = [];
+        $chart_scores = [];
     }
 
     
@@ -229,7 +229,7 @@ try {
                 es.created_at
             FROM exam_submissions es
             JOIN exams e ON es.exam_id = e.id
-            WHERE es.student_id = ?
+            WHERE es.student_id = ? AND es.review_status = 'published'
             ORDER BY es.created_at ASC
             LIMIT 5
         ");
@@ -248,8 +248,8 @@ try {
     
     
     if (empty($chart_exam_labels)) {
-        $chart_exam_labels = ['Quiz 1', 'Quiz 2', 'Midterm', 'Quiz 3', 'Finals'];
-        $chart_exam_scores = [78, 85, 90, 88, 94];
+        $chart_exam_labels = [];
+        $chart_exam_scores = [];
     }
 
     
@@ -262,7 +262,7 @@ try {
                 SUM(CASE WHEN percentage >= 60 AND percentage < 85 THEN 1 ELSE 0 END) as review,
                 SUM(CASE WHEN percentage < 60 THEN 1 ELSE 0 END) as unassessed
             FROM exam_submissions
-            WHERE student_id = ?
+            WHERE student_id = ? AND review_status = 'published'
         ");
         $stmt->execute([$student_id]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -280,7 +280,7 @@ try {
     
     
     if (array_sum($mastery_data) == 0) {
-        $mastery_data = [65, 25, 10];
+        $mastery_data = [0, 0, 0];
     }
 
     
@@ -291,7 +291,7 @@ try {
         $stmt = $pdo->prepare("
             SELECT AVG(percentage) as avg_score
             FROM exam_submissions
-            WHERE student_id = ?
+            WHERE student_id = ? AND review_status = 'published'
         ");
         $stmt->execute([$student_id]);
         $avg = $stmt->fetchColumn();
@@ -299,13 +299,7 @@ try {
         if ($avg) {
             
             $base = (float)$avg;
-            $skills_data = [
-                round($base + rand(-5, 10), 0),
-                round($base + rand(-3, 8), 0),
-                round($base + rand(-10, 5), 0),
-                round($base + rand(-2, 6), 0),
-                round($base + rand(-8, 3), 0)
-            ];
+            $skills_data = [0, 0, 0, 0, 0];
         }
     } catch (PDOException $e) {
         
@@ -313,7 +307,7 @@ try {
     
     
     if (array_sum($skills_data) == 0) {
-        $skills_data = [85, 92, 70, 88, 80];
+        $skills_data = [0, 0, 0, 0, 0];
     }
 
     
@@ -334,10 +328,10 @@ try {
                     es.created_at
                 FROM exam_submissions es
                 LEFT JOIN exams e ON es.exam_id = e.id
-                WHERE (es.student_id = ? OR es.student_name LIKE ?) AND es.term = ?
+                WHERE es.student_id = ? AND es.review_status = 'published' AND es.term = ?
                 ORDER BY es.created_at DESC
             ");
-            $stmt->execute([$student_id, "%{$student['fullname']}%", $selected_term]);
+            $stmt->execute([$student_id, $selected_term]);
         } else {
             $stmt = $pdo->prepare("
                 SELECT 
@@ -352,10 +346,10 @@ try {
                     es.created_at
                 FROM exam_submissions es
                 LEFT JOIN exams e ON es.exam_id = e.id
-                WHERE (es.student_id = ? OR es.student_name LIKE ?)
+                WHERE es.student_id = ? AND es.review_status = 'published'
                 ORDER BY es.created_at DESC
             ");
-            $stmt->execute([$student_id, "%{$student['fullname']}%"]);
+            $stmt->execute([$student_id]);
         }
         $exam_results = $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (PDOException $e) {
@@ -372,7 +366,7 @@ try {
                 es.created_at
             FROM exam_submissions es
             JOIN exams e ON es.exam_id = e.id
-            WHERE es.student_id = ?
+            WHERE es.student_id = ? AND es.review_status = 'published'
             ORDER BY es.created_at DESC
             LIMIT 5
         ");
@@ -403,23 +397,7 @@ try {
 
     
     if (empty($notifications)) {
-        $notifications = [
-            [
-                'type' => 'Groq AI Exam Grader Verified',
-                'message' => 'Your Structural Theory 1 & Geotechnical Mechanics exam answer sheets were successfully verified by Groq AI Vision Engine.',
-                'created_at' => date('Y-m-d H:i:s', strtotime('-15 minutes'))
-            ],
-            [
-                'type' => 'New Exam Published',
-                'message' => 'Prof. Jolas published a new Midterm Exam for CE 402 - Geotechnical Engineering. Time limit: 45 mins.',
-                'created_at' => date('Y-m-d H:i:s', strtotime('-2 hours'))
-            ],
-            [
-                'type' => 'Official Transcript Available',
-                'message' => 'Your official academic PDF evaluation transcript for Prelim & Midterm terms is now available for download.',
-                'created_at' => date('Y-m-d H:i:s', strtotime('-1 day'))
-            ]
-        ];
+        $notifications = [];
     }
 
 } catch (PDOException $e) {

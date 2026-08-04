@@ -283,4 +283,26 @@ $stmtUsr = $pdo->prepare("
 ");
 $stmtUsr->execute([$defaultPassHash, $defaultPassHash]);
 
+// Seed Deterministic Test Exam (ID #1) for Automated E2E verification
+$stmtExamSeed = $pdo->prepare("
+    INSERT INTO exams (id, teacher_id, title, subject, specialization, difficulty, time_limit, total_items, passing_percentage, status, created_at)
+    VALUES (1, 2, 'QA Civil Engineering Fundamentals Exam', 'Structural Engineering', 'Structural Engineering', 'medium', 45, 2, 75.00, 'active', NOW())
+    ON DUPLICATE KEY UPDATE title = VALUES(title), total_items = VALUES(total_items), passing_percentage = VALUES(passing_percentage)
+");
+$stmtExamSeed->execute();
+
+$stmtQ1Seed = $pdo->prepare("
+    INSERT INTO exam_questions (id, exam_id, question_text, question_type, option_a, option_b, option_c, option_d, correct_answer, points)
+    VALUES (1, 1, 'What is the formula for Stopping Sight Distance (SSD)?', 'multiple_choice', 'a', 'b', 'c', 'd', 'a', 1.00)
+    ON DUPLICATE KEY UPDATE question_text = VALUES(question_text)
+");
+$stmtQ1Seed->execute();
+
+$stmtQ2Seed = $pdo->prepare("
+    INSERT INTO exam_questions (id, exam_id, question_text, question_type, option_a, option_b, option_c, option_d, correct_answer, points)
+    VALUES (2, 1, 'Flexible pavement design uses CBR structural number.', 'true_false', 'true', 'false', NULL, NULL, 'true', 1.00)
+    ON DUPLICATE KEY UPDATE question_text = VALUES(question_text)
+");
+$stmtQ2Seed->execute();
+
 echo "\n=== Migration Complete ===\n";

@@ -60,7 +60,7 @@ class LessonExtractionService {
             return ['success' => false, 'error' => "Unsupported file extension: .{$fileExt}"];
         }
 
-        if (!in_array($detectedMime, $allowedMimes[$fileExt]) && $detectedMime !== 'application/octet-stream') {
+        if (!in_array($detectedMime, $allowedMimes[$fileExt])) {
             self::markFailed($pdo, $materialId, "File content type does not match extension .{$fileExt} (Detected: {$detectedMime}).");
             return ['success' => false, 'error' => "File content type does not match extension .{$fileExt} (Detected: {$detectedMime})."];
         }

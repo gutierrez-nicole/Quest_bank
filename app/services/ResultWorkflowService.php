@@ -222,7 +222,7 @@ class ResultWorkflowService {
             return ['allowed' => false, 'error' => 'Unauthorized: Cannot access another student\'s exam result.'];
         }
 
-        if (!in_array($sub['review_status'], ['published', 'finalized'])) {
+        if ($sub['review_status'] !== 'published') {
             return ['allowed' => false, 'error' => 'Exam result is pending teacher review and is not yet available.'];
         }
 

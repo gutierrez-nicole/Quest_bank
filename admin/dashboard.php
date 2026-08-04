@@ -361,13 +361,13 @@ try {
                             <i class="fa-solid fa-fire text-orange-500 mr-1.5"></i> Peak System Load Density (Heatmap Grid)
                         </h4>
                         <div class="grid grid-cols-7 gap-2 pt-2 text-[10px] font-bold text-center">
-                            <div class="p-2 bg-orange-100 text-orange-800 rounded">Mon<br><span class="text-[9px]">82%</span></div>
-                            <div class="p-2 bg-orange-200 text-orange-800 rounded">Tue<br><span class="text-[9px]">89%</span></div>
-                            <div class="p-2 bg-orange-500 text-white rounded font-black">Wed<br><span class="text-[9px]">98%</span></div>
-                            <div class="p-2 bg-orange-300 text-orange-900 rounded">Thu<br><span class="text-[9px]">91%</span></div>
-                            <div class="p-2 bg-orange-400 text-white rounded font-black">Fri<br><span class="text-[9px]">95%</span></div>
-                            <div class="p-2 bg-stone-100 text-stone-600 rounded">Sat<br><span class="text-[9px]">34%</span></div>
-                            <div class="p-2 bg-stone-100 text-stone-600 rounded">Sun<br><span class="text-[9px]">20%</span></div>
+                            <div class="p-2 bg-orange-100 text-orange-800 rounded">Mon<br><span class="text-[9px]">0%</span></div>
+                            <div class="p-2 bg-orange-200 text-orange-800 rounded">Tue<br><span class="text-[9px]">0%</span></div>
+                            <div class="p-2 bg-orange-500 text-white rounded font-black">Wed<br><span class="text-[9px]">0%</span></div>
+                            <div class="p-2 bg-orange-300 text-orange-900 rounded">Thu<br><span class="text-[9px]">0%</span></div>
+                            <div class="p-2 bg-orange-400 text-white rounded font-black">Fri<br><span class="text-[9px]">0%</span></div>
+                            <div class="p-2 bg-stone-100 text-stone-600 rounded">Sat<br><span class="text-[9px]">0%</span></div>
+                            <div class="p-2 bg-stone-100 text-stone-600 rounded">Sun<br><span class="text-[9px]">0%</span></div>
                         </div>
                     </div>
 
@@ -474,19 +474,19 @@ try {
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div class="bg-stone-50 dark:bg-stone-800/40 p-3.5 rounded-2xl border border-stone-100 dark:border-stone-800 text-center space-y-1">
                     <p class="text-[9px] font-extrabold uppercase text-stone-400">Predicted Pass Rate</p>
-                    <p class="text-xl font-black text-emerald-600 dark:text-emerald-400">94.8%</p>
+                    <p class="text-xl font-black text-emerald-600 dark:text-emerald-400">Insufficient data</p>
                 </div>
                 <div class="bg-stone-50 dark:bg-stone-800/40 p-3.5 rounded-2xl border border-stone-100 dark:border-stone-800 text-center space-y-1">
                     <p class="text-[9px] font-extrabold uppercase text-stone-400">OCR Grading Precision</p>
-                    <p class="text-xl font-black text-orange-500">98.2%</p>
+                    <p class="text-xl font-black text-orange-500">Insufficient data</p>
                 </div>
                 <div class="bg-stone-50 dark:bg-stone-800/40 p-3.5 rounded-2xl border border-stone-100 dark:border-stone-800 text-center space-y-1">
                     <p class="text-[9px] font-extrabold uppercase text-stone-400">Student Risk Factor</p>
-                    <p class="text-xl font-black text-blue-600 dark:text-blue-400">Low (3.1%)</p>
+                    <p class="text-xl font-black text-blue-600 dark:text-blue-400">Insufficient data</p>
                 </div>
                 <div class="bg-stone-50 dark:bg-stone-800/40 p-3.5 rounded-2xl border border-stone-100 dark:border-stone-800 text-center space-y-1">
                     <p class="text-[9px] font-extrabold uppercase text-stone-400">Forecast Gain</p>
-                    <p class="text-xl font-black text-purple-600 dark:text-purple-400">+4.2%</p>
+                    <p class="text-xl font-black text-purple-600 dark:text-purple-400">N/A</p>
                 </div>
             </div>
 
@@ -504,36 +504,7 @@ try {
                         </thead>
                         <tbody class="divide-y divide-stone-100 dark:divide-stone-800 font-semibold text-stone-700 dark:text-stone-300">
                             <tr class="hover:bg-stone-50/50 dark:hover:bg-stone-800/30">
-                                <td class="p-3.5 font-bold text-stone-800 dark:text-stone-100 flex items-center gap-2">
-                                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Structural Theory & Design
-                                </td>
-                                <td class="p-3.5 text-center font-mono">92.0%</td>
-                                <td class="p-3.5 text-center font-mono text-emerald-600 dark:text-emerald-400 font-bold">96.5%</td>
-                                <td class="p-3.5 text-right"><span class="bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded text-[10px] font-bold">EXCELLENT</span></td>
-                            </tr>
-                            <tr class="hover:bg-stone-50/50 dark:hover:bg-stone-800/30">
-                                <td class="p-3.5 font-bold text-stone-800 dark:text-stone-100 flex items-center gap-2">
-                                    <span class="w-2 h-2 rounded-full bg-amber-500"></span> Geotechnical & Foundation Engg
-                                </td>
-                                <td class="p-3.5 text-center font-mono">84.5%</td>
-                                <td class="p-3.5 text-center font-mono text-orange-600 dark:text-orange-400 font-bold">88.0%</td>
-                                <td class="p-3.5 text-right"><span class="bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-400 px-2 py-0.5 rounded text-[10px] font-bold">STABLE</span></td>
-                            </tr>
-                            <tr class="hover:bg-stone-50/50 dark:hover:bg-stone-800/30">
-                                <td class="p-3.5 font-bold text-stone-800 dark:text-stone-100 flex items-center gap-2">
-                                    <span class="w-2 h-2 rounded-full bg-blue-500"></span> Reinforced Concrete Design
-                                </td>
-                                <td class="p-3.5 text-center font-mono">89.0%</td>
-                                <td class="p-3.5 text-center font-mono text-blue-600 dark:text-blue-400 font-bold">92.4%</td>
-                                <td class="p-3.5 text-right"><span class="bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-400 px-2 py-0.5 rounded text-[10px] font-bold">HIGH</span></td>
-                            </tr>
-                            <tr class="hover:bg-stone-50/50 dark:hover:bg-stone-800/30">
-                                <td class="p-3.5 font-bold text-stone-800 dark:text-stone-100 flex items-center gap-2">
-                                    <span class="w-2 h-2 rounded-full bg-purple-500"></span> Fluid Mechanics & Hydraulics
-                                </td>
-                                <td class="p-3.5 text-center font-mono">86.2%</td>
-                                <td class="p-3.5 text-center font-mono text-purple-600 dark:text-purple-400 font-bold">90.1%</td>
-                                <td class="p-3.5 text-right"><span class="bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-400 px-2 py-0.5 rounded text-[10px] font-bold">HIGH</span></td>
+                                <td colspan="4" class="p-3.5 text-center font-bold text-stone-500">No data available</td>
                             </tr>
                         </tbody>
                     </table>
@@ -545,7 +516,7 @@ try {
                     <i class="fa-solid fa-lightbulb"></i> Groq AI Faculty Remediation Insight
                 </h5>
                 <p class="leading-relaxed">
-                    Student performance in <strong>Structural Engineering</strong> exhibits 96.5% mastery. AI model suggests allocating additional practice problem sets in <strong>Geotechnical Shear Strength & Soil Mechanics</strong> ahead of final term board exam preparations.
+                    Insufficient data
                 </p>
             </div>
 
@@ -631,7 +602,7 @@ try {
                 type: 'line',
                 data: {
                     labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'],
-                    datasets: [{ label: 'Active Telemetry', data: [12, 28, 45, 60, 85, 110, 148], borderColor: '#f97316', tension: 0.4, fill: false }]
+                    datasets: [{ label: 'Active Telemetry', data: [], borderColor: '#f97316', tension: 0.4, fill: false }]
                 },
                 options: chartOptions
             });
@@ -641,7 +612,7 @@ try {
                 type: 'line',
                 data: {
                     labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
-                    datasets: [{ label: 'Groq OCR Traffic', data: [15, 32, 54, 88], borderColor: '#ea580c', backgroundColor: 'rgba(249, 115, 22, 0.2)', fill: true, tension: 0.3 }]
+                    datasets: [{ label: 'Groq OCR Traffic', data: [], borderColor: '#ea580c', backgroundColor: 'rgba(249, 115, 22, 0.2)', fill: true, tension: 0.3 }]
                 },
                 options: chartOptions
             });
@@ -651,7 +622,7 @@ try {
                 type: 'radar',
                 data: {
                     labels: ['OCR Vision', 'Groq Speed', 'Accuracy', 'Database Sync', 'Security'],
-                    datasets: [{ label: 'Engine Health Index %', data: [96, 98, 94, 95, 99], backgroundColor: 'rgba(249, 115, 22, 0.2)', borderColor: '#f97316' }]
+                    datasets: [{ label: 'Engine Health Index %', data: [0, 0, 0, 0, 0], backgroundColor: 'rgba(249, 115, 22, 0.2)', borderColor: '#f97316' }]
                 },
                 options: { 
                     responsive: true, 

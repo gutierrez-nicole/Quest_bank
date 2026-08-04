@@ -174,9 +174,9 @@ try {
     }
     
     if (empty($sections_labels)) {
-        $sections_labels = ['BSCE 4-A', 'BSCE 4-B', 'BSCE 3-A', 'BSCE 2-A'];
-        $sections_pass_rates = [42, 38, 45, 30];
-        $sections_fail_rates = [8, 12, 5, 15];
+        $sections_labels = [];
+        $sections_pass_rates = [];
+        $sections_fail_rates = [];
     }
 
     

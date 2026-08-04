@@ -50,6 +50,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_review_status'
     if ($submission_id > 0) {
         try {
             AuthorizationService::enforceSubmissionAccess($teacher_id, $submission_id);
+
+            // Handle teacher score override/adjustment if provided
+            if (isset($_POST['edit_correct_count']) && $_POST['edit_correct_count'] !== '') {
+                $edit_correct = max(0, intval($_POST['edit_correct_count']));
+                $tot_items = intval($_POST['total_items'] ?? 10);
+                if ($tot_items > 0 && $edit_correct <= $tot_items) {
+                    $pct = round(($edit_correct / $tot_items) * 100, 2);
+                    $pass_status = ($pct >= 75.0) ? 'Pass' : 'Fail';
+                    $wrong = $tot_items - $edit_correct;
+                    $stmtScoreUpd = $pdo->prepare("UPDATE exam_submissions SET correct_count = ?, wrong_count = ?, total_score = ?, percentage = ?, status = ? WHERE id = ? AND teacher_id = ?");
+                    $stmtScoreUpd->execute([$edit_correct, $wrong, $edit_correct, $pct, $pass_status, $submission_id, $teacher_id]);
+                }
+            }
+
             $wfRes = ResultWorkflowService::transitionStatus($submission_id, $new_status, $teacher_id, $remarks);
 
             $success_msg = "Submission #{$submission_id} review status updated to " . ucfirst(str_replace('_', ' ', $wfRes['new_status'])) . "!";
@@ -67,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rerun_ocr_ai'])) {
     $sub = $stmtFetchSub->fetch(PDO::FETCH_ASSOC);
 
     if ($sub) {
-        $ocrText = $sub['ocr_text'] ?? "1. A\n2. B\n3. C\n4. D\n5. True";
+        $ocrText = $sub['ocr_text'] ?? "";
         $evalRes = GroqService::evaluateAnswerSheetDetailed($sub['student_name'], $sub['exam_title'], $sub['upload_type'], "1. A 2. B 3. C 4. D 5. True", $ocrText);
 
         if (isset($evalRes['success'])) {

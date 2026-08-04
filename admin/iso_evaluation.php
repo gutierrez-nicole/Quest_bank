@@ -46,7 +46,7 @@ try {
 } catch (Exception $e) {
     $evaluations = [];
     $criteria_means = [];
-    $overall_weighted_mean = 3.92;
+    $overall_weighted_mean = 0;
 }
 
 function getLikertInterpretation($score) {

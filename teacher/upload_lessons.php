@@ -23,8 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_material'])) {
             'application/pdf',
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-            'text/plain',
-            'application/octet-stream'
+            'text/plain'
         ];
 
         $finfo = finfo_open(FILEINFO_MIME_TYPE);
@@ -44,48 +43,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_material'])) {
         }
 
         if (!$has_forbidden && $file_size > 0 && $file_size <= 10485760 && in_array($file_ext, $allowed_exts) && in_array($mime_type, $allowed_mimes)) {
-            $upload_dir = __DIR__ . '/uploads/';
-            if (!is_dir($upload_dir)) {
-                mkdir($upload_dir, 0755, true);
-            }
-
-            $new_file_name = uniqid('lesson_') . '.' . $file_ext;
-            $target_path = $upload_dir . $new_file_name;
-
-            if (move_uploaded_file($file_tmp, $target_path)) {
-                try {
-                    $stmt = $pdo->prepare("
-                        INSERT INTO lesson_materials 
-                        (teacher_id, subject, title, file_name, file_path, file_type, file_size, processing_status, original_filename, stored_filename, mime_type) 
-                        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
-                    ");
-                    $stmt->execute([
-                        getCurrentUserId(),
-                        $subject,
-                        $title,
-                        $clean_original_filename,
-                        'uploads/' . $new_file_name,
-                        strtoupper($file_ext),
-                        $file_size,
-                        $clean_original_filename,
-                        $new_file_name,
-                        $mime_type
-                    ]);
-                    $material_id = $pdo->lastInsertId();
-                    logActivity("Uploaded new lesson material '{$title}' ({$clean_original_filename}) for subject '{$subject}'.");
-
-                    // Trigger automatic text extraction
-                    $extractRes = LessonExtractionService::extractAndSave($material_id);
-                    if ($extractRes['success']) {
-                        $success_msg = "Lesson material uploaded and content extracted successfully! ({$extractRes['word_count']} words, {$extractRes['page_count']} pages)";
-                    } else {
-                        $error_msg = "Lesson uploaded, but text extraction encountered an issue: " . $extractRes['error'];
-                    }
-                } catch (PDOException $e) {
-                    $error_msg = "Database record failed: " . $e->getMessage();
-                }
+            require_once __DIR__ . '/../app/services/FileValidationService.php';
+            $validationResult = FileValidationService::validateFile($file_tmp, $file_name);
+            
+            if (!$validationResult['success']) {
+                $error_msg = $validationResult['error'];
             } else {
-                $error_msg = "Failed to move uploaded file to server directory.";
+                $upload_dir = __DIR__ . '/uploads/';
+                if (!is_dir($upload_dir)) {
+                    mkdir($upload_dir, 0755, true);
+                }
+
+                $new_file_name = uniqid('lesson_') . '.' . $file_ext;
+                $target_path = $upload_dir . $new_file_name;
+
+                if (move_uploaded_file($file_tmp, $target_path)) {
+                    try {
+                        $stmt = $pdo->prepare("
+                            INSERT INTO lesson_materials 
+                            (teacher_id, subject, title, file_name, file_path, file_type, file_size, processing_status, original_filename, stored_filename, mime_type) 
+                            VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)
+                        ");
+                        $stmt->execute([
+                            getCurrentUserId(),
+                            $subject,
+                            $title,
+                            $clean_original_filename,
+                            'uploads/' . $new_file_name,
+                            strtoupper($file_ext),
+                            $file_size,
+                            $clean_original_filename,
+                            $new_file_name,
+                            $mime_type
+                        ]);
+                        $material_id = $pdo->lastInsertId();
+                        logActivity("Uploaded new lesson material '{$title}' ({$clean_original_filename}) for subject '{$subject}'.");
+
+                        // Trigger automatic text extraction
+                        $extractRes = LessonExtractionService::extractAndSave($material_id);
+                        if ($extractRes['success']) {
+                            $success_msg = "Lesson material uploaded and content extracted successfully! ({$extractRes['word_count']} words, {$extractRes['page_count']} pages)";
+                        } else {
+                            $error_msg = "Lesson uploaded, but text extraction encountered an issue: " . $extractRes['error'];
+                        }
+                    } catch (PDOException $e) {
+                        $error_msg = "Database record failed: " . $e->getMessage();
+                    }
+                } else {
+                    $error_msg = "Failed to move uploaded file to server directory.";
+                }
             }
         } else {
             $error_msg = "Invalid file type. Allowed formats: PDF, DOCX, PPTX, TXT.";
