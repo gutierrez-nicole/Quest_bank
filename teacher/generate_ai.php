@@ -1160,6 +1160,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                 cb.checked = false;
                             });
                         }
+
+                        function updateManualSourceDisplay(selectElem) {
+                            const card = selectElem.closest('[data-testid="generated-question-item"]');
+                            if (!card) return;
+                            const attrContainer = card.querySelector('[data-testid="question-source-attribution"]');
+                            if (!attrContainer) return;
+                            
+                            const selectedOption = selectElem.options[selectElem.selectedIndex];
+                            const period = selectedOption.getAttribute('data-period') || '';
+                            const title = selectedOption.getAttribute('data-title') || '';
+                            
+                            if (selectElem.value && period) {
+                                attrContainer.innerHTML = `
+                                    <span class="bg-blue-100 text-blue-800 font-extrabold px-2 py-0.5 rounded-full uppercase" data-testid="source-period">${period}</span>
+                                    <span class="bg-stone-200 text-stone-700 font-bold px-2 py-0.5 rounded-full truncate max-w-[120px]" data-testid="source-topic">${title}</span>
+                                    <span class="bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.5 rounded-full" data-testid="source-confidence"><i class="fa-solid fa-circle-check mr-0.5"></i> Manual Verified</span>
+                                `;
+                            } else {
+                                attrContainer.innerHTML = `
+                                    <span class="bg-amber-100 text-amber-800 font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1" data-testid="source-verification-required"><i class="fa-solid fa-triangle-exclamation text-amber-600"></i> Source verification required.</span>
+                                `;
+                            }
+                        }
                     </script>
                 </div>
 
@@ -1249,8 +1272,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                     $selectedPoolIds = $ai_meta_output['lesson_ids'] ?? [];
                                     $itemSrcIds = array_values(array_unique(array_intersect(array_map('intval', $rawSrcIds), array_map('intval', $selectedPoolIds))));
                                     $isSourceVerified = !empty($itemSrcIds);
-                                    $itemPeriod = $item['source_academic_period'] ?? ($ai_meta_output['covered_periods'][0] ?? 'general');
-                                    $itemTopic = $item['source_topic'] ?? $_POST['subject'];
+
+                                    $matchedLesson = null;
+                                    if ($isSourceVerified) {
+                                        foreach ($selLessons ?? [] as $sl) {
+                                            if ((int)$sl['id'] === (int)$itemSrcIds[0]) {
+                                                $matchedLesson = $sl;
+                                                break;
+                                            }
+                                        }
+                                    }
+
+                                    $itemPeriod = $matchedLesson['academic_period'] ?? '';
+                                    $itemTopic = $matchedLesson['title'] ?? '';
                                     $itemConf = $isSourceVerified ? 'high' : 'review_required';
                                 ?>
                                     <div class="p-4 border border-stone-200 rounded-2xl bg-stone-50/40 space-y-3 hover:border-orange-300 transition-all" data-testid="generated-question-item" data-lesson-id="<?php echo htmlspecialchars($itemSrcIds[0] ?? ''); ?>">
@@ -1262,13 +1296,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
 
                                             <!-- Question Attribution Badge -->
                                             <div class="flex items-center gap-1.5 text-[10px]" data-testid="question-source-attribution">
-                                                <span class="bg-blue-100 text-blue-800 font-extrabold px-2 py-0.5 rounded-full uppercase" data-testid="source-period">
-                                                    <?php echo htmlspecialchars($itemPeriod); ?>
-                                                </span>
-                                                <span class="bg-stone-200 text-stone-700 font-bold px-2 py-0.5 rounded-full truncate max-w-[120px]" data-testid="source-topic">
-                                                    <?php echo htmlspecialchars($itemTopic); ?>
-                                                </span>
-                                                <?php if ($isSourceVerified): ?>
+                                                <?php if ($isSourceVerified && !empty($itemPeriod)): ?>
+                                                    <span class="bg-blue-100 text-blue-800 font-extrabold px-2 py-0.5 rounded-full uppercase" data-testid="source-period">
+                                                        <?php echo htmlspecialchars($itemPeriod); ?>
+                                                    </span>
+                                                    <span class="bg-stone-200 text-stone-700 font-bold px-2 py-0.5 rounded-full truncate max-w-[120px]" data-testid="source-topic">
+                                                        <?php echo htmlspecialchars($itemTopic); ?>
+                                                    </span>
                                                     <span class="bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.5 rounded-full" data-testid="source-confidence">
                                                         <i class="fa-solid fa-circle-check mr-0.5"></i> High Grounding
                                                     </span>
@@ -1293,10 +1327,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                             <label class="text-[10px] font-bold text-stone-600 uppercase flex items-center gap-1">
                                                 <i class="fa-solid fa-book-bookmark text-orange-500"></i> Verified Lesson Source:
                                             </label>
-                                            <select name="questions[<?php echo $idx; ?>][manual_source_id]" data-testid="manual-source-select" class="bg-white border border-stone-300 rounded-lg px-2.5 py-1 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500 max-w-xs">
+                                            <select name="questions[<?php echo $idx; ?>][manual_source_id]" data-testid="manual-source-select" onchange="updateManualSourceDisplay(this)" class="bg-white border border-stone-300 rounded-lg px-2.5 py-1 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500 max-w-xs">
                                                 <option value="" <?php echo !$isSourceVerified ? 'selected' : ''; ?>>-- Select Verified Lesson Source --</option>
                                                 <?php foreach ($selLessons ?? [] as $sl): ?>
-                                                    <option value="<?php echo $sl['id']; ?>" <?php echo (in_array((int)$sl['id'], $itemSrcIds)) ? 'selected' : ''; ?>>
+                                                    <option value="<?php echo $sl['id']; ?>" data-period="<?php echo htmlspecialchars($sl['academic_period'] ?? 'general'); ?>" data-title="<?php echo htmlspecialchars($sl['title']); ?>" <?php echo (in_array((int)$sl['id'], $itemSrcIds)) ? 'selected' : ''; ?>>
                                                         <?php echo htmlspecialchars($sl['title']); ?> (<?php echo ucfirst($sl['academic_period'] ?? 'general'); ?>)
                                                     </option>
                                                 <?php endforeach; ?>

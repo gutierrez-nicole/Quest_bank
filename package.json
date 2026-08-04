@@ -5,7 +5,7 @@
   "main": "index.php",
   "scripts": {
     "test": "npx playwright test",
-    "test:epic22": "npx playwright test tests/epic22_e2e_complete.spec.js"
+    "test:epic22": "npx playwright test"
   },
   "devDependencies": {
     "@playwright/test": "^1.40.0"

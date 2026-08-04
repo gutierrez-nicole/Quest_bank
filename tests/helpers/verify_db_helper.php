@@ -11,7 +11,7 @@ $action = $argv[1] ?? '';
 
 $pdo = getDBConnection();
 if (!$pdo) {
-    echo json_encode(['error' => 'Database connection failed']);
+    echo json_encode(['success' => false, 'error' => 'Database connection failed']);
     exit(1);
 }
 
@@ -23,23 +23,49 @@ if ($action === 'seed') {
 if ($action === 'verify_exam_saved') {
     $batchId = $argv[2] ?? '';
     
+    if (empty($batchId)) {
+        echo json_encode(['success' => false, 'error' => 'Batch ID parameter missing']);
+        exit(1);
+    }
+
     $stmtBatch = $pdo->prepare("SELECT * FROM ai_generation_batches WHERE generation_batch_id = ?");
     $stmtBatch->execute([$batchId]);
     $batch = $stmtBatch->fetch(PDO::FETCH_ASSOC);
 
-    if (!$batch || empty($batch['saved_exam_id'])) {
-        echo json_encode(['success' => false, 'error' => 'Batch not found or not consumed']);
+    if (!$batch) {
+        echo json_encode(['success' => false, 'error' => "Batch '{$batchId}' not found in database"]);
         exit(1);
     }
 
-    $examId = $batch['saved_exam_id'];
+    if (empty($batch['saved_exam_id']) || empty($batch['batch_consumed_at'])) {
+        echo json_encode(['success' => false, 'error' => "Batch '{$batchId}' has not been consumed or saved"]);
+        exit(1);
+    }
+
+    $examId = intval($batch['saved_exam_id']);
     $stmtExam = $pdo->prepare("SELECT * FROM exams WHERE id = ?");
     $stmtExam->execute([$examId]);
     $exam = $stmtExam->fetch(PDO::FETCH_ASSOC);
 
-    $stmtQuestions = $pdo->prepare("SELECT * FROM exam_questions WHERE exam_id = ?");
+    if (!$exam) {
+        echo json_encode(['success' => false, 'error' => "Exam ID '{$examId}' associated with batch not found"]);
+        exit(1);
+    }
+
+    // Validate batch and exam metadata agreement
+    if ($exam['generation_batch_id'] !== $batchId) {
+        echo json_encode(['success' => false, 'error' => "Exam generation_batch_id mismatch"]);
+        exit(1);
+    }
+
+    $stmtQuestions = $pdo->prepare("SELECT * FROM exam_questions WHERE exam_id = ? ORDER BY id ASC");
     $stmtQuestions->execute([$examId]);
     $questions = $stmtQuestions->fetchAll(PDO::FETCH_ASSOC);
+
+    if (empty($questions)) {
+        echo json_encode(['success' => false, 'error' => "No questions found for saved exam ID '{$examId}'"]);
+        exit(1);
+    }
 
     $stmtSources = $pdo->prepare("
         SELECT gqs.* 
@@ -50,12 +76,110 @@ if ($action === 'verify_exam_saved') {
     $stmtSources->execute([$examId]);
     $sources = $stmtSources->fetchAll(PDO::FETCH_ASSOC);
 
+    // Decode batch selected lessons
+    $batchLessonIds = !empty($batch['selected_lesson_ids']) ? array_map('intval', explode(',', $batch['selected_lesson_ids'])) : [];
+
+    $detailedQuestions = [];
+    $seenQuestionLessonPairs = [];
+
+    foreach ($questions as $q) {
+        $qId = intval($q['id']);
+        
+        // Fetch source relations for this question
+        $stmtQSources = $pdo->prepare("SELECT * FROM generated_question_sources WHERE question_id = ?");
+        $stmtQSources->execute([$qId]);
+        $qSources = $stmtQSources->fetchAll(PDO::FETCH_ASSOC);
+
+        $qRelationCount = count($qSources);
+
+        if ($qRelationCount === 0) {
+            echo json_encode(['success' => false, 'error' => "Question ID '{$qId}' has zero source relations in generated_question_sources"]);
+            exit(1);
+        }
+
+        $qExactLessonIds = [];
+        $qPeriods = [];
+
+        foreach ($qSources as $qs) {
+            $lId = intval($qs['source_lesson_id']);
+            
+            // Check for duplicate question-lesson pair
+            $pairKey = "{$qId}_{$lId}";
+            if (isset($seenQuestionLessonPairs[$pairKey])) {
+                echo json_encode(['success' => false, 'error' => "Duplicate question-lesson source relation detected for question '{$qId}' and lesson '{$lId}'"]);
+                exit(1);
+            }
+            $seenQuestionLessonPairs[$pairKey] = true;
+
+            // Check if source lesson belongs to batch selected lessons
+            if (!empty($batchLessonIds) && !in_array($lId, $batchLessonIds, true)) {
+                echo json_encode(['success' => false, 'error' => "Unexpected source lesson ID '{$lId}' for question '{$qId}' not in batch selected lessons"]);
+                exit(1);
+            }
+
+            $qExactLessonIds[] = $lId;
+            if (!empty($qs['academic_period'])) {
+                $qPeriods[] = $qs['academic_period'];
+            }
+        }
+
+        $detailedQuestions[] = [
+            'id' => $qId,
+            'question' => $q['question'],
+            'type' => $q['type'],
+            'points' => intval($q['points']),
+            'source_topic' => $q['source_topic'],
+            'source_lesson_id' => intval($q['source_lesson_id']),
+            'source_relations_count' => $qRelationCount,
+            'exact_source_lesson_ids' => array_values(array_unique($qExactLessonIds)),
+            'source_academic_periods' => array_values(array_unique($qPeriods)),
+            'is_review_required' => empty($q['source_lesson_id']) ? 1 : 0,
+            'source_verified_by' => $qSources[0]['source_verified_by'] ?? null,
+            'source_verified_at' => $qSources[0]['source_verified_at'] ?? null
+        ];
+    }
+
+    $responseBatch = [
+        'generation_batch_id' => $batch['generation_batch_id'],
+        'teacher_id' => intval($batch['teacher_id']),
+        'selected_lesson_ids' => $batch['selected_lesson_ids'],
+        'selected_periods' => $batch['selected_periods'],
+        'selected_subject' => $batch['selected_subject'],
+        'semester' => $batch['semester'],
+        'school_year' => $batch['school_year'],
+        'year_level' => $batch['year_level'],
+        'program' => $batch['program'],
+        'batch_status' => $batch['batch_status'],
+        'requested_question_count' => intval($batch['requested_question_count']),
+        'generated_question_count' => intval($batch['generated_question_count']),
+        'failed_question_count' => intval($batch['failed_question_count']),
+        'source_lesson_count' => intval($batch['source_lesson_count']),
+        'batch_consumed_at' => $batch['batch_consumed_at'],
+        'batch_consumed_by' => intval($batch['batch_consumed_by']),
+        'saved_exam_id' => intval($batch['saved_exam_id']),
+        'teacher_acknowledged_by' => !empty($batch['teacher_acknowledged_by']) ? intval($batch['teacher_acknowledged_by']) : null,
+        'teacher_acknowledged_at' => $batch['teacher_acknowledged_at'] ?? null,
+        'acknowledgement_reason' => $batch['acknowledgement_reason'] ?? null,
+        'acknowledgement_token_hash' => $batch['acknowledgement_token_hash'] ?? null
+    ];
+
+    $responseExam = [
+        'id' => intval($exam['id']),
+        'title' => $exam['title'],
+        'subject' => $exam['subject'],
+        'covered_periods' => $exam['covered_periods'],
+        'source_lesson_count' => intval($exam['source_lesson_count']),
+        'generation_source_type' => $exam['generation_source_type'],
+        'generation_batch_id' => $exam['generation_batch_id'],
+        'total_items' => intval($exam['total_items'])
+    ];
+
     echo json_encode([
         'success' => true,
-        'batch' => $batch,
-        'exam' => $exam,
+        'batch' => $responseBatch,
+        'exam' => $responseExam,
         'questions_count' => count($questions),
-        'questions' => $questions,
+        'questions' => $detailedQuestions,
         'sources_count' => count($sources),
         'sources' => $sources
     ]);
@@ -96,5 +220,5 @@ function numeric_check($val) {
     return is_numeric($val);
 }
 
-echo json_encode(['error' => 'Unknown action']);
+echo json_encode(['success' => false, 'error' => 'Unknown action']);
 exit(1);
