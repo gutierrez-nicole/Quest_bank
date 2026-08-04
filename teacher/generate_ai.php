@@ -286,14 +286,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
                 $ai_meta_output['ack_token'] = $signed_incomplete_ack_token;
             }
 
-            // Final Repair 6 & 10: Persist generation audit record with failed chunk metadata & batch_status
+            // Final Security Repair: Failure to persist ai_generation_batches MUST be treated as generation failure
+            $batchInsertedSuccess = false;
             try {
                 $stmtBatch = $pdo->prepare("
                     INSERT INTO ai_generation_batches 
                     (generation_batch_id, teacher_id, selected_lesson_ids, selected_lesson_titles, selected_periods, selected_subject, semester, school_year, year_level, program, total_selected_words, estimated_tokens, ai_model, generation_duration, requested_question_count, generated_question_count, failed_question_count, warnings, batch_status, failed_chunk_count, affected_lesson_ids, failure_messages)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
-                $stmtBatch->execute([
+                $batchInsertedSuccess = $stmtBatch->execute([
                     $generation_batch_id,
                     $teacher_id,
                     json_encode($associated_lesson_ids),
@@ -317,8 +318,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
                     $affectedLessonIdsStr,
                     $failureMessagesStr
                 ]);
-            } catch (PDOException $e) {
-                // Keep generation working even if batch audit logging encounters non-fatal error
+            } catch (Throwable $e) {
+                $batchInsertedSuccess = false;
+            }
+
+            if (!$batchInsertedSuccess) {
+                $generated_questions = null;
+                $error_msg = "Generation failed: Server-side audit batch record could not be persisted.";
             }
 
             $periodLabel = !empty($associated_periods) ? ' (' . implode(', ', array_map('ucfirst', $associated_periods)) . ')' : '';
@@ -335,7 +341,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
     }
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || isset($_POST['save_title']))) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
     validateCSRFToken();
     $title = trim(sanitizeInput($_POST['save_title'] ?? ''));
     $subject = trim(sanitizeInput($_POST['save_subject'] ?? ''));
@@ -350,187 +356,252 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
     $qualifying_unlock_date = !empty($_POST['save_qualifying_unlock_date']) ? $_POST['save_qualifying_unlock_date'] : null;
     $qualifying_deadline = !empty($_POST['save_qualifying_deadline']) ? $_POST['save_qualifying_deadline'] : null;
     $questions = $_POST['questions'] ?? [];
-    $meta_json = $_POST['save_ai_metadata'] ?? '{}';
-    $lesson_ids_str = $_POST['save_lesson_ids'] ?? '';
 
-    $metaData = json_decode($meta_json, true) ?? [];
-    $save_covered_periods = !empty($metaData['covered_periods']) ? implode(',', $metaData['covered_periods']) : null;
-    $save_source_lesson_count = intval($metaData['source_lesson_count'] ?? 0);
-    $save_generation_source_type = $metaData['generation_source_type'] ?? null;
-    $save_generation_batch_id = $metaData['generation_batch_id'] ?? null;
-    $save_ai_model = $metaData['model'] ?? null;
-
-    $batchStatus = $metaData['batch_status'] ?? 'completed';
-    $ackReason = trim(sanitizeInput($_POST['acknowledgement_reason'] ?? ''));
-    $ackTokenInput = $_POST['ack_token'] ?? ($metaData['ack_token'] ?? '');
-
-    // Final Repair 10: Incomplete generation save requires verified signed acknowledgement token
-    if ($batchStatus === 'incomplete') {
-        $ackTokenData = verifyIncompleteAckToken($ackTokenInput, $teacher_id, $secretKey, $save_generation_batch_id);
-        if (!$ackTokenData) {
-            $error_msg = "Cannot save exam: Invalid, expired, replayed, or tampered incomplete batch acknowledgement token.";
-        } elseif (empty($ackReason)) {
-            $error_msg = "Cannot save exam: Incomplete AI generation batch requires an explicit teacher acknowledgement reason.";
-        }
+    // Server-Authoritative: Accept ONLY a stable generation_batch_id from POST
+    $save_generation_batch_id = trim($_POST['save_generation_batch_id'] ?? $_POST['generation_batch_id'] ?? '');
+    if (empty($save_generation_batch_id)) {
+        $meta_json_post = $_POST['save_ai_metadata'] ?? '{}';
+        $meta_post = json_decode($meta_json_post, true) ?? [];
+        $save_generation_batch_id = $meta_post['generation_batch_id'] ?? '';
     }
 
-    if (empty($error_msg) && !empty($title) && !empty($subject) && !empty($questions)) {
-        try {
-            $pdo->beginTransaction();
-
-            $stmt = $pdo->prepare("
-                INSERT INTO exams 
-                (teacher_id, title, subject, specialization, difficulty, time_limit, total_items, ai_metadata, lesson_ids,
-                 exam_category, qualifying_passing_percentage, qualifying_max_attempts, qualifying_year_level,
-                 qualifying_program, qualifying_is_required, qualifying_unlock_date, qualifying_deadline,
-                 covered_periods, source_lesson_count, generation_source_type, generation_batch_id, ai_model) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ");
-            $stmt->execute([
-                $teacher_id, 
-                $title, 
-                $subject, 
-                $specialization, 
-                $difficulty, 
-                60, 
-                count($questions),
-                $meta_json,
-                $lesson_ids_str,
-                $exam_category,
-                $qualifying_passing_percentage,
-                $qualifying_max_attempts,
-                $qualifying_year_level,
-                $qualifying_program,
-                $qualifying_is_required,
-                $qualifying_unlock_date,
-                $qualifying_deadline,
-                $save_covered_periods,
-                $save_source_lesson_count,
-                $save_generation_source_type,
-                $save_generation_batch_id,
-                $save_ai_model
-            ]);
-            $exam_id = $pdo->lastInsertId();
-
-            $saveLessonIds = array_map('intval', array_filter(explode(',', $lesson_ids_str)));
-
-            $qStmt = $pdo->prepare("
-                INSERT INTO exam_questions 
-                (exam_id, question_text, question_type, option_a, option_b, option_c, option_d, correct_answer, formula_latex, matching_pairs, points, explanation, difficulty, topic, lesson_id) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ");
-
-            // Repair Prompt 3: Normalized generated_question_sources relation table
-            $srcStmt = $pdo->prepare("
-                INSERT IGNORE INTO generated_question_sources (question_id, lesson_id, academic_period, source_topic, source_confidence) VALUES (?, ?, ?, ?, ?)
-            ");
-
-            $lessonPeriodMap = [];
-            if (!empty($saveLessonIds)) {
-                $plc = implode(',', array_fill(0, count($saveLessonIds), '?'));
-                $stmtPeriods = $pdo->prepare("SELECT id, COALESCE(academic_period,'general') AS academic_period FROM lesson_materials WHERE id IN ($plc)");
-                $stmtPeriods->execute($saveLessonIds);
-                while ($lp = $stmtPeriods->fetch(PDO::FETCH_ASSOC)) {
-                    $lessonPeriodMap[(int)$lp['id']] = $lp['academic_period'];
-                }
-            }
-            
-            $seenQuestions = [];
-            $savedCount = 0;
-            $questionIndex = 0;
-
-            foreach ($questions as $q) {
-                $questionIndex++;
-                $qText = trim($q['text'] ?? $q['question'] ?? '');
-                if (empty($qText) || in_array(mb_strtolower($qText), $seenQuestions)) {
-                    continue; 
-                }
-
-                // Final Repair 2: Extract, validate, and normalize source lesson IDs against selected pool
-                $rawQSources = [];
-                if (!empty($q['manual_source_id'])) {
-                    $rawQSources[] = intval($q['manual_source_id']);
-                }
-                if (!empty($q['source_lesson_ids'])) {
-                    $rawSources = is_array($q['source_lesson_ids']) ? $q['source_lesson_ids'] : explode(',', (string)$q['source_lesson_ids']);
-                    foreach ($rawSources as $rs) {
-                        $rawQSources[] = intval($rs);
-                    }
-                }
-
-                // Strictly intersect with authorized/selected lesson pool
-                $validQSources = array_values(array_unique(array_intersect($rawQSources, $saveLessonIds)));
-                $isReviewRequired = empty($validQSources) ? 1 : 0;
-
-                // Final Repair 2: Prevent final save if unverified source questions remain without teacher assignment
-                if ($isReviewRequired === 1) {
-                    $pdo->rollBack();
-                    $error_msg = "Cannot save exam: Question #{$questionIndex} (\"" . htmlspecialchars(substr($qText, 0, 40)) . "...\") has no verified lesson source. Please assign a valid lesson source for every item before saving.";
-                    break;
-                }
-
-                $seenQuestions[] = mb_strtolower($qText);
-                $qLessonId = $validQSources[0];
-
-                $qStmt->execute([
-                    $exam_id,
-                    $qText,
-                    $q['type'] ?? 'multiple_choice',
-                    $q['opt_a'] ?? null,
-                    $q['opt_b'] ?? null,
-                    $q['opt_c'] ?? null,
-                    $q['opt_d'] ?? null,
-                    $q['correct'] ?? $q['correct_answer'] ?? '',
-                    $q['formula_latex'] ?? null,
-                    isset($q['matching_pairs']) ? (is_string($q['matching_pairs']) ? $q['matching_pairs'] : json_encode($q['matching_pairs'])) : null,
-                    intval($q['points'] ?? 1),
-                    $q['explanation'] ?? null,
-                    $difficulty,
-                    $q['source_topic'] ?? $subject,
-                    $qLessonId
-                ]);
-                $questionId = $pdo->lastInsertId();
-                $savedCount++;
-
-                // Persist verified source relations with teacher audit timestamp
-                foreach ($validQSources as $srcLid) {
-                    $srcPeriod = $lessonPeriodMap[$srcLid] ?? 'general';
-                    $srcTopic = $q['source_topic'] ?? $subject;
-                    $srcConf = 'high';
-                    
-                    $srcStmt2 = $pdo->prepare("
-                        INSERT IGNORE INTO generated_question_sources 
-                        (question_id, lesson_id, academic_period, source_topic, source_confidence, source_review_required, source_verified_by, source_verified_at) 
-                        VALUES (?, ?, ?, ?, ?, 0, ?, NOW())
-                    ");
-                    $srcStmt2->execute([$questionId, $srcLid, $srcPeriod, $srcTopic, $srcConf, $teacher_id]);
-                }
-            }
-
-            if (!empty($error_msg)) {
-                // Exam save was aborted due to unverified sources
-            } else {
-                $stmtUpdateTotal = $pdo->prepare("UPDATE exams SET total_items = ? WHERE id = ?");
-                $stmtUpdateTotal->execute([$savedCount, $exam_id]);
-
-                if (!empty($save_generation_batch_id)) {
-                    $stmtUpdB = $pdo->prepare("UPDATE ai_generation_batches SET teacher_acknowledged_by = ?, teacher_acknowledged_at = NOW(), acknowledgement_reason = ? WHERE generation_batch_id = ?");
-                    $stmtUpdB->execute([$teacher_id, !empty($ackReason) ? $ackReason : 'Teacher confirmed save of generated questions', $save_generation_batch_id]);
-                }
-
-                $pdo->commit();
-                $sourceLabel = $save_generation_source_type === 'cross_period_lessons' ? ", Cross-Period" : "";
-                logActivity("Saved AI-generated exam '{$title}' ({$savedCount} deduplicated questions, Difficulty: {$difficulty}{$sourceLabel}).", $teacher_id);
-                $success_msg = "Exam '{$title}' successfully created and saved to Question Bank with {$savedCount} verified questions!";
-                $generated_questions = null;
-            }
-        } catch (PDOException $e) {
-            $pdo->rollBack();
-            $error_msg = "Failed to save exam: " . $e->getMessage();
-        }
+    if (empty($save_generation_batch_id)) {
+        $error_msg = "Cannot save exam: Generation batch ID is missing.";
     } else {
-        $error_msg = "Exam parameters or question items are missing.";
+        // Load the server-side audit batch record (SOURCE OF TRUTH)
+        $stmtBatch = $pdo->prepare("SELECT * FROM ai_generation_batches WHERE generation_batch_id = ?");
+        $stmtBatch->execute([$save_generation_batch_id]);
+        $batchRecord = $stmtBatch->fetch(PDO::FETCH_ASSOC);
+
+        if (empty($batchRecord)) {
+            $error_msg = "Cannot save exam: Generation batch record '{$save_generation_batch_id}' not found.";
+        } elseif (intval($batchRecord['teacher_id']) !== intval($teacher_id)) {
+            $error_msg = "Cannot save exam: Unauthorized access to generation batch belonging to another teacher.";
+        } elseif (!empty($batchRecord['batch_consumed_at']) || !empty($batchRecord['saved_exam_id'])) {
+            $error_msg = "Cannot save exam: Generation batch '{$save_generation_batch_id}' has already been consumed to create an exam.";
+        } else {
+            // DERIVE ALL METADATA SERVER-SIDE FROM $batchRecord (IGNORE POST METADATA)
+            $saveLessonIds = json_decode($batchRecord['selected_lesson_ids'], true);
+            $saveLessonIds = is_array($saveLessonIds) ? array_values(array_map('intval', $saveLessonIds)) : [];
+            $lesson_ids_str = implode(',', $saveLessonIds);
+
+            $save_covered_periods = $batchRecord['selected_periods'];
+            $save_source_lesson_count = count($saveLessonIds);
+            $save_generation_source_type = $save_source_lesson_count > 0 ? 'cross_period_lessons' : 'manual';
+            $save_ai_model = $batchRecord['ai_model'] ?? GROQ_DEFAULT_MODEL;
+            $batchStatus = $batchRecord['batch_status'] ?? 'completed';
+
+            $server_meta_json = json_encode([
+                'model' => $save_ai_model,
+                'generation_source_type' => $save_generation_source_type,
+                'covered_periods' => explode(',', $save_covered_periods),
+                'source_lesson_count' => $save_source_lesson_count,
+                'generation_batch_id' => $save_generation_batch_id,
+                'lesson_ids' => $saveLessonIds,
+                'batch_status' => $batchStatus
+            ]);
+
+            $ackReason = trim(sanitizeInput($_POST['acknowledgement_reason'] ?? ''));
+            $ackTokenInput = $_POST['ack_token'] ?? '';
+            $ackTokenHash = (!empty($ackTokenInput)) ? hash('sha256', $ackTokenInput) : null;
+
+            if (!empty($title) && !empty($subject) && !empty($questions)) {
+                try {
+                    $pdo->beginTransaction();
+
+                    // Lock batch row in database transaction
+                    $stmtLock = $pdo->prepare("SELECT * FROM ai_generation_batches WHERE generation_batch_id = ? AND teacher_id = ? FOR UPDATE");
+                    $stmtLock->execute([$save_generation_batch_id, $teacher_id]);
+                    $lockedBatch = $stmtLock->fetch(PDO::FETCH_ASSOC);
+
+                    if (empty($lockedBatch) || !empty($lockedBatch['batch_consumed_at']) || !empty($lockedBatch['saved_exam_id'])) {
+                        $pdo->rollBack();
+                        $error_msg = "Cannot save exam: Generation batch '{$save_generation_batch_id}' has already been consumed.";
+                    } else {
+                        // Atomic Acknowledgment Check inside Transaction
+                        if ($batchStatus === 'incomplete') {
+                            $ackTokenData = verifyIncompleteAckToken($ackTokenInput, $teacher_id, $secretKey, $save_generation_batch_id);
+                            if (!$ackTokenData) {
+                                $pdo->rollBack();
+                                $error_msg = "Cannot save exam: Invalid, expired, replayed, or tampered incomplete batch acknowledgement token.";
+                            } elseif (empty($ackReason)) {
+                                $pdo->rollBack();
+                                $error_msg = "Cannot save exam: Incomplete AI generation batch requires an explicit teacher acknowledgement reason.";
+                            }
+                        }
+
+                        if (empty($error_msg)) {
+                            $stmt = $pdo->prepare("
+                                INSERT INTO exams 
+                                (teacher_id, title, subject, specialization, difficulty, time_limit, total_items, ai_metadata, lesson_ids,
+                                 exam_category, qualifying_passing_percentage, qualifying_max_attempts, qualifying_year_level,
+                                 qualifying_program, qualifying_is_required, qualifying_unlock_date, qualifying_deadline,
+                                 covered_periods, source_lesson_count, generation_source_type, generation_batch_id, ai_model) 
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            ");
+                            $stmt->execute([
+                                $teacher_id, 
+                                $title, 
+                                $subject, 
+                                $specialization, 
+                                $difficulty, 
+                                60, 
+                                count($questions),
+                                $server_meta_json,
+                                $lesson_ids_str,
+                                $exam_category,
+                                $qualifying_passing_percentage,
+                                $qualifying_max_attempts,
+                                $qualifying_year_level,
+                                $qualifying_program,
+                                $qualifying_is_required,
+                                $qualifying_unlock_date,
+                                $qualifying_deadline,
+                                $save_covered_periods,
+                                $save_source_lesson_count,
+                                $save_generation_source_type,
+                                $save_generation_batch_id,
+                                $save_ai_model
+                            ]);
+                            $exam_id = $pdo->lastInsertId();
+
+                            $qStmt = $pdo->prepare("
+                                INSERT INTO exam_questions 
+                                (exam_id, question_text, question_type, option_a, option_b, option_c, option_d, correct_answer, formula_latex, matching_pairs, points, explanation, difficulty, topic, lesson_id) 
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            ");
+
+                            $srcStmt = $pdo->prepare("
+                                INSERT IGNORE INTO generated_question_sources 
+                                (question_id, lesson_id, academic_period, source_topic, source_confidence, source_review_required, source_verified_by, source_verified_at) 
+                                VALUES (?, ?, ?, ?, ?, 0, ?, NOW())
+                            ");
+
+                            $lessonPeriodMap = [];
+                            if (!empty($saveLessonIds)) {
+                                $plc = implode(',', array_fill(0, count($saveLessonIds), '?'));
+                                $stmtPeriods = $pdo->prepare("SELECT id, COALESCE(academic_period,'general') AS academic_period FROM lesson_materials WHERE id IN ($plc)");
+                                $stmtPeriods->execute($saveLessonIds);
+                                while ($lp = $stmtPeriods->fetch(PDO::FETCH_ASSOC)) {
+                                    $lessonPeriodMap[(int)$lp['id']] = $lp['academic_period'];
+                                }
+                            }
+
+                            $seenQuestions = [];
+                            $savedCount = 0;
+                            $questionIndex = 0;
+
+                            foreach ($questions as $q) {
+                                $questionIndex++;
+                                $qText = trim($q['text'] ?? $q['question'] ?? '');
+                                if (empty($qText) || in_array(mb_strtolower($qText), $seenQuestions)) {
+                                    continue; 
+                                }
+
+                                $rawQSources = [];
+                                if (!empty($q['manual_source_id'])) {
+                                    $rawQSources[] = intval($q['manual_source_id']);
+                                }
+                                if (!empty($q['source_lesson_ids'])) {
+                                    $rawSources = is_array($q['source_lesson_ids']) ? $q['source_lesson_ids'] : explode(',', (string)$q['source_lesson_ids']);
+                                    foreach ($rawSources as $rs) {
+                                        $rawQSources[] = intval($rs);
+                                    }
+                                }
+
+                                $validQSources = array_values(array_unique(array_intersect($rawQSources, $saveLessonIds)));
+                                $isReviewRequired = empty($validQSources) ? 1 : 0;
+
+                                if ($isReviewRequired === 1) {
+                                    $pdo->rollBack();
+                                    $error_msg = "Cannot save exam: Question #{$questionIndex} (\"" . htmlspecialchars(substr($qText, 0, 40)) . "...\") has no verified lesson source. Please assign a valid lesson source for every item before saving.";
+                                    break;
+                                }
+
+                                $seenQuestions[] = mb_strtolower($qText);
+                                $qLessonId = $validQSources[0];
+
+                                $qStmt->execute([
+                                    $exam_id,
+                                    $qText,
+                                    $q['type'] ?? 'multiple_choice',
+                                    $q['opt_a'] ?? null,
+                                    $q['opt_b'] ?? null,
+                                    $q['opt_c'] ?? null,
+                                    $q['opt_d'] ?? null,
+                                    $q['correct'] ?? $q['correct_answer'] ?? '',
+                                    $q['formula_latex'] ?? null,
+                                    isset($q['matching_pairs']) ? (is_string($q['matching_pairs']) ? $q['matching_pairs'] : json_encode($q['matching_pairs'])) : null,
+                                    intval($q['points'] ?? 1),
+                                    $q['explanation'] ?? null,
+                                    $difficulty,
+                                    $q['source_topic'] ?? $subject,
+                                    $qLessonId
+                                ]);
+                                $questionId = $pdo->lastInsertId();
+                                $savedCount++;
+
+                                foreach ($validQSources as $srcLid) {
+                                    $srcPeriod = $lessonPeriodMap[$srcLid] ?? 'general';
+                                    $srcTopic = $q['source_topic'] ?? $subject;
+                                    $srcConf = 'high';
+                                    $srcStmt->execute([$questionId, $srcLid, $srcPeriod, $srcTopic, $srcConf, $teacher_id]);
+                                }
+                            }
+
+                            if (empty($error_msg)) {
+                                $stmtUpdateTotal = $pdo->prepare("UPDATE exams SET total_items = ? WHERE id = ?");
+                                $stmtUpdateTotal->execute([$savedCount, $exam_id]);
+
+                                // Mark Batch Consumed & Populate Acknowledgement Details ATOMICALLY inside Transaction
+                                $stmtConsume = $pdo->prepare("
+                                    UPDATE ai_generation_batches 
+                                    SET batch_consumed_at = NOW(),
+                                        batch_consumed_by = ?,
+                                        saved_exam_id = ?,
+                                        teacher_acknowledged_at = IF(? = 'incomplete', NOW(), teacher_acknowledged_at),
+                                        teacher_acknowledged_by = IF(? = 'incomplete', ?, teacher_acknowledged_by),
+                                        acknowledgement_reason = IF(? = 'incomplete', ?, acknowledgement_reason),
+                                        acknowledgement_token_hash = IF(? = 'incomplete', ?, acknowledgement_token_hash)
+                                    WHERE generation_batch_id = ? AND batch_consumed_at IS NULL AND saved_exam_id IS NULL
+                                ");
+                                $stmtConsume->execute([
+                                    $teacher_id,
+                                    $exam_id,
+                                    $batchStatus,
+                                    $batchStatus,
+                                    $teacher_id,
+                                    $batchStatus,
+                                    $ackReason,
+                                    $batchStatus,
+                                    $ackTokenHash,
+                                    $save_generation_batch_id
+                                ]);
+
+                                if ($stmtConsume->rowCount() === 0) {
+                                    $pdo->rollBack();
+                                    $error_msg = "Cannot save exam: Generation batch '{$save_generation_batch_id}' has already been consumed.";
+                                } else {
+                                    $pdo->commit();
+                                    $sourceLabel = $save_generation_source_type === 'cross_period_lessons' ? ", Cross-Period" : "";
+                                    logActivity("Saved AI-generated exam '{$title}' ({$savedCount} deduplicated questions, Difficulty: {$difficulty}{$sourceLabel}).", $teacher_id);
+                                    $success_msg = "Exam '{$title}' successfully created and saved to Question Bank with {$savedCount} verified questions!";
+                                    $generated_questions = null;
+                                }
+                            }
+                        }
+                    }
+                } catch (Throwable $e) {
+                    if ($pdo->inTransaction()) {
+                        $pdo->rollBack();
+                    }
+                    $error_msg = "Failed to save exam: " . $e->getMessage();
+                }
+            }
+        }
     }
+} else {
+    $error_msg = "Exam parameters or question items are missing.";
 }
 ?>
 
