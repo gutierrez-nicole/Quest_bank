@@ -198,8 +198,15 @@ if (!tableExists($pdo, 'submission_score_overrides')) {
         CREATE TABLE `submission_score_overrides` (
             `id` INT(11) NOT NULL AUTO_INCREMENT,
             `submission_id` INT(11) NOT NULL,
+            `question_id` INT(11) DEFAULT NULL,
+            `old_student_answer` TEXT DEFAULT NULL,
+            `new_student_answer` TEXT DEFAULT NULL,
+            `old_points` DECIMAL(5,2) DEFAULT 0.00,
+            `new_points` DECIMAL(5,2) DEFAULT 0.00,
             `old_score` DECIMAL(5,2) DEFAULT 0.00,
             `new_score` DECIMAL(5,2) DEFAULT 0.00,
+            `old_correct_answer` VARCHAR(255) DEFAULT NULL,
+            `new_correct_answer` VARCHAR(255) DEFAULT NULL,
             `reviewer_id` INT(11) NOT NULL,
             `reason` TEXT DEFAULT NULL,
             `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -209,7 +216,14 @@ if (!tableExists($pdo, 'submission_score_overrides')) {
     ");
     echo "  [+] Created table submission_score_overrides\n";
 } else {
-    echo "  [=] Table submission_score_overrides already exists\n";
+    echo "  [=] Table submission_score_overrides already exists, verifying columns...\n";
+    addColumn($pdo, 'submission_score_overrides', 'question_id', "INT(11) DEFAULT NULL");
+    addColumn($pdo, 'submission_score_overrides', 'old_student_answer', "TEXT DEFAULT NULL");
+    addColumn($pdo, 'submission_score_overrides', 'new_student_answer', "TEXT DEFAULT NULL");
+    addColumn($pdo, 'submission_score_overrides', 'old_points', "DECIMAL(5,2) DEFAULT 0.00");
+    addColumn($pdo, 'submission_score_overrides', 'new_points', "DECIMAL(5,2) DEFAULT 0.00");
+    addColumn($pdo, 'submission_score_overrides', 'old_correct_answer', "VARCHAR(255) DEFAULT NULL");
+    addColumn($pdo, 'submission_score_overrides', 'new_correct_answer', "VARCHAR(255) DEFAULT NULL");
 }
 
 if (!tableExists($pdo, 'exam_assignments')) {

@@ -1,0 +1,299 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QuestBank - Teacher Dashboard</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #444; border-radius: 10px; }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .animate-fadeIn { animation: fadeIn 0.2s ease-out; }
+    </style>
+</head>
+<body class="bg-[#fffbf7] min-h-screen flex">
+
+    
+    <aside class="w-16 lg:w-64 bg-stone-950 text-stone-300 flex flex-col justify-between z-30 shadow-2xl fixed h-full transition-all duration-300">
+    <div class="flex flex-col h-full overflow-hidden">
+        
+        <div class="p-3 lg:p-5 border-b border-stone-800 flex items-center justify-center lg:justify-start bg-stone-900/80 flex-shrink-0">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl flex items-center justify-center font-black text-white shadow-lg shadow-orange-600/30 flex-shrink-0">
+                    <i class="fa-solid fa-chalkboard-user text-lg"></i>
+                </div>
+                <div class="hidden lg:block">
+                    <h1 class="text-sm font-black tracking-tight text-white">Quest<span class="text-orange-500">Bank</span></h1>
+                    <span class="text-[9px] uppercase font-bold text-orange-500 tracking-wider">Faculty Portal</span>
+                </div>
+            </div>
+        </div>
+
+        
+        <nav class="p-2 lg:p-4 space-y-1 overflow-y-auto custom-scrollbar flex-grow text-xs">
+            <a href="dashboard.php" title="Dashboard Overview" class="flex items-center justify-center lg:justify-start gap-3 px-3 py-2.5 rounded-xl font-bold transition-all bg-orange-600 text-white shadow-lg shadow-orange-600/30">
+                <i class="fa-solid fa-chart-line text-sm text-center"></i> <span class="hidden lg:inline-block">Dashboard Overview</span>
+            </a>
+            <a href="create_exam.php" title="Create Exam Bank" class="flex items-center justify-center lg:justify-start gap-3 px-3 py-2.5 rounded-xl font-bold transition-all text-stone-400 hover:text-white hover:bg-stone-900">
+                <i class="fa-solid fa-file-circle-plus text-sm text-center"></i> <span class="hidden lg:inline-block">Create Exam Bank</span>
+            </a>
+            <a href="generate_ai.php" title="AI Exam Generator" class="flex items-center justify-center lg:justify-start gap-3 px-3 py-2.5 rounded-xl font-bold transition-all text-stone-400 hover:text-white hover:bg-stone-900">
+                <i class="fa-solid fa-wand-magic-sparkles text-sm text-center"></i> <span class="hidden lg:inline-block">AI Exam Generator</span>
+            </a>
+            <a href="upload_check.php" title="AI Exam OCR Checker" class="flex items-center justify-center lg:justify-start gap-3 px-3 py-2.5 rounded-xl font-bold transition-all text-stone-400 hover:text-white hover:bg-stone-900">
+                <i class="fa-solid fa-expand text-sm text-center"></i> <span class="hidden lg:inline-block">AI Exam OCR Checker</span>
+            </a>
+            <a href="upload_lessons.php" title="Upload Lessons" class="flex items-center justify-center lg:justify-start gap-3 px-3 py-2.5 rounded-xl font-bold transition-all text-stone-400 hover:text-white hover:bg-stone-900">
+                <i class="fa-solid fa-cloud-arrow-up text-sm text-center"></i> <span class="hidden lg:inline-block">Upload Lessons</span>
+            </a>
+            <a href="manage_students.php" title="Student Roster" class="flex items-center justify-center lg:justify-start gap-3 px-3 py-2.5 rounded-xl font-bold transition-all text-stone-400 hover:text-white hover:bg-stone-900">
+                <i class="fa-solid fa-users-rectangle text-sm text-center"></i> <span class="hidden lg:inline-block">Student Roster</span>
+            </a>
+            <a href="reports.php" title="Reports & Analytics" class="flex items-center justify-center lg:justify-start gap-3 px-3 py-2.5 rounded-xl font-bold transition-all text-stone-400 hover:text-white hover:bg-stone-900">
+                <i class="fa-solid fa-square-poll-vertical text-sm text-center"></i> <span class="hidden lg:inline-block">Reports & Analytics</span>
+            </a>
+            <a href="backup.php" title="Backup & Restore" class="flex items-center justify-center lg:justify-start gap-3 px-3 py-2.5 rounded-xl font-bold transition-all text-stone-400 hover:text-white hover:bg-stone-900">
+                <i class="fa-solid fa-database text-sm text-center"></i> <span class="hidden lg:inline-block">Backup & Restore</span>
+            </a>
+            <a href="profile_settings.php" title="Profile Settings" class="flex items-center justify-center lg:justify-start gap-3 px-3 py-2.5 rounded-xl font-bold transition-all text-stone-400 hover:text-white hover:bg-stone-900">
+                <i class="fa-solid fa-user-gear text-sm text-center"></i> <span class="hidden lg:inline-block">Profile Settings</span>
+            </a>
+        </nav>
+
+        
+        <div class="p-2 lg:p-4 border-t border-stone-800 bg-stone-900/50 flex-shrink-0">
+            <a href="../logout.php" title="Sign Out" class="flex items-center justify-center gap-2 w-full bg-rose-600/10 hover:bg-rose-600 text-rose-500 hover:text-white text-xs font-bold py-2.5 rounded-xl transition-all">
+                <i class="fa-solid fa-right-from-bracket"></i> <span class="hidden lg:inline-block">Sign Out</span>
+            </a>
+        </div>
+    </div>
+</aside>
+
+    
+    <main class="flex-grow flex flex-col min-w-0 ml-16 lg:ml-64 min-h-screen">
+        
+        
+        <header class="bg-white border-b border-stone-200 px-6 py-4 flex items-center justify-between flex-shrink-0">
+            <div>
+                <h2 class="text-lg font-bold text-stone-800">Faculty Dashboard Workspace</h2>
+                <p class="text-xs text-stone-400">Welcome, Professor! Manage automatic test items, curriculum layers, and student rosters.</p>
+            </div>
+            
+            <div class="flex items-center gap-4">
+                <div class="flex items-center gap-3 pl-2 border-l border-stone-200">
+                    <div class="w-9 h-9 rounded-xl bg-orange-100 text-orange-700 font-bold flex items-center justify-center shadow-inner">
+                        QA                    </div>
+                    <div class="hidden sm:block text-left">
+                        <p class="text-xs font-bold text-stone-800 leading-tight">QA Test Professor Alpha</p>
+                        <p class="text-[10px] text-stone-400 font-medium">Faculty Professor</p>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        
+        <div class="flex-grow overflow-y-auto p-6 space-y-6 custom-scrollbar">
+
+            
+            
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-white p-4 border border-stone-200 rounded-xl flex items-center justify-between shadow-sm hover:shadow-md transition-shadow">
+                    <div>
+                        <p class="text-[10px] uppercase tracking-wider font-bold text-stone-400">Handled Students</p>
+                        <h3 class="text-2xl font-black text-stone-800 mt-1">3</h3>
+                        <p class="text-[9px] text-emerald-600 font-semibold mt-1">
+                            <i class="fa-solid fa-circle-check"></i> Active Roster
+                        </p>
+                    </div>
+                    <div class="p-3 bg-orange-100 text-orange-600 rounded-xl"><i class="fa-solid fa-users text-lg"></i></div>
+                </div>
+                <div class="bg-white p-4 border border-stone-200 rounded-xl flex items-center justify-between shadow-sm hover:shadow-md transition-shadow">
+                    <div>
+                        <p class="text-[10px] uppercase tracking-wider font-bold text-stone-400">AI Exams Generated</p>
+                        <h3 class="text-2xl font-black text-stone-800 mt-1">196</h3>
+                        <p class="text-[9px] text-blue-600 font-semibold mt-1">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> Created
+                        </p>
+                    </div>
+                    <div class="p-3 bg-amber-100 text-amber-600 rounded-xl"><i class="fa-solid fa-wand-magic-sparkles text-lg"></i></div>
+                </div>
+                <div class="bg-white p-4 border border-stone-200 rounded-xl flex items-center justify-between shadow-sm hover:shadow-md transition-shadow">
+                    <div>
+                        <p class="text-[10px] uppercase tracking-wider font-bold text-stone-400">OCR Scripts Checked</p>
+                        <h3 class="text-2xl font-black text-stone-800 mt-1">877</h3>
+                        <p class="text-[9px] text-purple-600 font-semibold mt-1">
+                            <i class="fa-solid fa-check-double"></i> Graded
+                        </p>
+                    </div>
+                    <div class="p-3 bg-purple-100 text-purple-600 rounded-xl"><i class="fa-solid fa-print text-lg"></i></div>
+                </div>
+                <div class="bg-white p-4 border border-stone-200 rounded-xl flex items-center justify-between shadow-sm hover:shadow-md transition-shadow">
+                    <div>
+                        <p class="text-[10px] uppercase tracking-wider font-bold text-stone-400">Sections Average</p>
+                        <h3 class="text-2xl font-black text-emerald-600 mt-1">60.7%</h3>
+                        <p class="text-[9px] text-stone-500 font-semibold mt-1">
+                            <i class="fa-solid fa-chart-line"></i> Overall Score
+                        </p>
+                    </div>
+                    <div class="p-3 bg-emerald-100 text-emerald-600 rounded-xl"><i class="fa-solid fa-chart-line text-lg"></i></div>
+                </div>
+            </div>
+
+            
+            <div class="bg-white border border-stone-200 p-5 rounded-2xl shadow-sm space-y-4">
+                <div class="flex items-center justify-between border-b border-stone-100 pb-3">
+                    <div>
+                        <h3 class="text-sm font-bold text-stone-800 flex items-center gap-2">
+                            <i class="fa-solid fa-user-plus text-orange-600"></i> Student Subject Join Requests
+                            <span class="bg-orange-100 text-orange-800 text-[10px] font-black px-2 py-0.5 rounded-full">0 Pending</span>
+                        </h3>
+                        <p class="text-[11px] text-stone-400">Review student enrollment applications for your assigned subjects and class sections (Thesis Docx Figure 10 & 13).</p>
+                    </div>
+                    <a href="manage_students.php" class="text-xs font-extrabold text-orange-600 hover:underline">Manage Student Roster →</a>
+                </div>
+
+                                    <div class="text-center py-6 bg-stone-50/50 rounded-xl border border-dashed border-stone-200">
+                        <p class="text-xs text-stone-400 font-semibold"><i class="fa-solid fa-circle-check text-emerald-500 mr-1"></i> No pending student join requests. All student rosters are up to date!</p>
+                    </div>
+                            </div>
+
+            
+            <div class="bg-white border border-stone-200 p-5 rounded-2xl shadow-sm">
+                <div class="flex items-center justify-between mb-4 border-b pb-2">
+                    <div>
+                        <h3 class="text-sm font-bold text-stone-800"><i class="fa-solid fa-chart-column text-orange-500 mr-1.5"></i> Section Performance Comparison (Pass vs Fail)</h3>
+                        <p class="text-[11px] text-stone-400">Real-time data: Passing (≥75%) and failing (<75%) student ratios per section.</p>
+                    </div>
+                </div>
+                <div class="h-64 w-full">
+                    <canvas id="sectionBarChart"></canvas>
+                </div>
+            </div>
+
+            
+            <div class="bg-white border border-stone-200 p-5 rounded-2xl shadow-sm space-y-4">
+                <div class="flex items-center justify-between border-b pb-3">
+                    <h3 class="text-sm font-bold text-stone-800"><i class="fa-solid fa-clock-rotate-left text-orange-500 mr-1.5"></i> Recent Evaluated Submissions</h3>
+                    <a href="reports.php" class="text-xs font-bold text-orange-600 hover:underline">View All Reports →</a>
+                </div>
+
+                                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs">
+                            <thead class="bg-stone-50 text-stone-500 font-bold uppercase border-b">
+                                <tr>
+                                    <th class="p-3">Student Name</th>
+                                    <th class="p-3">Exam Title</th>
+                                    <th class="p-3">Score %</th>
+                                    <th class="p-3">Status</th>
+                                    <th class="p-3">Date Checked</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-stone-100">
+                                                                    <tr class="hover:bg-stone-50/60 transition-all">
+                                        <td class="p-3 font-extrabold text-stone-800">QA Test Student Alpha</td>
+                                        <td class="p-3 font-semibold text-stone-600">QA Civil Engineering Fundamentals Exam</td>
+                                        <td class="p-3 font-bold text-stone-800">100.00%</td>
+                                        <td class="p-3">
+                                                                                            <span class="bg-emerald-100 text-emerald-700 font-bold text-[10px] px-2 py-0.5 rounded-full">Pass</span>
+                                                                                    </td>
+                                        <td class="p-3 text-stone-400 font-medium">Aug 04, 2026</td>
+                                    </tr>
+                                                                    <tr class="hover:bg-stone-50/60 transition-all">
+                                        <td class="p-3 font-extrabold text-stone-800">QA Test Student Alpha</td>
+                                        <td class="p-3 font-semibold text-stone-600">QA Civil Engineering Fundamentals Exam</td>
+                                        <td class="p-3 font-bold text-stone-800">100.00%</td>
+                                        <td class="p-3">
+                                                                                            <span class="bg-emerald-100 text-emerald-700 font-bold text-[10px] px-2 py-0.5 rounded-full">Pass</span>
+                                                                                    </td>
+                                        <td class="p-3 text-stone-400 font-medium">Aug 04, 2026</td>
+                                    </tr>
+                                                                    <tr class="hover:bg-stone-50/60 transition-all">
+                                        <td class="p-3 font-extrabold text-stone-800">Guest Student</td>
+                                        <td class="p-3 font-semibold text-stone-600">P4 Test Exam</td>
+                                        <td class="p-3 font-bold text-stone-800">25.00%</td>
+                                        <td class="p-3">
+                                                                                            <span class="bg-rose-100 text-rose-700 font-bold text-[10px] px-2 py-0.5 rounded-full">Fail</span>
+                                                                                    </td>
+                                        <td class="p-3 text-stone-400 font-medium">Aug 04, 2026</td>
+                                    </tr>
+                                                                    <tr class="hover:bg-stone-50/60 transition-all">
+                                        <td class="p-3 font-extrabold text-stone-800">Guest Student</td>
+                                        <td class="p-3 font-semibold text-stone-600">P4 Test Exam</td>
+                                        <td class="p-3 font-bold text-stone-800">100.00%</td>
+                                        <td class="p-3">
+                                                                                            <span class="bg-emerald-100 text-emerald-700 font-bold text-[10px] px-2 py-0.5 rounded-full">Pass</span>
+                                                                                    </td>
+                                        <td class="p-3 text-stone-400 font-medium">Aug 04, 2026</td>
+                                    </tr>
+                                                                    <tr class="hover:bg-stone-50/60 transition-all">
+                                        <td class="p-3 font-extrabold text-stone-800">Guest Student</td>
+                                        <td class="p-3 font-semibold text-stone-600">P4 Test Exam</td>
+                                        <td class="p-3 font-bold text-stone-800">0.00%</td>
+                                        <td class="p-3">
+                                                                                            <span class="bg-rose-100 text-rose-700 font-bold text-[10px] px-2 py-0.5 rounded-full">Fail</span>
+                                                                                    </td>
+                                        <td class="p-3 text-stone-400 font-medium">Aug 04, 2026</td>
+                                    </tr>
+                                                            </tbody>
+                        </table>
+                    </div>
+                            </div>
+
+        </div>
+    </main>
+
+    
+    <script>
+        const ctx = document.getElementById('sectionBarChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ["BSCE 4-A","Section A","Section B"],
+                datasets: [
+                    {
+                        label: 'Passed Students',
+                        data: [244,237,0],
+                        backgroundColor: '#10b981',
+                        borderRadius: 8
+                    },
+                    {
+                        label: 'Failed Students',
+                        data: [244,144,1],
+                        backgroundColor: '#f43f5e',
+                        borderRadius: 8
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'top', labels: { font: { family: 'Plus Jakarta Sans', weight: 'bold', size: 11 } } }
+                },
+                scales: {
+                    y: { beginAtZero: true, grid: { color: '#f3f4f6' } },
+                    x: { grid: { display: false } }
+                }
+            }
+        });
+    </script>
+</body>
+</html>

@@ -276,13 +276,30 @@ class ResultWorkflowService {
         $pdo->beginTransaction();
 
         try {
-            // Log override in submission_score_overrides
+            // Log complete question-level audit history in submission_score_overrides
+            $oldCorrectAnswer = $ans['correct_answer'] ?? null;
+            $newCorrectAnswer = $oldCorrectAnswer;
             $stmtLog = $pdo->prepare("
                 INSERT INTO submission_score_overrides (
-                    submission_id, old_score, new_score, reviewer_id, reason, created_at
-                ) VALUES (?, ?, ?, ?, ?, NOW())
+                    submission_id, question_id, old_student_answer, new_student_answer,
+                    old_points, new_points, old_score, new_score,
+                    old_correct_answer, new_correct_answer, reviewer_id, reason, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
             ");
-            $stmtLog->execute([$submissionId, $oldPoints, $newPoints, $teacherId, $reason]);
+            $stmtLog->execute([
+                $submissionId,
+                $questionId,
+                $oldAnswer,
+                $updatedAnswer,
+                $oldPoints,
+                $newPoints,
+                $sub['total_score'],
+                $newPoints, // will be recalculated below
+                $oldCorrectAnswer,
+                $newCorrectAnswer,
+                $teacherId,
+                $reason
+            ]);
 
             // Update item answer row
             $stmtUpdAns = $pdo->prepare("
@@ -383,8 +400,37 @@ class ResultWorkflowService {
             throw new Exception("Exam #{$examId} has no questions configured for scoring.");
         }
 
+        // Load original uploaded answer sheet file if present
+        $filePath = $sub['file_path'] ?? null;
         $ocrText = $sub['ocr_text'] ?? '';
         $submittedAnswers = [];
+
+        if (!empty($filePath)) {
+            $baseDir = defined('BASE_PATH') ? BASE_PATH : dirname(__DIR__, 2);
+            $absPath = (strpos($filePath, '/') === 0) ? $filePath : $baseDir . '/' . ltrim($filePath, '/');
+            if (!file_exists($absPath)) {
+                throw new Exception("Original answer sheet file not found at '{$filePath}'. Cannot re-run OCR without original file.");
+            }
+            if (file_exists(__DIR__ . '/OcrService.php')) {
+                require_once __DIR__ . '/OcrService.php';
+                if (method_exists('OcrService', 'processAnswerSheet')) {
+                    $ocrResult = OcrService::processAnswerSheet($absPath, count($questions));
+                    if (isset($ocrResult['success']) && !empty($ocrResult['raw_text'])) {
+                        $ocrText = $ocrResult['raw_text'];
+                        if (isset($ocrResult['answers']) && is_array($ocrResult['answers'])) {
+                            $qIdx = 0;
+                            foreach ($questions as $q) {
+                                $qId = $q['id'];
+                                if (isset($ocrResult['answers'][$qIdx + 1])) {
+                                    $submittedAnswers[$qId] = $ocrResult['answers'][$qIdx + 1];
+                                }
+                                $qIdx++;
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         // Check if there are existing submission_answers
         $stmtOldAns = $pdo->prepare("SELECT question_id, student_answer, awarded_points, max_points, evaluation_status FROM submission_answers WHERE submission_id = ?");
@@ -392,7 +438,9 @@ class ResultWorkflowService {
         $previousItemScoresList = $stmtOldAns->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($previousItemScoresList as $oldAns) {
-            $submittedAnswers[$oldAns['question_id']] = $oldAns['student_answer'];
+            if (!isset($submittedAnswers[$oldAns['question_id']])) {
+                $submittedAnswers[$oldAns['question_id']] = $oldAns['student_answer'];
+            }
         }
 
         // Parse OCR text if answers are unpopulated
@@ -477,7 +525,7 @@ class ResultWorkflowService {
                 $reason
             ]);
 
-            // Update item-level submission_answers
+            // Update item-level submission_answers with ALL fields updated
             $stmtAnswer = $pdo->prepare("
                 INSERT INTO submission_answers (
                     submission_id, exam_id, student_id, question_id, student_answer,
@@ -490,8 +538,11 @@ class ResultWorkflowService {
                 )
                 ON DUPLICATE KEY UPDATE
                     student_answer = VALUES(student_answer),
+                    correct_answer = VALUES(correct_answer),
                     awarded_points = VALUES(awarded_points),
                     max_points = VALUES(max_points),
+                    confidence = VALUES(confidence),
+                    requires_review = VALUES(requires_review),
                     evaluation_status = VALUES(evaluation_status),
                     evaluation_reason = VALUES(evaluation_reason)
             ");
