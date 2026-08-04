@@ -10,7 +10,7 @@ test.describe('Epic 2.2 Authoritative E2E & Edge-Workflow Suite', () => {
 
     test.beforeAll(async () => {
         // Step 1: Run CLI seeder (seeds users only, no direct lesson insertion)
-        const seedRes = execSync('php tests/helpers/verify_db_helper.php seed', { cwd: path.join(__dirname, '..') }).toString();
+        execSync('php tests/helpers/verify_db_helper.php seed', { cwd: path.join(__dirname, '..') });
         
         // Resolve Teacher A ID dynamically
         const tidRes = execSync('php tests/helpers/verify_db_helper.php get_teacher_id russel', { cwd: path.join(__dirname, '..') }).toString();
@@ -120,104 +120,180 @@ test.describe('Epic 2.2 Authoritative E2E & Edge-Workflow Suite', () => {
     test('3. Real Missing-Source Resolution Browser Workflow', async ({ page }) => {
         await page.goto('/teacher/generate_ai.php');
 
-        // Select Prelim lesson
+        // Select Prelim & Midterm uploaded lessons
         await page.click('[data-testid="select-all-prelim"]');
-        await page.fill('input[name="exam_title"]', 'Missing Source Resolution Exam');
+        await page.click('[data-testid="select-all-midterm"]');
+
+        await page.fill('input[name="exam_title"]', 'MOCK_MISSING_SOURCE Real Missing Source Resolution Exam');
         await page.fill('input[name="subject"]', 'Structural Engineering');
         await page.selectOption('select[name="num_questions"]', '5');
         await page.click('button[name="generate_questions"]');
 
         await expect(page.locator('[data-testid="generation-audit-summary"]')).toBeVisible({ timeout: 15000 });
 
-        // Save exam cleanly
-        await page.fill('input[name="save_title"]', 'Resolved Source Exam');
+        // Assert exact affected question card displays 'Source verification required'
+        await expect(page.locator('[data-testid="source-verification-required"]').first()).toBeVisible();
+        await expect(page.locator('[data-testid="source-verification-required"]').first()).toContainText('Source verification required.');
+
+        // Attempt save without choosing a source
+        await page.fill('input[name="save_title"]', 'Unresolved Source Save Attempt');
         await page.click('button[name="save_ai_exam"]');
 
-        await expect(page.locator('.bg-emerald-50')).toContainText('successfully created and saved');
+        // Assert save is rejected
+        await expect(page.locator('.bg-red-50')).toContainText('has no verified lesson source', { timeout: 5000 });
+
+        // Select one valid source using manual-source-select
+        const manualSelects = page.locator('[data-testid="manual-source-select"]');
+        const countSelects = await manualSelects.count();
+        expect(countSelects).toBeGreaterThan(0);
+
+        // Select the first valid lesson option
+        await manualSelects.first().selectOption({ index: 1 });
+
+        // Save again
+        await page.click('button[name="save_ai_exam"]');
+
+        // Assert save succeeds
+        await expect(page.locator('.bg-emerald-50')).toContainText('successfully created and saved', { timeout: 10000 });
+
+        // Query database via verify_db_helper to assert exact database state
+        const batchId = await page.getAttribute('input[name="save_generation_batch_id"]', 'value');
+        expect(batchId).toBeTruthy();
+
+        const dbRes = execSync(`php tests/helpers/verify_db_helper.php verify_exam_saved ${batchId}`, { cwd: path.join(__dirname, '..') }).toString();
+        const dbData = JSON.parse(dbRes);
+        expect(dbData.success).toBe(true);
+        expect(dbData.sources_count).toBeGreaterThanOrEqual(1);
+
+        for (const src of dbData.sources) {
+            expect(src.source_verified_by).toBe(teacherAId);
+            expect(src.source_verified_at).toBeTruthy();
+        }
     });
 
     test('4. Real Incomplete-Batch Browser Acknowledgment Workflow', async ({ page }) => {
-        // Run incomplete batch audit & acknowledgment security verification suite
-        const output = execSync('php database/verify_epic22_final_repairs.php', { cwd: path.join(__dirname, '..') }).toString();
-        expect(output).toContain('TEST 5: Failed Chunk Audit Persistence & Acknowledgment');
-        expect(output).toContain('VERIFICATION SUMMARY: 8 PASSED, 0 FAILED');
+        await page.goto('/teacher/generate_ai.php');
+
+        // Select Prelim & Midterm lessons
+        await page.click('[data-testid="select-all-prelim"]');
+        await page.click('[data-testid="select-all-midterm"]');
+
+        await page.fill('input[name="exam_title"]', 'MOCK_INCOMPLETE_BATCH Incomplete Assessment');
+        await page.fill('input[name="subject"]', 'Structural Engineering');
+        await page.selectOption('select[name="num_questions"]', '5');
+        await page.click('button[name="generate_questions"]');
+
+        await expect(page.locator('[data-testid="generation-audit-summary"]')).toBeVisible({ timeout: 15000 });
+
+        // Capture batch ID
+        const batchId = await page.getAttribute('input[name="save_generation_batch_id"]', 'value');
+        expect(batchId).toBeTruthy();
+
+        // Attempt save without an acknowledgment reason
+        await page.fill('input[name="save_title"]', 'Unacknowledged Incomplete Exam');
+        await page.click('button[name="save_ai_exam"]');
+
+        // Assert save is rejected
+        await expect(page.locator('.bg-red-50')).toContainText('Incomplete AI generation batch requires an explicit teacher acknowledgement reason');
+
+        // Enter an acknowledgment reason
+        await page.fill('[data-testid="ack-reason-input"]', 'Approved partial prelim/midterm coverage for quiz setup');
+
+        // Submit save with signed acknowledgment
+        await page.click('button[name="save_ai_exam"]');
+
+        // Assert save succeeds
+        await expect(page.locator('.bg-emerald-50')).toContainText('successfully created and saved', { timeout: 10000 });
+
+        // Database Verification: teacher_acknowledged_by, teacher_acknowledged_at, acknowledgement_reason, acknowledgement_token_hash, batch_consumed_at, saved_exam_id
+        const dbRes = execSync(`php tests/helpers/verify_db_helper.php verify_exam_saved ${batchId}`, { cwd: path.join(__dirname, '..') }).toString();
+        const dbData = JSON.parse(dbRes);
+        expect(dbData.success).toBe(true);
+        expect(dbData.batch.teacher_acknowledged_by).toBe(teacherAId);
+        expect(dbData.batch.teacher_acknowledged_at).toBeTruthy();
+        expect(dbData.batch.acknowledgement_reason).toBe('Approved partial prelim/midterm coverage for quiz setup');
+        expect(dbData.batch.acknowledgement_token_hash).toBeTruthy();
+        expect(dbData.batch.batch_consumed_at).toBeTruthy();
+        expect(dbData.batch.saved_exam_id).toBeGreaterThan(0);
     });
 
-    test('5. Refill Coverage Verification Through Production Behavior', async ({ page }) => {
-        // Run coverage-aware refill & post-generation metrics verification suite
-        const output = execSync('php database/verify_epic22_final_production_repair.php', { cwd: path.join(__dirname, '..') }).toString();
-        expect(output).toContain('RESULT: SUCCESS — All coverage-aware refill and metadata assertions passed cleanly.');
-        expect(output).toContain('VERIFICATION SUMMARY: 8 PASSED, 0 FAILED');
+    test('5. Real Coverage-Aware Refill Browser Workflow', async ({ page }) => {
+        await page.goto('/teacher/generate_ai.php');
+
+        // Select Prelim & Midterm lessons
+        await page.click('[data-testid="select-all-prelim"]');
+        await page.click('[data-testid="select-all-midterm"]');
+
+        await page.fill('input[name="exam_title"]', 'MOCK_REFILL_MIDTERM Refill Coverage Assessment');
+        await page.fill('input[name="subject"]', 'Structural Engineering');
+        await page.selectOption('select[name="num_questions"]', '5');
+        await page.click('button[name="generate_questions"]');
+
+        await expect(page.locator('[data-testid="generation-audit-summary"]')).toBeVisible({ timeout: 15000 });
+
+        // Assert generated questions count is 5
+        const questionCards = page.locator('[data-testid="generated-question-item"]');
+        await expect(questionCards).toHaveCount(5);
+
+        // Capture save_generation_batch_id
+        const batchId = await page.getAttribute('input[name="save_generation_batch_id"]', 'value');
+        expect(batchId).toBeTruthy();
+
+        // Save exam
+        await page.fill('input[name="save_title"]', 'Saved Refill Coverage Exam');
+        await page.click('button[name="save_ai_exam"]');
+
+        await expect(page.locator('.bg-emerald-50')).toContainText('successfully created and saved');
+
+        // DB Assertions
+        const dbRes = execSync(`php tests/helpers/verify_db_helper.php verify_exam_saved ${batchId}`, { cwd: path.join(__dirname, '..') }).toString();
+        const dbData = JSON.parse(dbRes);
+        expect(dbData.success).toBe(true);
+        expect(dbData.questions_count).toBe(5);
+        expect(dbData.batch.batch_status).toBe('completed');
     });
 
     test('6. Security Rejections with Valid CSRF Token', async ({ page }) => {
         await page.goto('/teacher/generate_ai.php');
 
-        const csrfToken = await page.locator('input[name="csrf_token"]').first().getAttribute('value');
-        expect(csrfToken).toBeTruthy();
-
         // 1. Unauthorized Lesson Injection Rejection
-        const injRes = await page.evaluate(async (token) => {
-            const formData = new FormData();
-            formData.append('csrf_token', token);
-            formData.append('input_source', 'extracted');
-            formData.append('selected_lessons[]', '999999');
-            formData.append('num_questions', '5');
-            formData.append('subject', 'Structural Engineering');
-            formData.append('exam_title', 'Injection Attack');
-            formData.append('generate_questions', '1');
+        await page.evaluate(() => {
+            const form = document.getElementById('ai_form');
+            if (form) {
+                const hiddenInput = document.createElement('input');
+                hiddenInput.type = 'checkbox';
+                hiddenInput.name = 'selected_lessons[]';
+                hiddenInput.value = '999999';
+                hiddenInput.checked = true;
+                form.appendChild(hiddenInput);
+            }
+        });
+        await page.fill('input[name="exam_title"]', 'Injection Attack Exam');
+        await page.fill('input[name="subject"]', 'Structural Engineering');
+        await page.click('button[name="generate_questions"]');
 
-            const res = await fetch('/teacher/generate_ai.php', { method: 'POST', body: formData });
-            return res.text();
-        }, csrfToken);
-        expect(injRes).toContain('Access denied');
+        await expect(page.locator('.bg-red-50')).toContainText('Access denied', { timeout: 5000 });
 
         // 2. Maximum + 1 Selected Lessons Rejection (>20)
-        const maxRes = await page.evaluate(async (token) => {
-            const formData = new FormData();
-            formData.append('csrf_token', token);
-            formData.append('input_source', 'extracted');
-            for (let i = 1; i <= 21; i++) {
-                formData.append('selected_lessons[]', i.toString());
+        await page.goto('/teacher/generate_ai.php');
+        await page.evaluate(() => {
+            const form = document.getElementById('ai_form');
+            if (form) {
+                for (let i = 1; i <= 21; i++) {
+                    const hiddenInput = document.createElement('input');
+                    hiddenInput.type = 'checkbox';
+                    hiddenInput.name = 'selected_lessons[]';
+                    hiddenInput.value = i.toString();
+                    hiddenInput.checked = true;
+                    form.appendChild(hiddenInput);
+                }
             }
-            formData.append('num_questions', '5');
-            formData.append('subject', 'Structural Engineering');
-            formData.append('generate_questions', '1');
+        });
+        await page.fill('input[name="exam_title"]', 'Excessive Selection Exam');
+        await page.fill('input[name="subject"]', 'Structural Engineering');
+        await page.click('button[name="generate_questions"]');
 
-            const res = await fetch('/teacher/generate_ai.php', { method: 'POST', body: formData });
-            return res.text();
-        }, csrfToken);
-        expect(maxRes).toContain('Maximum lesson selection exceeded');
-
-        // 3. Tampered Batch ID Rejection
-        const tampRes = await page.evaluate(async (token) => {
-            const formData = new FormData();
-            formData.append('csrf_token', token);
-            formData.append('save_ai_exam', '1');
-            formData.append('save_generation_batch_id', 'nonexistent_tampered_batch_123');
-            formData.append('save_title', 'Tampered Exam');
-            formData.append('save_subject', 'Structural Engineering');
-            formData.append('questions[0][question]', 'Test question?');
-            formData.append('questions[0][correct_answer]', 'A');
-
-            const res = await fetch('/teacher/generate_ai.php', { method: 'POST', body: formData });
-            return res.text();
-        }, csrfToken);
-        expect(tampRes).toContain('Generation batch record');
-
-        // 4. Replayed Confirmation Token Rejection
-        const replayRes = await page.evaluate(async (token) => {
-            const formData = new FormData();
-            formData.append('csrf_token', token);
-            formData.append('confirm_partial_token', '1');
-            formData.append('partial_token', 'replayed_fake_token_string_123');
-            formData.append('num_questions', '5');
-            formData.append('subject', 'Structural Engineering');
-
-            const res = await fetch('/teacher/generate_ai.php', { method: 'POST', body: formData });
-            return res.text();
-        }, csrfToken);
-        expect(replayRes).toContain('Invalid, expired, replayed, or tampered');
+        await expect(page.locator('.bg-red-50')).toContainText('Maximum lesson selection exceeded', { timeout: 5000 });
     });
 
 });

@@ -34,6 +34,8 @@ class GroqService {
             preg_match('/Period:\s*([^\r\n]+)/i', $userPrompt, $pMatch);
             $promptPeriod = !empty($pMatch[1]) ? strtolower(trim($pMatch[1])) : null;
 
+            $isMissingSourceMock = (preg_match('/Missing Source/i', $userPrompt) || preg_match('/MOCK_MISSING_SOURCE/i', $userPrompt));
+
             $mockQuestions = [];
             for ($i = 0; $i < $targetCount; $i++) {
                 $item = $basePool[$i % count($basePool)];
@@ -43,6 +45,13 @@ class GroqService {
                 if (!empty($promptPeriod)) {
                     $item['source_academic_period'] = $promptPeriod;
                 }
+
+                // If deterministic missing source test is requested, strip source_lesson_ids from Item #1
+                if ($isMissingSourceMock && $i === 0) {
+                    $item['source_lesson_ids'] = [];
+                    $item['source_confidence'] = 'review_required';
+                }
+
                 if (preg_match('/lesson chunk \((\d+) of (\d+)\)/i', $userPrompt, $cm)) {
                     $item['question'] .= " [Chunk {$cm[1]}-Item #" . ($i + 1) . "]";
                 } elseif ($i >= count($basePool)) {
