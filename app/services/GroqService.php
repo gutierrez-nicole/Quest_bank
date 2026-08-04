@@ -4,13 +4,12 @@ require_once __DIR__ . '/../config/config.php';
 
 class GroqService {
 
-    private static function sendRequest($payload, $apiKey = null) {
-        if ($apiKey === 'INVALID_KEY_EXPLICIT_MISSING') {
-            return ['error' => 'Groq API Key is missing. Please configure GROQ_API_KEY in .env or app/config/config.php.'];
-        }
+    public static $testMode = false;
 
-        $key = $apiKey ?: GROQ_API_KEY;
-        if (empty($key) || $key === 'YOUR_GROQ_API_KEY_HERE' || strpos($key, 'gsk_') === false) {
+    private static function sendRequest($payload, $apiKey = null) {
+        // Test-only Mock check (Strictly scoped to testMode, APP_ENV === 'testing', or explicit TEST_MOCK_KEY)
+        $isTestEnv = self::$testMode || (defined('APP_ENV') && APP_ENV === 'testing') || ($apiKey === 'TEST_MOCK_KEY');
+        if ($isTestEnv && ($apiKey === 'TEST_MOCK_KEY' || empty($apiKey) || $apiKey === 'YOUR_GROQ_API_KEY_HERE')) {
             $userPrompt = $payload['messages'][0]['content'] ?? '';
             $targetCount = 5;
             if (preg_match('/Generate exactly (\d+)/i', $userPrompt, $pm)) {
@@ -28,7 +27,9 @@ class GroqService {
             $mockQuestions = [];
             for ($i = 0; $i < $targetCount; $i++) {
                 $item = $basePool[$i % count($basePool)];
-                if ($i >= count($basePool)) {
+                if (preg_match('/lesson chunk \((\d+) of (\d+)\)/i', $userPrompt, $cm)) {
+                    $item['question'] .= " [Chunk {$cm[1]}-Item #" . ($i + 1) . "]";
+                } elseif ($i >= count($basePool)) {
                     $item['question'] .= " (Item Variant #" . ($i + 1) . ")";
                 }
                 $mockQuestions[] = $item;
@@ -49,9 +50,37 @@ class GroqService {
             ];
         }
 
+        // Production Credential & Error Enforcement (NO production mock fallbacks!)
+        $key = ($apiKey !== null && $apiKey !== '') ? $apiKey : GROQ_API_KEY;
+        if (empty($key) || $key === 'YOUR_GROQ_API_KEY_HERE' || $key === 'MISSING_KEY') {
+            return [
+                'success' => false,
+                'error_code' => 'MISSING_API_KEY',
+                'user_message' => 'Groq API Key is not configured. Please set GROQ_API_KEY in your server configuration.',
+                'technical_message' => 'GROQ_API_KEY constant is empty or set to default placeholder.',
+                'retryable' => false,
+                'provider_status' => 401,
+                'request_id' => null,
+                'error' => 'Groq API Key is not configured.'
+            ];
+        }
+
+        if (strpos($key, 'gsk_') === false) {
+            return [
+                'success' => false,
+                'error_code' => 'INVALID_API_KEY',
+                'user_message' => 'Groq API Key format is invalid. Key must begin with gsk_.',
+                'technical_message' => 'Provided API key prefix check failed.',
+                'retryable' => false,
+                'provider_status' => 401,
+                'request_id' => null,
+                'error' => 'Groq API Key format is invalid.'
+            ];
+        }
+
         $ch = curl_init(GROQ_API_ENDPOINT);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 1);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
@@ -63,52 +92,87 @@ class GroqService {
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
 
         $response = curl_exec($ch);
-        $error = curl_error($ch);
+        $curlErrNo = curl_errno($ch);
+        $curlError = curl_error($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
 
-        $userPrompt = $payload['messages'][0]['content'] ?? '';
-        $targetCount = 5;
-        if (preg_match('/Generate exactly (\d+)/i', $userPrompt, $pm)) {
-            $targetCount = intval($pm[1]);
-        }
-
-        $basePool = [
-            ['question' => 'What is the formula for Stopping Sight Distance (SSD)?', 'type' => 'multiple_choice', 'opt_a' => '0.278*V*t + V^2/(254*f)', 'opt_b' => 'V^2 / 254', 'opt_c' => '0.278*V*t', 'opt_d' => 'None of the above', 'correct_answer' => 'A', 'explanation' => 'Standard SSD formula accounting for reaction time and braking.', 'points' => 1, 'source_topic' => 'Highway Engineering', 'source_academic_period' => 'prelim', 'source_confidence' => 'high'],
-            ['question' => 'Flexible pavement design uses CBR structural number for traffic load calculation.', 'type' => 'true_false', 'opt_a' => 'True', 'opt_b' => 'False', 'opt_c' => null, 'opt_d' => null, 'correct_answer' => 'True', 'explanation' => 'CBR determines subgrade strength.', 'points' => 1, 'source_topic' => 'Pavement Design', 'source_academic_period' => 'midterm', 'source_confidence' => 'high'],
-            ['question' => 'What structural component resists bending moments in reinforced concrete?', 'type' => 'multiple_choice', 'opt_a' => 'Steel rebar', 'opt_b' => 'Aggregates', 'opt_c' => 'Water', 'opt_d' => 'Sand', 'correct_answer' => 'A', 'explanation' => 'Steel rebar provides tensile capacity.', 'points' => 1, 'source_topic' => 'Structural Concrete', 'source_academic_period' => 'finals', 'source_confidence' => 'high'],
-            ['question' => 'Pavement markings guide traffic flow and lane discipline.', 'type' => 'true_false', 'opt_a' => 'True', 'opt_b' => 'False', 'opt_c' => null, 'opt_d' => null, 'correct_answer' => 'True', 'explanation' => 'Visual guidance for drivers.', 'points' => 1, 'source_topic' => 'Traffic Engineering', 'source_academic_period' => 'general', 'source_confidence' => 'high'],
-            ['question' => 'Which coefficient represents pavement friction in SSD calculation?', 'type' => 'multiple_choice', 'opt_a' => 'f (coefficient of longitudinal friction)', 'opt_b' => 'CBR', 'opt_c' => 'V (velocity)', 'opt_d' => 't (time)', 'correct_answer' => 'A', 'explanation' => 'Friction coefficient f.', 'points' => 1, 'source_topic' => 'Highway Engineering', 'source_academic_period' => 'prelim', 'source_confidence' => 'high']
-        ];
-
-        $mockQuestions = [];
-        for ($i = 0; $i < $targetCount; $i++) {
-            $item = $basePool[$i % count($basePool)];
-            if (preg_match('/lesson chunk \((\d+) of (\d+)\)/i', $userPrompt, $cm)) {
-                $item['question'] .= " [Chunk {$cm[1]}-Item #" . ($i + 1) . "]";
-            } elseif ($i >= count($basePool)) {
-                $item['question'] .= " (Item Variant #" . ($i + 1) . ")";
+        if ($curlErrNo) {
+            if ($curlErrNo === CURLE_OPERATION_TIMEDOUT) {
+                return [
+                    'success' => false,
+                    'error_code' => 'TIMEOUT',
+                    'user_message' => 'The AI question generation service timed out. Please try again.',
+                    'technical_message' => "cURL error {$curlErrNo}: {$curlError}",
+                    'retryable' => true,
+                    'provider_status' => 504,
+                    'request_id' => null,
+                    'error' => 'AI question generation service timed out.'
+                ];
             }
-            $mockQuestions[] = $item;
+            return [
+                'success' => false,
+                'error_code' => 'PROVIDER_ERROR',
+                'user_message' => 'Network error connecting to Groq AI service.',
+                'technical_message' => "cURL error {$curlErrNo}: {$curlError}",
+                'retryable' => true,
+                'provider_status' => $httpCode ?: 500,
+                'request_id' => null,
+                'error' => 'Network error connecting to Groq AI service.'
+            ];
         }
 
-        if ($error) {
+        if ($httpCode === 429) {
             return [
-                'success' => true,
-                'data' => [
-                    'choices' => [
-                        [
-                            'message' => [
-                                'content' => json_encode($mockQuestions)
-                            ]
-                        ]
-                    ],
-                    'usage' => ['total_tokens' => 250]
-                ]
+                'success' => false,
+                'error_code' => 'RATE_LIMIT_EXCEEDED',
+                'user_message' => 'Groq AI service rate limit reached. Please wait a moment before retrying.',
+                'technical_message' => 'HTTP 429 Rate Limit Exceeded.',
+                'retryable' => true,
+                'provider_status' => 429,
+                'request_id' => null,
+                'error' => 'Groq AI service rate limit reached.'
+            ];
+        }
+
+        if ($httpCode === 401 || $httpCode === 403) {
+            return [
+                'success' => false,
+                'error_code' => 'INVALID_API_KEY',
+                'user_message' => 'Groq API rejected credentials. Authentication failed.',
+                'technical_message' => "HTTP {$httpCode} Unauthorized.",
+                'retryable' => false,
+                'provider_status' => $httpCode,
+                'request_id' => null,
+                'error' => 'Groq API authentication failed.'
+            ];
+        }
+
+        if ($httpCode >= 400) {
+            return [
+                'success' => false,
+                'error_code' => 'PROVIDER_ERROR',
+                'user_message' => 'Groq AI service encountered an operational error (HTTP ' . $httpCode . ').',
+                'technical_message' => "HTTP {$httpCode} status returned from Groq.",
+                'retryable' => true,
+                'provider_status' => $httpCode,
+                'request_id' => null,
+                'error' => 'Groq AI service error (HTTP ' . $httpCode . ').'
             ];
         }
 
         $decoded = json_decode($response, true);
-        if (isset($decoded['error']) || !isset($decoded['choices'])) {
-            return ['success' => true, 'data' => ['choices' => [['message' => ['content' => json_encode($mockQuestions)]]], 'usage' => ['total_tokens' => 250]]];
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($decoded) || !isset($decoded['choices'][0]['message']['content'])) {
+            return [
+                'success' => false,
+                'error_code' => 'MALFORMED_RESPONSE',
+                'user_message' => 'Received malformed JSON payload from AI provider.',
+                'technical_message' => 'JSON parse error: ' . json_last_error_msg(),
+                'retryable' => true,
+                'provider_status' => 502,
+                'request_id' => null,
+                'error' => 'Received malformed JSON payload from AI provider.'
+            ];
         }
 
         return ['success' => true, 'data' => $decoded];

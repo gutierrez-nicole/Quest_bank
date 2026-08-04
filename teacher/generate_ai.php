@@ -279,7 +279,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
                 $success_msg .= " ⚠ Warnings: " . implode('; ', $ai_meta_output['generation_warnings']);
             }
         } else {
-            $error_msg = $result['error'] ?? "Failed to generate AI questions.";
+            $ai_error_details = $result;
+            $error_msg = $result['user_message'] ?? $result['error'] ?? "Failed to generate AI questions.";
         }
     } elseif (empty($error_msg)) {
         $error_msg = "Please select extracted lesson materials or paste valid lesson content.";
@@ -506,10 +507,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
                 </div>
             <?php endif; ?>
 
-            <?php if (!empty($error_msg)): ?>
+            <?php if (!empty($error_msg) && empty($ai_error_details)): ?>
                 <div class="bg-rose-50 border-l-4 border-rose-500 p-4 rounded-xl text-xs font-semibold text-rose-800 flex items-center justify-between shadow-sm animate-fadeIn">
                     <span class="flex items-center gap-2"><i class="fa-solid fa-circle-exclamation text-rose-600 text-sm"></i> <?php echo $error_msg; ?></span>
                     <button onclick="this.parentElement.remove();" class="text-rose-500 hover:text-rose-800"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+            <?php endif; ?>
+
+            <?php if (!empty($ai_error_details)): ?>
+                <div class="bg-rose-50 border border-rose-300 rounded-2xl p-5 shadow-sm space-y-3 animate-fadeIn" data-testid="ai-error-banner">
+                    <div class="flex items-center justify-between border-b border-rose-200/80 pb-3">
+                        <div class="flex items-center gap-2 text-rose-900 font-extrabold text-xs">
+                            <i class="fa-solid fa-circle-exclamation text-rose-600 text-base"></i>
+                            <span>AI Service Generation Failure</span>
+                        </div>
+                        <?php if (!empty($ai_error_details['error_code'])): ?>
+                            <span class="bg-rose-200 text-rose-900 px-2 py-0.5 rounded font-mono font-extrabold text-[10px]" data-testid="ai-error-code">
+                                <?php echo htmlspecialchars($ai_error_details['error_code']); ?>
+                            </span>
+                        <?php endif; ?>
+                    </div>
+                    <p class="text-xs text-rose-800 font-semibold" data-testid="ai-error-message">
+                        <?php echo htmlspecialchars($ai_error_details['user_message'] ?? $error_msg); ?>
+                    </p>
+                    <?php if (!empty($ai_error_details['technical_message'])): ?>
+                        <div class="bg-rose-100/60 rounded-xl p-3 text-[11px] font-mono text-rose-900 border border-rose-200" data-testid="ai-error-technical">
+                            <span class="font-bold">Technical Details:</span> <?php echo htmlspecialchars($ai_error_details['technical_message']); ?>
+                        </div>
+                    <?php endif; ?>
+                    <?php if (!empty($ai_error_details['retryable'])): ?>
+                        <div class="pt-2 flex items-center gap-3">
+                            <button type="button" onclick="document.querySelector('form button[name=generate_questions]').click();" data-testid="ai-retry-btn" class="bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs px-4 py-2 rounded-xl shadow transition-all flex items-center gap-2">
+                                <i class="fa-solid fa-rotate-right"></i> Retry AI Generation
+                            </button>
+                            <span class="text-[11px] text-rose-700 font-medium">This issue may be temporary. You can retry safely.</span>
+                        </div>
+                    <?php endif; ?>
                 </div>
             <?php endif; ?>
 

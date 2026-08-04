@@ -4,6 +4,8 @@
  */
 require_once __DIR__ . '/../app/bootstrap.php';
 
+GroqService::$testMode = true;
+
 $pdo = getDBConnection();
 $passed = 0;
 $failed = 0;

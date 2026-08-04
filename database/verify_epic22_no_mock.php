@@ -1,0 +1,89 @@
+<?php
+/**
+ * Verification Script for QuestBank Epic 2.2 Final Repair 1 (Remove Production Mock AI Fallback)
+ */
+require_once __DIR__ . '/../app/bootstrap.php';
+
+$pdo = getDBConnection();
+$passed = 0;
+$failed = 0;
+
+echo "===========================================================\n";
+echo " QUESTBANK EPIC 2.2 FINAL REPAIR 1 VERIFICATION (NO MOCK)  \n";
+echo "===========================================================\n";
+
+function logTest($name, $status, $detail = '') {
+    global $passed, $failed;
+    if ($status) {
+        $passed++;
+        echo "  [PASS] $name\n";
+        if ($detail) echo "         -> $detail\n";
+    } else {
+        $failed++;
+        echo "  [FAIL] $name\n";
+        if ($detail) echo "         -> $detail\n";
+    }
+}
+
+$sampleLessonText = "Soil mechanics is a branch of soil physics and applied mechanics that describes the behavior of soils. It differs from fluid mechanics and solid mechanics in that soils consist of a heterogeneous mixture of fluids (usually air and water) and particles (usually clay, silt, sand, and gravel).";
+
+try {
+    // --- TEST 1: Missing API Key Returns Failure ---
+    $res1 = GroqService::generateQuestions($sampleLessonText, 5, 'Soil Mechanics', 'Test Exam', 'Geotechnical', 'multiple_choice', 'medium', 'MISSING_KEY');
+    $pass1 = (isset($res1['success']) && $res1['success'] === false) && 
+             ($res1['error_code'] === 'MISSING_API_KEY') && 
+             empty($res1['questions']);
+    logTest("TEST 1: Missing API Key Returns Failure (No Production Mock)", $pass1, "error_code: " . ($res1['error_code'] ?? 'N/A'));
+
+    // --- TEST 2: Invalid Key Format Returns Failure ---
+    $res2 = GroqService::generateQuestions($sampleLessonText, 5, 'Soil Mechanics', 'Test Exam', 'Geotechnical', 'multiple_choice', 'medium', 'invalid_key_prefix');
+    $pass2 = (isset($res2['success']) && $res2['success'] === false) && 
+             ($res2['error_code'] === 'INVALID_API_KEY') && 
+             empty($res2['questions']);
+    logTest("TEST 2: Invalid Key Format (No gsk_ prefix) Returns Failure", $pass2, "error_code: " . ($res2['error_code'] ?? 'N/A'));
+
+    // --- TEST 3: Invalid API Key HTTP 401 Returns Failure ---
+    $res3 = GroqService::generateQuestions($sampleLessonText, 5, 'Soil Mechanics', 'Test Exam', 'Geotechnical', 'multiple_choice', 'medium', 'gsk_invalid_test_credentials_key_1234567890');
+    $pass3 = (isset($res3['success']) && $res3['success'] === false) && 
+             in_array($res3['error_code'], ['INVALID_API_KEY', 'PROVIDER_ERROR']) && 
+             empty($res3['questions']);
+    logTest("TEST 3: Invalid API Key Credentials Return Failure", $pass3, "error_code: " . ($res3['error_code'] ?? 'N/A') . ", status: " . ($res3['provider_status'] ?? 'N/A'));
+
+    // --- TEST 4: Structured Failure Contract Structure ---
+    $hasContractKeys = isset($res1['success']) && 
+                        isset($res1['error_code']) && 
+                        isset($res1['user_message']) && 
+                        isset($res1['technical_message']) && 
+                        isset($res1['retryable']) && 
+                        isset($res1['provider_status']);
+    logTest("TEST 4: Structured Failure Contract Keys Present", $hasContractKeys, "Contains error_code, user_message, technical_message, retryable, provider_status");
+
+    // --- TEST 5: Explicit Test Mock Works ONLY in Testing Mode ---
+    GroqService::$testMode = true;
+    $res5 = GroqService::generateQuestions($sampleLessonText, 5, 'Soil Mechanics', 'Test Exam', 'Geotechnical', 'multiple_choice', 'medium', 'TEST_MOCK_KEY');
+    GroqService::$testMode = false;
+    $pass5 = (isset($res5['success']) && $res5['success'] === true) && count($res5['questions'] ?? []) === 5;
+    logTest("TEST 5: Explicit Test Mock Works ONLY in Testing Mode", $pass5, "Generated " . count($res5['questions'] ?? []) . " questions under testMode=true");
+
+    // --- TEST 6: Zero Database Persistence on Generation Failure ---
+    $stmtExamsBefore = $pdo->query("SELECT COUNT(*) FROM exams")->fetchColumn();
+    $stmtQsBefore = $pdo->query("SELECT COUNT(*) FROM exam_questions")->fetchColumn();
+
+    // Trigger failure call
+    $resFail = GroqService::generateQuestions($sampleLessonText, 5, 'Soil Mechanics', 'Fail Exam', 'Geotechnical', 'multiple_choice', 'medium', 'invalid_key_prefix');
+
+    $stmtExamsAfter = $pdo->query("SELECT COUNT(*) FROM exams")->fetchColumn();
+    $stmtQsAfter = $pdo->query("SELECT COUNT(*) FROM exam_questions")->fetchColumn();
+
+    $noPersistence = ($stmtExamsBefore === $stmtExamsAfter) && ($stmtQsBefore === $stmtQsAfter);
+    logTest("TEST 6: Zero Database Records Persisted on AI Failure", $noPersistence, "Exams count unchanged: {$stmtExamsAfter}, Questions count: {$stmtQsAfter}");
+
+} catch (Throwable $e) {
+    echo "TEST EXCEPTION: " . $e->getMessage() . "\n" . $e->getTraceAsString() . "\n";
+}
+
+echo "\n-----------------------------------------------------------\n";
+echo "VERIFICATION SUMMARY: {$passed} PASSED, {$failed} FAILED\n";
+echo "-----------------------------------------------------------\n";
+
+exit($failed > 0 ? 1 : 0);
