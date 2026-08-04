@@ -1130,10 +1130,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
 
                             <div class="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
                                 <?php foreach ($generated_questions as $idx => $item): 
-                                    $itemSrcIds = !empty($item['source_lesson_ids']) ? (array)$item['source_lesson_ids'] : ($ai_meta_output['lesson_ids'] ?? []);
+                                    $rawSrcIds = !empty($item['source_lesson_ids']) ? (array)$item['source_lesson_ids'] : [];
+                                    $selectedPoolIds = $ai_meta_output['lesson_ids'] ?? [];
+                                    $itemSrcIds = array_values(array_unique(array_intersect(array_map('intval', $rawSrcIds), array_map('intval', $selectedPoolIds))));
+                                    $isSourceVerified = !empty($itemSrcIds);
                                     $itemPeriod = $item['source_academic_period'] ?? ($ai_meta_output['covered_periods'][0] ?? 'general');
                                     $itemTopic = $item['source_topic'] ?? $_POST['subject'];
-                                    $itemConf = $item['source_confidence'] ?? 'high';
+                                    $itemConf = $isSourceVerified ? 'high' : 'review_required';
                                 ?>
                                     <div class="p-4 border border-stone-200 rounded-2xl bg-stone-50/40 space-y-3 hover:border-orange-300 transition-all" data-testid="generated-question-item" data-lesson-id="<?php echo htmlspecialchars($itemSrcIds[0] ?? ''); ?>">
                                         <div class="flex items-center justify-between flex-wrap gap-2">
@@ -1142,7 +1145,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
                                                 <span class="text-[10px] font-bold uppercase text-stone-400 bg-white px-2 py-0.5 rounded-md" data-testid="question-type"><?php echo htmlspecialchars($item['type']); ?></span>
                                             </div>
 
-                                            <!-- Repair Prompt 3: Question Attribution Badge -->
+                                            <!-- Question Attribution Badge -->
                                             <div class="flex items-center gap-1.5 text-[10px]" data-testid="question-source-attribution">
                                                 <span class="bg-blue-100 text-blue-800 font-extrabold px-2 py-0.5 rounded-full uppercase" data-testid="source-period">
                                                     <?php echo htmlspecialchars($itemPeriod); ?>
@@ -1150,13 +1153,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
                                                 <span class="bg-stone-200 text-stone-700 font-bold px-2 py-0.5 rounded-full truncate max-w-[120px]" data-testid="source-topic">
                                                     <?php echo htmlspecialchars($itemTopic); ?>
                                                 </span>
-                                                <?php if ($itemConf === 'high'): ?>
+                                                <?php if ($isSourceVerified): ?>
                                                     <span class="bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.5 rounded-full" data-testid="source-confidence">
                                                         <i class="fa-solid fa-circle-check mr-0.5"></i> High Grounding
                                                     </span>
                                                 <?php else: ?>
-                                                    <span class="bg-amber-100 text-amber-800 font-extrabold px-1.5 py-0.5 rounded-full" data-testid="source-confidence">
-                                                        <i class="fa-solid fa-triangle-exclamation mr-0.5"></i> Review Required
+                                                    <span class="bg-amber-100 text-amber-800 font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1" data-testid="source-verification-required">
+                                                        <i class="fa-solid fa-triangle-exclamation text-amber-600"></i> Source verification required.
                                                     </span>
                                                 <?php endif; ?>
                                             </div>
@@ -1169,6 +1172,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || i
                                         <input type="hidden" name="questions[<?php echo $idx; ?>][source_topic]" value="<?php echo htmlspecialchars($itemTopic); ?>">
                                         <input type="hidden" name="questions[<?php echo $idx; ?>][source_academic_period]" value="<?php echo htmlspecialchars($itemPeriod); ?>">
                                         <input type="hidden" name="questions[<?php echo $idx; ?>][source_confidence]" value="<?php echo htmlspecialchars($itemConf); ?>">
+
+                                        <!-- Explicit Lesson Selector for Teacher Assignment -->
+                                        <div class="pt-2 border-t border-stone-100 flex items-center justify-between gap-3">
+                                            <label class="text-[10px] font-bold text-stone-600 uppercase flex items-center gap-1">
+                                                <i class="fa-solid fa-book-bookmark text-orange-500"></i> Verified Lesson Source:
+                                            </label>
+                                            <select name="questions[<?php echo $idx; ?>][manual_source_id]" data-testid="manual-source-select" class="bg-white border border-stone-300 rounded-lg px-2.5 py-1 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500 max-w-xs">
+                                                <option value="" <?php echo !$isSourceVerified ? 'selected' : ''; ?>>-- Select Verified Lesson Source --</option>
+                                                <?php foreach ($selLessons ?? [] as $sl): ?>
+                                                    <option value="<?php echo $sl['id']; ?>" <?php echo (in_array((int)$sl['id'], $itemSrcIds)) ? 'selected' : ''; ?>>
+                                                        <?php echo htmlspecialchars($sl['title']); ?> (<?php echo ucfirst($sl['academic_period'] ?? 'general'); ?>)
+                                                    </option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
 
                                         <?php if ($item['type'] === 'multiple_choice'): ?>
                                             <div class="grid grid-cols-2 gap-2 text-xs" data-testid="mcq-options">
