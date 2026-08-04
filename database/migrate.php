@@ -36,6 +36,12 @@ function addColumn($pdo, $table, $column, $definition) {
 }
 
 // ============================================
+// USERS — Status Column
+// ============================================
+echo "\n--- users ---\n";
+addColumn($pdo, 'users', 'status', "VARCHAR(20) NOT NULL DEFAULT 'active'");
+
+// ============================================
 // LESSON_MATERIALS — Extraction Engine Columns
 // ============================================
 echo "\n--- lesson_materials ---\n";
@@ -228,6 +234,58 @@ if (!tableExists($pdo, 'exam_assignments')) {
 } else {
     echo "  [=] Table exam_assignments already exists\n";
 }
+if (!tableExists($pdo, 'submission_reprocessing_history')) {
+    $pdo->exec("
+        CREATE TABLE `submission_reprocessing_history` (
+            `id` INT(11) NOT NULL AUTO_INCREMENT,
+            `submission_id` INT(11) NOT NULL,
+            `previous_ocr_text` LONGTEXT DEFAULT NULL,
+            `new_ocr_text` LONGTEXT DEFAULT NULL,
+            `previous_item_scores` JSON DEFAULT NULL,
+            `new_item_scores` JSON DEFAULT NULL,
+            `previous_total` DECIMAL(5,2) DEFAULT 0.00,
+            `new_total` DECIMAL(5,2) DEFAULT 0.00,
+            `actor_id` INT(11) NOT NULL,
+            `reason` TEXT DEFAULT NULL,
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `submission_id` (`submission_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+    ");
+    echo "  [+] Created table submission_reprocessing_history\n";
+} else {
+    echo "  [=] Table submission_reprocessing_history already exists\n";
+}
+
+if (!tableExists($pdo, 'submission_snapshots')) {
+    $pdo->exec("
+        CREATE TABLE `submission_snapshots` (
+            `id` INT(11) NOT NULL AUTO_INCREMENT,
+            `submission_id` INT(11) NOT NULL,
+            `review_status` VARCHAR(30) NOT NULL,
+            `status` VARCHAR(20) NOT NULL,
+            `published_at` DATETIME DEFAULT NULL,
+            `reviewed_at` DATETIME DEFAULT NULL,
+            `total_score` DECIMAL(5,2) DEFAULT 0.00,
+            `percentage` DECIMAL(5,2) DEFAULT 0.00,
+            `correct_count` INT(11) DEFAULT 0,
+            `wrong_count` INT(11) DEFAULT 0,
+            `ocr_text` LONGTEXT DEFAULT NULL,
+            `corrected_ocr_text` LONGTEXT DEFAULT NULL,
+            `evaluation_result` JSON DEFAULT NULL,
+            `item_answers` JSON DEFAULT NULL,
+            `reopened_by` INT(11) NOT NULL,
+            `reason` TEXT NOT NULL,
+            `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `submission_id` (`submission_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+    ");
+    echo "  [+] Created table submission_snapshots\n";
+} else {
+    echo "  [=] Table submission_snapshots already exists\n";
+}
+
 // ============================================
 // SEED DEFAULT CREDENTIALS (Russel & Nicole)
 // ============================================

@@ -161,6 +161,99 @@ runTestCase("Empty Result List Returns Clean Empty Output", function() use ($pdo
     return true;
 });
 
+// 6. OCR Rerun Uses Stored Exam Questions and Updates Item-Level Answers
+runTestCase("OCR Rerun Uses Stored Exam Questions and Updates Item-Level Answers", function() use ($pdo, $testExamId, $student1Id, $teacherId, $q1Id, $q2Id) {
+    // Initial submission
+    $res = EvaluationService::evaluateAndSaveSubmission($testExamId, $student1Id, [$q1Id => 'A', $q2Id => 'B'], 'scanned', ['ocr_text' => '1. A 2. B']);
+    $subId = $res['submission_id'];
+
+    // If review_status is finalized/published, reprocessOcr MUST reject it
+    $pdo->exec("UPDATE exam_submissions SET review_status = 'finalized' WHERE id = {$subId}");
+    try {
+        ResultWorkflowService::reprocessOcr($subId, $teacherId, 'Testing block');
+        return "reprocessOcr should block finalized results without admin reopen!";
+    } catch (LogicException $e) {
+        // Expected protection block
+    }
+
+    // Set to pending_review to test valid reprocessing
+    $pdo->exec("UPDATE exam_submissions SET review_status = 'pending_review' WHERE id = {$subId}");
+
+    // Call ResultWorkflowService::reprocessOcr
+    $reprocessRes = ResultWorkflowService::reprocessOcr($subId, $teacherId, 'Testing OCR Reprocessing');
+    if (!$reprocessRes['success']) return "Reprocessing failed";
+    if ((float)$reprocessRes['new_total'] !== 2.0) return "Expected score 2.0, got " . $reprocessRes['new_total'];
+
+    // Verify submission_reprocessing_history record exists
+    $histStmt = $pdo->prepare("SELECT * FROM submission_reprocessing_history WHERE submission_id = ?");
+    $histStmt->execute([$subId]);
+    $hist = $histStmt->fetch(PDO::FETCH_ASSOC);
+    if (!$hist) return "Reprocessing history log missing";
+
+    return true;
+});
+
+// 7. Authorization Enforcement in ResultWorkflowService
+runTestCase("Authorization Enforcement Inside ResultWorkflowService", function() use ($pdo, $testExamId, $student1Id, $student2Id) {
+    // Create submission owned by teacherId (1)
+    $res = EvaluationService::evaluateAndSaveSubmission($testExamId, $student1Id, [], 'online');
+    $subId = $res['submission_id'];
+
+    // Non-existent actor or unauthorized teacher (student2Id) direct service call
+    try {
+        ResultWorkflowService::transitionStatus($subId, 'reviewed', $student2Id, 'Attempt unauthorized transition');
+        return "Expected SecurityException for unauthorized actor, but call succeeded!";
+    } catch (SecurityException $e) {
+        // Expected
+    }
+
+    return true;
+});
+
+// 8. Full Snapshot Preservation for Reopened Results
+runTestCase("Full Snapshot Preservation for Reopened Results", function() use ($pdo, $testExamId, $student1Id, $teacherId, $q1Id, $q2Id) {
+    // Admin user ID
+    $adminStmt = $pdo->query("SELECT id FROM users WHERE role = 'admin' LIMIT 1");
+    $adminId = $adminStmt->fetchColumn() ?: 1;
+
+    // Create and finalize a submission
+    $res = EvaluationService::evaluateAndSaveSubmission($testExamId, $student1Id, [$q1Id => 'A', $q2Id => 'B'], 'online');
+    $subId = $res['submission_id'];
+
+    $pdo->exec("UPDATE exam_submissions SET review_status = 'published', published_at = NOW() WHERE id = {$subId}");
+
+    // Non-admin reopen attempt should fail
+    try {
+        ResultWorkflowService::reopenSubmission($subId, $teacherId, 'pending_review', 'Teacher try reopen');
+        return "Non-admin teacher should NOT be able to reopen!";
+    } catch (SecurityException $e) {
+        // Expected
+    }
+
+    // Missing reason should fail
+    try {
+        ResultWorkflowService::reopenSubmission($subId, $adminId, 'pending_review', '');
+        return "Reopen without reason should fail!";
+    } catch (InvalidArgumentException $e) {
+        // Expected
+    }
+
+    // Valid admin reopen
+    $reopenRes = ResultWorkflowService::reopenSubmission($subId, $adminId, 'pending_review', 'Audit grade correction request');
+    if (!$reopenRes['success']) return "Admin reopen failed";
+
+    // Verify snapshot created in submission_snapshots
+    $snapStmt = $pdo->prepare("SELECT * FROM submission_snapshots WHERE submission_id = ?");
+    $snapStmt->execute([$subId]);
+    $snap = $snapStmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$snap) return "Reopen grading snapshot missing from submission_snapshots table!";
+    if ($snap['review_status'] !== 'published') return "Snapshot must record pre-reopen status (published)";
+    if (empty($snap['item_answers'])) return "Snapshot item_answers must be preserved!";
+
+    return true;
+});
+
 // Summary
 echo "\n=========================================\n";
 echo "PROMPT 5 TEST RESULTS: Passed {$passed}, Failed {$failed}\n";

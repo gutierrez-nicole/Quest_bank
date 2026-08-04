@@ -56,3 +56,5 @@ function logActivity($action_description, $user_id = null) {
         error_log("Failed to log activity: " . $e->getMessage());
     }
 }
+
+class SecurityException extends Exception {}

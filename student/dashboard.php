@@ -17,7 +17,13 @@ try {
             $evalRes = EvaluationService::evaluateAndSaveSubmission($exam_id, $student_id, is_array($answers) ? $answers : [], 'online');
 
             if ($evalRes['success']) {
-                echo json_encode(['success' => true, 'submission_id' => $evalRes['submission_id'], 'percentage' => $evalRes['percentage'], 'status' => $evalRes['status']]);
+                echo json_encode([
+                    'success' => true,
+                    'submission_id' => $evalRes['submission_id'],
+                    'total_score' => $evalRes['total_score'] ?? $evalRes['total_awarded_points'] ?? 0,
+                    'percentage' => $evalRes['percentage'],
+                    'status' => $evalRes['status']
+                ]);
             } else {
                 echo json_encode(['success' => false, 'error' => $evalRes['error'] ?? 'Evaluation failed']);
             }

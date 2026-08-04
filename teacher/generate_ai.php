@@ -15,7 +15,7 @@ $stmtMaterials = $pdo->prepare("SELECT id, title, subject, lesson_text, word_cou
 $stmtMaterials->execute([$teacher_id]);
 $completed_lessons = $stmtMaterials->fetchAll(PDO::FETCH_ASSOC);
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_questions'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']) || isset($_POST['selected_lessons']) || !empty($_POST['lesson_text']))) {
     validateCSRFToken();
     $input_source = $_POST['input_source'] ?? 'manual';
     $selected_lesson_ids = $_POST['selected_lessons'] ?? [];
@@ -66,7 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['generate_questions'])
     }
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['save_ai_exam']) || isset($_POST['save_title']))) {
     validateCSRFToken();
     $title = trim(sanitizeInput($_POST['save_title'] ?? ''));
     $subject = trim(sanitizeInput($_POST['save_subject'] ?? ''));

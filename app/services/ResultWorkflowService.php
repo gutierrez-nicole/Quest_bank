@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../database.php';
 require_once __DIR__ . '/../../includes/security.php';
+require_once __DIR__ . '/AuthorizationService.php';
 
 class ResultWorkflowService {
 
@@ -40,8 +41,17 @@ class ResultWorkflowService {
             throw new Exception("Submission #{$submissionId} not found.");
         }
 
+        // Centralized Authorization Enforcement
+        if (!AuthorizationService::canReviewSubmission($reviewerId, $submissionId)) {
+            throw new SecurityException("Unauthorized: User #{$reviewerId} is not authorized to review submission #{$submissionId}.");
+        }
+
         $currentStatus = $sub['review_status'] ?? 'pending_review';
         $targetStatus = strtolower(trim($targetStatus));
+
+        if ($targetStatus === 'published' && !AuthorizationService::canPublishSubmission($reviewerId, $submissionId)) {
+            throw new SecurityException("Unauthorized: User #{$reviewerId} is not authorized to publish submission #{$submissionId}.");
+        }
 
         // Ordinary teachers are strictly prohibited from backward transitions
         $backwardTransitions = ['reviewed' => 'pending_review', 'finalized' => 'reviewed', 'published' => 'finalized', 'archived' => 'published'];
@@ -115,7 +125,7 @@ class ResultWorkflowService {
 
     /**
      * Separate explicit Administrative Reopen Workflow for backward transitions.
-     * Requires DB-verified admin user and mandatory reason.
+     * Requires DB-verified admin user and mandatory reason, and preserves a full snapshot before reopening.
      */
     public static function reopenSubmission($submissionId, $adminId, $targetStatus, $reason) {
         $pdo = getDBConnection();
@@ -148,9 +158,44 @@ class ResultWorkflowService {
             throw new InvalidArgumentException("Invalid reopen target status '{$targetStatus}'. Allowed reopen targets: pending_review, reviewed, finalized.");
         }
 
+        // Fetch all current item-level answers for snapshot
+        $stmtAns = $pdo->prepare("SELECT question_id, student_answer, correct_answer, awarded_points, max_points, evaluation_status, evaluation_reason FROM submission_answers WHERE submission_id = ?");
+        $stmtAns->execute([$submissionId]);
+        $itemAnswers = $stmtAns->fetchAll(PDO::FETCH_ASSOC);
+
         $pdo->beginTransaction();
 
         try {
+            // Save complete grading snapshot in submission_snapshots table
+            $stmtSnap = $pdo->prepare("
+                INSERT INTO submission_snapshots (
+                    submission_id, review_status, status, published_at, reviewed_at,
+                    total_score, percentage, correct_count, wrong_count, ocr_text,
+                    corrected_ocr_text, evaluation_result, item_answers, reopened_by, reason, created_at
+                ) VALUES (
+                    ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, NOW()
+                )
+            ");
+            $stmtSnap->execute([
+                $submissionId,
+                $sub['review_status'],
+                $sub['status'],
+                $sub['published_at'],
+                $sub['reviewed_at'],
+                $sub['total_score'],
+                $sub['percentage'],
+                $sub['correct_count'],
+                $sub['wrong_count'],
+                $sub['ocr_text'],
+                $sub['corrected_ocr_text'],
+                $sub['evaluation_result'],
+                json_encode($itemAnswers),
+                $adminId,
+                $reason
+            ]);
+
             $stmtUpd = $pdo->prepare("
                 UPDATE exam_submissions 
                 SET review_status = ?, published_at = NULL, teacher_remarks = ?
@@ -296,6 +341,220 @@ class ResultWorkflowService {
     }
 
     /**
+     * Reprocess OCR for a submission through the production scoring engine (ExamScoringService).
+     * Enforces stored question keys, updates submission_answers, recalculates aggregate totals,
+     * and logs full evidence in submission_reprocessing_history.
+     */
+    public static function reprocessOcr($submissionId, $actorId, $reason = 'OCR Re-run') {
+        $pdo = getDBConnection();
+
+        if (empty(trim($reason))) {
+            throw new InvalidArgumentException("Reprocessing reason is required.");
+        }
+
+        // Fetch submission
+        $stmtSub = $pdo->prepare("SELECT * FROM exam_submissions WHERE id = ?");
+        $stmtSub->execute([$submissionId]);
+        $sub = $stmtSub->fetch(PDO::FETCH_ASSOC);
+
+        if (!$sub) {
+            throw new Exception("Submission #{$submissionId} not found.");
+        }
+
+        // Authorization check
+        if (!AuthorizationService::canReviewSubmission($actorId, $submissionId)) {
+            throw new SecurityException("Unauthorized: User #{$actorId} is not authorized to reprocess submission #{$submissionId}.");
+        }
+
+        // Published/Finalized Protection: Require admin reopen before OCR rerun
+        if (in_array($sub['review_status'], ['finalized', 'published', 'archived'])) {
+            throw new LogicException("Cannot re-run OCR on finalized, published, or archived results without an administrative reopen workflow.");
+        }
+
+        $examId = intval($sub['exam_id']);
+        $studentId = intval($sub['student_id']);
+
+        // Load stored exam questions for this exact exam
+        $stmtQ = $pdo->prepare("SELECT * FROM exam_questions WHERE exam_id = ? ORDER BY id ASC");
+        $stmtQ->execute([$examId]);
+        $questions = $stmtQ->fetchAll(PDO::FETCH_ASSOC);
+
+        if (empty($questions)) {
+            throw new Exception("Exam #{$examId} has no questions configured for scoring.");
+        }
+
+        $ocrText = $sub['ocr_text'] ?? '';
+        $submittedAnswers = [];
+
+        // Check if there are existing submission_answers
+        $stmtOldAns = $pdo->prepare("SELECT question_id, student_answer, awarded_points, max_points, evaluation_status FROM submission_answers WHERE submission_id = ?");
+        $stmtOldAns->execute([$submissionId]);
+        $previousItemScoresList = $stmtOldAns->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($previousItemScoresList as $oldAns) {
+            $submittedAnswers[$oldAns['question_id']] = $oldAns['student_answer'];
+        }
+
+        // Parse OCR text if answers are unpopulated
+        if (!empty($ocrText)) {
+            if (file_exists(__DIR__ . '/AnswerSheetParser.php')) {
+                require_once __DIR__ . '/AnswerSheetParser.php';
+                if (method_exists('AnswerSheetParser', 'extractAnswersFromText')) {
+                    $parsedFromText = AnswerSheetParser::extractAnswersFromText($ocrText, count($questions));
+                    $qIdx = 0;
+                    foreach ($questions as $q) {
+                        $qId = $q['id'];
+                        if (!isset($submittedAnswers[$qId]) || $submittedAnswers[$qId] === '') {
+                            if (isset($parsedFromText[$qIdx + 1])) {
+                                $submittedAnswers[$qId] = $parsedFromText[$qIdx + 1];
+                            }
+                        }
+                        $qIdx++;
+                    }
+                }
+            }
+        }
+
+        // Score through ExamScoringService
+        require_once __DIR__ . '/ExamScoringService.php';
+
+        $totalAwardedPoints = 0.00;
+        $totalPossiblePoints = 0.00;
+        $correctCount = 0;
+        $wrongCount = 0;
+        $reviewRequiredCount = 0;
+        $newItemScores = [];
+
+        foreach ($questions as $q) {
+            $qId = $q['id'];
+            $maxPoints = floatval($q['points'] ?? 1.00);
+            $totalPossiblePoints += $maxPoints;
+
+            $studentAnswerRaw = $submittedAnswers[$qId] ?? null;
+            $itemEval = ExamScoringService::evaluateSingleAnswer($q, $studentAnswerRaw);
+
+            if ($itemEval['evaluation_status'] === 'correct') {
+                $correctCount++;
+            } elseif ($itemEval['requires_review']) {
+                $reviewRequiredCount++;
+            } else {
+                $wrongCount++;
+            }
+
+            $totalAwardedPoints += $itemEval['awarded_points'];
+            $newItemScores[] = $itemEval;
+        }
+
+        $stmtExam = $pdo->prepare("SELECT passing_percentage FROM exams WHERE id = ?");
+        $stmtExam->execute([$examId]);
+        $passPct = floatval($stmtExam->fetchColumn() ?: 75.00);
+
+        $newPercentage = ($totalPossiblePoints > 0) ? round(($totalAwardedPoints / $totalPossiblePoints) * 100, 2) : 0.00;
+        $newPassOrFail = ($newPercentage >= $passPct) ? 'Pass' : 'Fail';
+
+        $pdo->beginTransaction();
+
+        try {
+            // Save reprocessing history
+            $stmtHist = $pdo->prepare("
+                INSERT INTO submission_reprocessing_history (
+                    submission_id, previous_ocr_text, new_ocr_text, previous_item_scores,
+                    new_item_scores, previous_total, new_total, actor_id, reason, created_at
+                ) VALUES (
+                    ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, NOW()
+                )
+            ");
+            $stmtHist->execute([
+                $submissionId,
+                $sub['ocr_text'],
+                $ocrText,
+                json_encode($previousItemScoresList),
+                json_encode($newItemScores),
+                $sub['total_score'],
+                $totalAwardedPoints,
+                $actorId,
+                $reason
+            ]);
+
+            // Update item-level submission_answers
+            $stmtAnswer = $pdo->prepare("
+                INSERT INTO submission_answers (
+                    submission_id, exam_id, student_id, question_id, student_answer,
+                    correct_answer, awarded_points, max_points, evaluation_status, evaluation_reason,
+                    confidence, requires_review, created_at
+                ) VALUES (
+                    ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?,
+                    ?, ?, NOW()
+                )
+                ON DUPLICATE KEY UPDATE
+                    student_answer = VALUES(student_answer),
+                    awarded_points = VALUES(awarded_points),
+                    max_points = VALUES(max_points),
+                    evaluation_status = VALUES(evaluation_status),
+                    evaluation_reason = VALUES(evaluation_reason)
+            ");
+
+            foreach ($newItemScores as $item) {
+                $stmtAnswer->execute([
+                    $submissionId,
+                    $examId,
+                    $studentId,
+                    $item['question_id'],
+                    $item['student_answer'],
+                    $item['stored_correct_answer'],
+                    $item['awarded_points'],
+                    $item['maximum_points'],
+                    $item['evaluation_status'],
+                    $item['evaluation_reason'],
+                    $item['confidence'],
+                    $item['requires_review'] ? 1 : 0
+                ]);
+            }
+
+            // Update submission totals and evaluation_result
+            $stmtUpdSub = $pdo->prepare("
+                UPDATE exam_submissions 
+                SET correct_count = ?, wrong_count = ?, total_score = ?, total_possible_score = ?,
+                    percentage = ?, status = ?, evaluation_result = ?
+                WHERE id = ?
+            ");
+            $stmtUpdSub->execute([
+                $correctCount,
+                $wrongCount,
+                $totalAwardedPoints,
+                $totalPossiblePoints,
+                $newPercentage,
+                $newPassOrFail,
+                json_encode($newItemScores),
+                $submissionId
+            ]);
+
+            $pdo->commit();
+
+            logActivity("OCR Reprocessed for Submission #{$submissionId} by User #{$actorId}. Score: {$sub['total_score']} -> {$totalAwardedPoints} ({$newPercentage}%)", $actorId);
+
+            return [
+                'success' => true,
+                'submission_id' => $submissionId,
+                'previous_total' => floatval($sub['total_score']),
+                'new_total' => $totalAwardedPoints,
+                'total_possible' => $totalPossiblePoints,
+                'percentage' => $newPercentage,
+                'status' => $newPassOrFail,
+                'correct_count' => $correctCount,
+                'wrong_count' => $wrongCount,
+                'item_scores' => $newItemScores
+            ];
+
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
      * Enforce student privacy check: Ensures current user is authorized to view submission
      */
     public static function enforceStudentPrivacy($submissionId, $currentStudentId) {
@@ -320,3 +579,4 @@ class ResultWorkflowService {
         return ['allowed' => true, 'submission' => $sub];
     }
 }
+

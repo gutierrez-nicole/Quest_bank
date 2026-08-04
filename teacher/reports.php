@@ -88,60 +88,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['override_item_score']
     }
 }
 
-// 3. OCR Re-Run Handler (Uses stored exam_questions keys dynamically, not fixed templates)
+// 3. OCR Re-Run Handler (Routes through production ExamScoringService, updates submission_answers, and logs evidence history)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rerun_ocr_ai'])) {
     validateCSRFToken();
     $submission_id = intval($_POST['submission_id'] ?? 0);
-    $stmtFetchSub = $pdo->prepare("SELECT * FROM exam_submissions WHERE id = ? AND teacher_id = ?");
-    $stmtFetchSub->execute([$submission_id, $teacher_id]);
-    $sub = $stmtFetchSub->fetch(PDO::FETCH_ASSOC);
-
-    if ($sub) {
-        if (in_array($sub['review_status'], ['finalized', 'published'])) {
-            $error_msg = "Cannot re-run OCR on finalized or published results without an administrative reopen workflow.";
-        } else {
-            try {
-                // Fetch exact stored exam questions for this exam
-                $qStmt = $pdo->prepare("SELECT id, question_text, question_type, correct_answer, points FROM exam_questions WHERE exam_id = ? ORDER BY id ASC");
-                $qStmt->execute([$sub['exam_id']]);
-                $storedQuestions = $qStmt->fetchAll(PDO::FETCH_ASSOC);
-
-                $answerKeyParts = [];
-                $idx = 1;
-                foreach ($storedQuestions as $q) {
-                    $answerKeyParts[] = "{$idx}. {$q['correct_answer']}";
-                    $idx++;
-                }
-                $storedAnswerKey = implode(" ", $answerKeyParts);
-
-                $ocrText = $sub['ocr_text'] ?? "";
-                $evalRes = GroqService::evaluateAnswerSheetDetailed($sub['student_name'], $sub['exam_title'], $sub['upload_type'], $storedAnswerKey, $ocrText);
-
-                if (isset($evalRes['success'])) {
-                    $ev = $evalRes['evaluation'];
-                    $stmtUpd = $pdo->prepare("
-                        UPDATE exam_submissions 
-                        SET correct_count = ?, wrong_count = ?, total_score = ?, percentage = ?, status = ?, evaluation_result = ? 
-                        WHERE id = ?
-                    ");
-                    $stmtUpd->execute([
-                        intval($ev['correct_count'] ?? $ev['correct'] ?? 0),
-                        intval($ev['wrong_count'] ?? $ev['wrong'] ?? 0),
-                        intval($ev['correct_count'] ?? $ev['correct'] ?? 0),
-                        floatval($ev['percentage'] ?? 0.0),
-                        $ev['status'] ?? 'Pass',
-                        json_encode($ev),
-                        $submission_id
-                    ]);
-                    logActivity("Re-ran AI comparative evaluation using stored exam keys for submission #{$submission_id}.", $teacher_id);
-                    $success_msg = "Re-ran AI comparative evaluation using stored exam keys for submission #{$submission_id} successfully!";
-                } else {
-                    $error_msg = "Re-run AI evaluation failed: " . ($evalRes['error'] ?? 'Unknown error');
-                }
-            } catch (Exception $e) {
-                $error_msg = "OCR Re-processing Error: " . $e->getMessage();
-            }
+    if ($submission_id > 0) {
+        try {
+            $res = ResultWorkflowService::reprocessOcr($submission_id, $teacher_id, "Teacher requested OCR reprocessing via Reports interface");
+            $success_msg = "Re-ran OCR evaluation using production scoring engine for submission #{$submission_id}! Recalculated Score: {$res['new_total']} / {$res['total_possible']} ({$res['percentage']}%) - {$res['status']}";
+        } catch (Exception $e) {
+            $error_msg = "OCR Reprocessing Error: " . $e->getMessage();
         }
+    } else {
+        $error_msg = "OCR Reprocessing Error: Invalid submission ID.";
     }
 }
 ?>
