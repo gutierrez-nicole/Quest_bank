@@ -10,6 +10,10 @@ uploads/*
 !uploads/.gitkeep
 !uploads/.htaccess
 
+# Database backups
+database/backups/
+*.sql.gz
+
 # Dependency & Vendor directories
 node_modules/
 vendor/
