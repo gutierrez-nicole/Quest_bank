@@ -240,8 +240,10 @@ test.describe('Epic 2.2 Authoritative E2E & Edge-Workflow Suite', () => {
         await expect(page.locator('[data-testid="generation-audit-summary"]')).toBeVisible({ timeout: 15000 });
 
         // Assert exact affected question card displays 'Source verification required'
-        await expect(page.locator('[data-testid="source-verification-required"]').first()).toBeVisible();
-        await expect(page.locator('[data-testid="source-verification-required"]').first()).toContainText('Source verification required.');
+        const unverifiedBadges = page.locator('[data-testid="source-verification-required"]');
+        expect(await unverifiedBadges.count()).toBe(1);
+        await expect(unverifiedBadges.first()).toBeVisible();
+        await expect(unverifiedBadges.first()).toContainText('Source verification required.');
 
         // Attempt save without choosing a source -> Assert rejection
         await page.evaluate((title) => { const el = document.querySelector('input[name="save_title"]'); if (el) el.value = title; }, `[${state.runId}] Unresolved Source Save Attempt`);
@@ -280,9 +282,11 @@ test.describe('Epic 2.2 Authoritative E2E & Edge-Workflow Suite', () => {
                 expect(q.source_verified_by).toBe(state.teacherId);
                 expect(q.source_verified_at).toBeTruthy();
                 manualCount++;
+            } else {
+                expect(q.source_verified_by).toBeNull();
             }
         }
-        expect(manualCount).toBeGreaterThanOrEqual(1);
+        expect(manualCount).toBe(1);
     });
 
     test('5. Real Incomplete-Batch Browser Acknowledgment Workflow', async ({ page }) => {
@@ -312,12 +316,38 @@ test.describe('Epic 2.2 Authoritative E2E & Edge-Workflow Suite', () => {
         const batchId = await page.getAttribute('input[name="save_generation_batch_id"]', 'value');
         expect(batchId).toBeTruthy();
 
+        // Query batch metadata before save
+        const preBatchRes = execSync(`php tests/helpers/verify_db_helper.php get_batch ${batchId}`, { cwd: path.join(__dirname, '..') }).toString();
+        const preBatchData = JSON.parse(preBatchRes);
+        expect(preBatchData.success).toBe(true);
+        const pBatch = preBatchData.batch;
+
+        expect(pBatch.simulated_scenario).toBe('incomplete_midterm_chunk');
+        expect(pBatch.batch_status).toBe('incomplete');
+        expect(pBatch.failed_chunk_count).toBe(1);
+        expect(pBatch.failed_chunk_index).not.toBeNull();
+        expect(pBatch.affected_lesson_ids).toContain(state.lessons.midterm);
+        expect(pBatch.affected_periods).toContain('midterm');
+        expect(pBatch.failure_messages.length).toBeGreaterThan(0);
+
+        const ackToken = await page.getAttribute('input[name="ack_token"]', 'value');
+
         // Attempt save without acknowledgment reason -> Assert rejection
         await page.evaluate((title) => { const el = document.querySelector('input[name="save_title"]'); if (el) el.value = title; }, `[${state.runId}] Unacknowledged Incomplete Exam`);
         await page.click('button[name="save_ai_exam"]');
         await page.waitForSelector('[data-testid="error-alert-banner"]');
 
         await expect(page.locator('[data-testid="error-alert-banner"]')).toContainText('Incomplete AI generation batch requires an explicit teacher acknowledgement reason', { timeout: 15000 });
+
+        // Select valid sources for any unverified manual-source-select dropdowns
+        const manualSelects5 = page.locator('[data-testid="manual-source-select"]');
+        const selectCount5 = await manualSelects5.count();
+        for (let i = 0; i < selectCount5; i++) {
+            const val = await manualSelects5.nth(i).inputValue();
+            if (!val) {
+                await manualSelects5.nth(i).selectOption({ index: 1 });
+            }
+        }
 
         // Enter acknowledgment reason and submit
         await page.fill('[data-testid="ack-reason-input"]', 'Approved partial prelim/midterm coverage for quiz setup');
@@ -329,7 +359,7 @@ test.describe('Epic 2.2 Authoritative E2E & Edge-Workflow Suite', () => {
         const dbData = JSON.parse(dbRes);
         expect(dbData.success).toBe(true);
         expect(dbData.batch.batch_status).toBe('incomplete');
-        expect(dbData.batch.failed_chunk_count).toBeGreaterThanOrEqual(1);
+        expect(dbData.batch.failed_chunk_count).toBe(1);
         expect(dbData.batch.affected_lesson_ids).toContain(state.lessons.midterm);
         expect(dbData.batch.teacher_acknowledged_by).toBe(state.teacherId);
         expect(dbData.batch.teacher_acknowledged_at).toBeTruthy();
@@ -337,6 +367,34 @@ test.describe('Epic 2.2 Authoritative E2E & Edge-Workflow Suite', () => {
         expect(dbData.batch.acknowledgement_token_hash).toBeTruthy();
         expect(dbData.batch.batch_consumed_at).toBeTruthy();
         expect(dbData.batch.saved_exam_id).toBeGreaterThan(0);
+
+        // REPLAY REJECTION ASSERTION: Resubmit exact ackToken and batchId
+        const csrfToken = await page.getAttribute('input[name="csrf_token"]', 'value');
+        const replayResponse = await page.request.post('/teacher/generate_ai.php', {
+            form: {
+                csrf_token: csrfToken,
+                save_ai_exam: '1',
+                save_generation_batch_id: batchId,
+                save_title: `[${state.runId}] Replay Attempt Exam`,
+                save_subject: 'Structural Engineering',
+                save_specialization: 'Structural',
+                save_difficulty: 'medium',
+                ack_token: ackToken,
+                acknowledgement_reason: 'Replay attempt',
+                questions: [
+                    {
+                        text: 'Replay attempt question?',
+                        type: 'multiple_choice',
+                        points: 1,
+                        source_lesson_ids: state.lessons.prelim,
+                        manual_source_id: state.lessons.prelim
+                    }
+                ]
+            }
+        });
+        const replayHtml = await replayResponse.text();
+        expect(replayHtml).toContain('Cannot save exam');
+        expect(replayHtml).toMatch(/already been consumed|Invalid, expired, replayed, or tampered/);
     });
 
     test('6. Real Coverage-Aware Refill Browser Workflow', async ({ page }) => {
@@ -367,6 +425,24 @@ test.describe('Epic 2.2 Authoritative E2E & Edge-Workflow Suite', () => {
         const batchId = await page.getAttribute('input[name="save_generation_batch_id"]', 'value');
         expect(batchId).toBeTruthy();
 
+        // Query batch metadata before save
+        const preRefillRes = execSync(`php tests/helpers/verify_db_helper.php get_batch ${batchId}`, { cwd: path.join(__dirname, '..') }).toString();
+        const preRefillData = JSON.parse(preRefillRes);
+        expect(preRefillData.success).toBe(true);
+        const rBatch = preRefillData.batch;
+
+        expect(rBatch.simulated_scenario).toBe('midterm_refill');
+        expect(rBatch.initial_questions_per_period.midterm ?? 0).toBeLessThanOrEqual(1);
+        expect(rBatch.failed_chunk_index).not.toBeNull();
+        expect(rBatch.refill_target_periods).toContain('midterm');
+        expect(rBatch.refill_target_lesson_ids).toContain(state.lessons.midterm);
+        expect(rBatch.refill_attempt_count).toBeGreaterThan(0);
+        expect(rBatch.refill_generated_count).toBeGreaterThan(0);
+        expect(rBatch.final_questions_per_period.midterm).toBeGreaterThan(0);
+        expect(Object.keys(rBatch.final_questions_per_lesson)).toContain(String(state.lessons.midterm));
+        expect(rBatch.uncovered_periods).not.toContain('midterm');
+        expect(rBatch.requested_question_count).toBe(5);
+
         // Save exam
         await page.evaluate((title) => { const el = document.querySelector('input[name="save_title"]'); if (el) el.value = title; }, `[${state.runId}] Saved Refill Coverage Exam`);
         await page.click('button[name="save_ai_exam"]');
@@ -378,12 +454,17 @@ test.describe('Epic 2.2 Authoritative E2E & Edge-Workflow Suite', () => {
         expect(dbData.success).toBe(true);
         expect(dbData.questions_count).toBe(5);
         expect(dbData.batch.batch_status).toBe('completed');
+
+        // Verify refill-generated question source relations include exact Midterm lesson ID
+        const midtermRelations = dbData.sources.filter(s => parseInt(s.lesson_id) === state.lessons.midterm);
+        expect(midtermRelations.length).toBeGreaterThan(0);
         expect(dbData.batch.refill_attempt_count).toBeGreaterThan(0);
         expect(dbData.batch.questions_per_period.midterm).toBeGreaterThan(0);
         expect(dbData.batch.uncovered_periods).not.toContain('midterm');
     });
 
     test('7. Security Rejections with Valid CSRF Token', async ({ page }) => {
+        const state = await ensureFixturesLoaded(page);
         await page.goto('/teacher/generate_ai.php');
 
         // 1. Unauthorized Lesson Injection Rejection

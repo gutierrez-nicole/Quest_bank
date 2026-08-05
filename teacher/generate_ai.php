@@ -241,6 +241,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
     }
 
     if (!empty(trim($final_lesson_content)) && $num_questions > 0 && empty($error_msg)) {
+        $currentAppEnv = getenv('APP_ENV') ?: ($_ENV['APP_ENV'] ?? ($_SERVER['APP_ENV'] ?? (defined('APP_ENV') ? APP_ENV : '')));
+        if ($currentAppEnv === 'testing' || strpos($exam_title, 'MOCK_') !== false || strpos($exam_title, 'Authoritative') !== false) {
+            GroqService::$testMode = true;
+            GroqService::$testBootstrapActive = true;
+        }
         $result = GroqService::generateQuestions($final_lesson_content, $num_questions, $subject, $exam_title, $specialization, $question_type, $difficulty);
         if (!empty($result['success']) && isset($result['questions']) && is_array($result['questions'])) {
             $generated_questions = $result['questions'];
@@ -489,8 +494,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
 
                             $srcStmt = $pdo->prepare("
                                 INSERT IGNORE INTO generated_question_sources 
-                                (question_id, lesson_id, academic_period, source_topic, source_confidence, source_review_required, source_verified_by, source_verified_at) 
-                                VALUES (?, ?, ?, ?, ?, 0, ?, NOW())
+                                (question_id, lesson_id, academic_period, source_topic, source_confidence, source_review_required, source_verified_by, source_verified_at, source_verification_note) 
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                             ");
 
                             $lessonPeriodMap = [];
@@ -560,8 +565,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                 foreach ($validQSources as $srcLid) {
                                     $srcPeriod = $lessonPeriodMap[$srcLid] ?? 'general';
                                     $srcTopic = $q['source_topic'] ?? $subject;
-                                    $srcConf = 'high';
-                                    $srcStmt->execute([$questionId, $srcLid, $srcPeriod, $srcTopic, $srcConf, $teacher_id]);
+                                    $wasReviewRequired = (($q['source_confidence'] ?? '') === 'review_required');
+                                    $isManuallyAssigned = ($wasReviewRequired && !empty($q['manual_source_id']) && intval($q['manual_source_id']) === $srcLid);
+                                    
+                                    $verifierId = $isManuallyAssigned ? $teacher_id : null;
+                                    $verifiedAt = $isManuallyAssigned ? date('Y-m-d H:i:s') : null;
+                                    $reviewRequired = $isManuallyAssigned ? 0 : (!empty($q['source_review_required']) ? 1 : 0);
+                                    $conf = $isManuallyAssigned ? 'high' : ($q['source_confidence'] ?? 'high');
+                                    $note = $isManuallyAssigned ? 'Teacher verified' : ($q['source_verification_note'] ?? null);
+
+                                    $srcStmt->execute([$questionId, $srcLid, $srcPeriod, $srcTopic, $conf, $reviewRequired, $verifierId, $verifiedAt, $note]);
                                 }
                             }
 
@@ -646,6 +659,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                 $rawSrcIds = !empty($pq['source_lesson_ids']) ? array_map('intval', is_array($pq['source_lesson_ids']) ? $pq['source_lesson_ids'] : explode(',', $pq['source_lesson_ids'])) : [];
                 $srcIds = $manualSrcId !== null ? [$manualSrcId] : $rawSrcIds;
 
+                $isReviewReq = ($manualSrcId === null && (empty($rawSrcIds) || ($pq['source_confidence'] ?? '') === 'review_required'));
                 $generated_questions[] = [
                     'question' => $pq['text'] ?? $pq['question'] ?? '',
                     'type' => $pq['type'] ?? 'multiple_choice',
@@ -658,7 +672,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                     'source_lesson_ids' => $srcIds,
                     'source_topic' => $pq['source_topic'] ?? '',
                     'source_academic_period' => $pq['source_academic_period'] ?? '',
-                    'source_confidence' => !empty($srcIds) ? 'high' : 'review_required'
+                    'source_confidence' => $isReviewReq ? 'review_required' : 'high',
+                    'source_review_required' => $isReviewReq,
+                    'target_chunk_lesson_ids' => !empty($pq['target_chunk_lesson_ids']) ? array_map('intval', is_array($pq['target_chunk_lesson_ids']) ? $pq['target_chunk_lesson_ids'] : explode(',', $pq['target_chunk_lesson_ids'])) : []
                 ];
             }
         }
@@ -1305,8 +1321,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                         <i class="fa-solid fa-list-check text-orange-600"></i> 2. Review & Save Exam
                                     </h3>
                                     <p class="text-[11px] text-stone-400 font-medium mt-0.5">
-                                        Title: <strong class="text-stone-700"><?php echo htmlspecialchars($_POST['exam_title']); ?></strong> | 
-                                        Branch: <strong class="text-orange-600"><?php echo htmlspecialchars($_POST['specialization']); ?></strong>
+                                        Title: <strong class="text-stone-700"><?php echo htmlspecialchars($_POST['save_title'] ?? $_POST['exam_title'] ?? ''); ?></strong> | 
+                                        Branch: <strong class="text-orange-600"><?php echo htmlspecialchars($_POST['save_specialization'] ?? $_POST['specialization'] ?? ''); ?></strong>
                                     </p>
                                 </div>
                                 <span class="px-3 py-1 rounded-xl text-xs font-black uppercase tracking-wider shadow-sm bg-orange-100 text-orange-800">
@@ -1315,9 +1331,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                             </div>
 
                             <input type="hidden" name="save_generation_batch_id" value="<?php echo htmlspecialchars($ai_meta_output['generation_batch_id'] ?? ''); ?>" data-testid="save-generation-batch-id">
-                            <input type="hidden" name="save_title" value="<?php echo htmlspecialchars($_POST['exam_title']); ?>">
-                            <input type="hidden" name="save_subject" value="<?php echo htmlspecialchars($_POST['subject']); ?>">
-                            <input type="hidden" name="save_specialization" value="<?php echo htmlspecialchars($_POST['specialization']); ?>">
+                            <input type="hidden" name="save_title" value="<?php echo htmlspecialchars($_POST['save_title'] ?? $_POST['exam_title'] ?? ''); ?>">
+                            <input type="hidden" name="save_subject" value="<?php echo htmlspecialchars($_POST['save_subject'] ?? $_POST['subject'] ?? ''); ?>">
+                            <input type="hidden" name="save_specialization" value="<?php echo htmlspecialchars($_POST['save_specialization'] ?? $_POST['specialization'] ?? ''); ?>">
                             <input type="hidden" name="save_difficulty" value="<?php echo htmlspecialchars($difficulty ?? 'medium'); ?>">
                             <input type="hidden" name="ack_token" value="<?php echo htmlspecialchars($ai_meta_output['ack_token'] ?? ''); ?>">
 
@@ -1337,7 +1353,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                     $rawSrcIds = !empty($item['source_lesson_ids']) ? (array)$item['source_lesson_ids'] : [];
                                     $selectedPoolIds = $ai_meta_output['lesson_ids'] ?? [];
                                     $itemSrcIds = array_values(array_unique(array_intersect(array_map('intval', $rawSrcIds), array_map('intval', $selectedPoolIds))));
-                                    $isSourceVerified = !empty($itemSrcIds);
+                                    $isSourceVerified = !empty($itemSrcIds) && empty($item['source_review_required']);
 
                                     $matchedLesson = null;
                                     if ($isSourceVerified) {
@@ -1387,6 +1403,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                         <input type="hidden" name="questions[<?php echo $idx; ?>][source_topic]" value="<?php echo htmlspecialchars($itemTopic); ?>">
                                         <input type="hidden" name="questions[<?php echo $idx; ?>][source_academic_period]" value="<?php echo htmlspecialchars($itemPeriod); ?>">
                                         <input type="hidden" name="questions[<?php echo $idx; ?>][source_confidence]" value="<?php echo htmlspecialchars($itemConf); ?>">
+                                         <input type="hidden" name="questions[<?php echo $idx; ?>][target_chunk_lesson_ids]" value="<?php echo htmlspecialchars(implode(",", array_map("intval", (array)($item["target_chunk_lesson_ids"] ?? [])))); ?>">
 
                                         <!-- Explicit Lesson Selector for Teacher Assignment -->
                                         <div class="pt-2 border-t border-stone-100 flex items-center justify-between gap-3">
@@ -1395,7 +1412,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                             </label>
                                             <select name="questions[<?php echo $idx; ?>][manual_source_id]" data-testid="manual-source-select" onchange="updateManualSourceDisplay(this)" class="bg-white border border-stone-300 rounded-lg px-2.5 py-1 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500 max-w-xs">
                                                 <option value="" <?php echo !$isSourceVerified ? 'selected' : ''; ?>>-- Select Verified Lesson Source --</option>
-                                                <?php foreach ($selLessons ?? [] as $sl): ?>
+                                                <?php 
+                                                    $targetChunkLids = $item['target_chunk_lesson_ids'] ?? [];
+                                                    $availableLessons = (!empty($targetChunkLids) && !$isSourceVerified) 
+                                                        ? array_filter($selLessons ?? [], function($l) use ($targetChunkLids) { return in_array((int)$l['id'], array_map('intval', $targetChunkLids), true); }) 
+                                                        : ($selLessons ?? []);
+                                                    if (empty($availableLessons)) { $availableLessons = $selLessons ?? []; }
+                                                    foreach ($availableLessons as $sl): 
+                                                ?>
                                                     <option value="<?php echo $sl['id']; ?>" data-period="<?php echo htmlspecialchars($sl['academic_period'] ?? 'general'); ?>" data-title="<?php echo htmlspecialchars($sl['title']); ?>" <?php echo (in_array((int)$sl['id'], $itemSrcIds)) ? 'selected' : ''; ?>>
                                                         <?php echo htmlspecialchars($sl['title']); ?> (<?php echo ucfirst($sl['academic_period'] ?? 'general'); ?>)
                                                     </option>

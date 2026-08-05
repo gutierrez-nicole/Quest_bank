@@ -49,11 +49,11 @@ echo "===========================================================\n";
 echo " QUESTBANK EPIC 2.2 DETERMINISTIC MOCK SCENARIO VERIFICATION\n";
 echo "===========================================================\n";
 
-$pdo = getDBConnection();
-if ($pdo) {
+try {
+    $pdo = getDBConnection();
     logTest("Setup: Database Connection Established", true, "Database handle active");
-} else {
-    logTest("Setup: Database Connection Established", false, "Could not connect to database");
+} catch (Throwable $e) {
+    fwrite(STDERR, "SETUP FAILED: Database unavailable.\n");
     exit(1);
 }
 
@@ -216,10 +216,10 @@ echo "\n-----------------------------------------------------------\n";
 echo "VERIFICATION SUMMARY: {$passedCount} PASSED, {$failedCount} FAILED\n";
 echo "-----------------------------------------------------------\n";
 
-if ($failedCount === 0) {
+if ($passedCount > 0 && $failedCount === 0) {
     echo "RESULT: SUCCESS — All deterministic mock scenario assertions passed cleanly.\n";
     exit(0);
 } else {
-    echo "RESULT: FAILURE — {$failedCount} test(s) failed.\n";
+    echo "RESULT: FAILURE — {$failedCount} test(s) failed or no assertions ran.\n";
     exit(1);
 }

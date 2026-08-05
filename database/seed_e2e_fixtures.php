@@ -35,9 +35,11 @@ if (php_sapi_name() !== 'cli') {
     exit(1);
 }
 
-$pdo = getDBConnection();
-if (!$pdo) {
-    echo json_encode(['error' => 'Database connection failed']);
+try {
+    $pdo = getDBConnection();
+} catch (Throwable $e) {
+    fwrite(STDERR, "SETUP FAILED: Database unavailable.\n");
+    echo json_encode(['error' => 'Database connection failed: ' . $e->getMessage()]);
     exit(1);
 }
 

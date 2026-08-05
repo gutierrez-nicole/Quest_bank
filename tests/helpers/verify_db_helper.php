@@ -9,9 +9,11 @@ require_once __DIR__ . '/../../app/bootstrap.php';
 
 $action = $argv[1] ?? '';
 
-$pdo = getDBConnection();
-if (!$pdo) {
-    echo json_encode(['success' => false, 'error' => 'Database connection failed']);
+try {
+    $pdo = getDBConnection();
+} catch (Throwable $e) {
+    fwrite(STDERR, "SETUP FAILED: Database unavailable.\n");
+    echo json_encode(['success' => false, 'error' => 'Database connection failed: ' . $e->getMessage()]);
     exit(1);
 }
 
@@ -214,6 +216,50 @@ if ($action === 'verify_exam_saved') {
         'sources_count' => count($sources),
         'sources' => $sources
     ]);
+    exit(0);
+}
+
+if ($action === 'get_batch') {
+    $batchId = $argv[2] ?? '';
+    if (empty($batchId)) {
+        echo json_encode(['success' => false, 'error' => 'Batch ID parameter missing']);
+        exit(1);
+    }
+    $stmtBatch = $pdo->prepare("SELECT * FROM ai_generation_batches WHERE generation_batch_id = ?");
+    $stmtBatch->execute([$batchId]);
+    $batch = $stmtBatch->fetch(PDO::FETCH_ASSOC);
+    if (!$batch) {
+        echo json_encode(['success' => false, 'error' => "Batch '{$batchId}' not found"]);
+        exit(1);
+    }
+    $responseBatch = [
+        'generation_batch_id' => $batch['generation_batch_id'],
+        'teacher_id' => intval($batch['teacher_id']),
+        'batch_status' => $batch['batch_status'],
+        'requested_question_count' => intval($batch['requested_question_count']),
+        'generated_question_count' => intval($batch['generated_question_count']),
+        'failed_question_count' => intval($batch['failed_question_count']),
+        'failed_chunk_count' => intval($batch['failed_chunk_count'] ?? 0),
+        'affected_lesson_ids' => json_decode($batch['affected_lesson_ids'] ?? '[]', true) ?: [],
+        'affected_periods' => json_decode($batch['affected_periods'] ?? '[]', true) ?: [],
+        'failure_messages' => json_decode($batch['failure_messages'] ?? '[]', true) ?: [],
+        'simulated_scenario' => $batch['simulated_scenario'] ?? null,
+        'failed_chunk_index' => isset($batch['failed_chunk_index']) ? intval($batch['failed_chunk_index']) : null,
+        'refill_target_chunk_index' => isset($batch['refill_target_chunk_index']) ? intval($batch['refill_target_chunk_index']) : null,
+        'refill_target_lesson_ids' => json_decode($batch['refill_target_lesson_ids'] ?? '[]', true) ?: [],
+        'refill_target_periods' => json_decode($batch['refill_target_periods'] ?? '[]', true) ?: [],
+        'initial_questions_per_lesson' => json_decode($batch['initial_questions_per_lesson'] ?? '{}', true) ?: [],
+        'initial_questions_per_period' => json_decode($batch['initial_questions_per_period'] ?? '{}', true) ?: [],
+        'initial_uncovered_lesson_ids' => json_decode($batch['initial_uncovered_lesson_ids'] ?? '[]', true) ?: [],
+        'initial_uncovered_periods' => json_decode($batch['initial_uncovered_periods'] ?? '[]', true) ?: [],
+        'final_questions_per_lesson' => json_decode($batch['questions_per_lesson'] ?? '{}', true) ?: [],
+        'final_questions_per_period' => json_decode($batch['questions_per_period'] ?? '{}', true) ?: [],
+        'refill_attempt_count' => intval($batch['refill_attempt_count'] ?? 0),
+        'refill_generated_count' => intval($batch['refill_generated_count'] ?? 0),
+        'uncovered_periods' => json_decode($batch['uncovered_periods'] ?? '[]', true) ?: [],
+        'batch_consumed_at' => $batch['batch_consumed_at']
+    ];
+    echo json_encode(['success' => true, 'batch' => $responseBatch]);
     exit(0);
 }
 

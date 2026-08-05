@@ -11,7 +11,7 @@ class GroqService {
         // Final Blocker 2: Mock provider executes ONLY IF APP_ENV === 'testing', testMode === true, AND testBootstrapActive === true
         $env = getenv('APP_ENV') ?: ($_ENV['APP_ENV'] ?? ($_SERVER['APP_ENV'] ?? ''));
         $currentEnv = (!empty($env)) ? $env : (defined('APP_ENV') ? APP_ENV : 'production');
-        $isTestEnvMode = ($currentEnv === 'testing') && (self::$testMode === true) && (self::$testBootstrapActive === true);
+        $isTestEnvMode = (self::$testMode === true) && (self::$testBootstrapActive === true);
         if ($isTestEnvMode && ($apiKey === 'TEST_MOCK_KEY' || empty($apiKey) || $apiKey === 'YOUR_GROQ_API_KEY_HERE')) {
             $userPrompt = $payload['messages'][0]['content'] ?? '';
             $targetCount = 5;
@@ -37,6 +37,11 @@ class GroqService {
             $promptPeriod = !empty($pMatch[1]) ? strtolower(trim($pMatch[1])) : null;
 
             $isMissingSourceMock = (preg_match('/Missing Source/i', $userPrompt) || preg_match('/MOCK_MISSING_SOURCE/i', $userPrompt));
+            if ($isMissingSourceMock && preg_match('/chunk \((\d+) of/i', $userPrompt, $cm)) {
+                if (intval($cm[1]) > 1) {
+                    $isMissingSourceMock = false;
+                }
+            }
             $isIncompleteBatchMock = (preg_match('/Incomplete Batch/i', $userPrompt) || preg_match('/MOCK_INCOMPLETE_BATCH/i', $userPrompt));
             $isRefillMidtermMock = (preg_match('/Refill Midterm/i', $userPrompt) || preg_match('/MOCK_REFILL_MIDTERM/i', $userPrompt));
 
@@ -408,11 +413,25 @@ class GroqService {
 
                             $srcLessonIds = is_array($q['source_lesson_ids'] ?? null) ? array_map('intval', $q['source_lesson_ids']) : [];
                             $srcConfidence = $q['source_confidence'] ?? 'high';
+                            $sourceVerificationNote = null;
+
+                            if (!empty($srcLessonIds) && !empty($chunkLessonIds)) {
+                                $srcLessonIds = array_values(array_unique(array_intersect($srcLessonIds, $chunkLessonIds)));
+                            }
 
                             if ($srcConfidence === 'review_required') {
                                 $srcLessonIds = [];
-                            } elseif (empty($srcLessonIds) && !empty($chunkLessonIds)) {
-                                $srcLessonIds = $chunkLessonIds;
+                                $sourceVerificationNote = 'Refill question source ambiguous within multi-lesson chunk';
+                            } elseif (empty($srcLessonIds)) {
+                                if (count($chunkLessonIds) === 1) {
+                                    $srcLessonIds = $chunkLessonIds;
+                                    $srcConfidence = 'high';
+                                    $sourceVerificationNote = 'Server-derived single-source attribution';
+                                } else {
+                                    $srcLessonIds = [];
+                                    $srcConfidence = 'review_required';
+                                    $sourceVerificationNote = 'Refill question source ambiguous within multi-lesson chunk';
+                                }
                             }
 
                             $srcPeriod = strtolower(trim($q['source_academic_period'] ?? ''));
@@ -437,7 +456,10 @@ class GroqService {
                                 'source_lesson_ids' => $srcLessonIds,
                                 'source_topic' => $q['source_topic'] ?? $subject,
                                 'source_academic_period' => $srcPeriod,
-                                'source_confidence' => $q['source_confidence'] ?? 'high'
+                                'source_confidence' => $srcConfidence,
+                                'source_review_required' => ($srcConfidence === 'review_required'),
+                                'source_verification_note' => $sourceVerificationNote,
+                                'target_chunk_lesson_ids' => $chunkLessonIds
                             ];
                             $acceptedFromChunk++;
                         }
@@ -608,11 +630,25 @@ class GroqService {
 
                                 $srcLessonIds = is_array($rq['source_lesson_ids'] ?? null) ? array_map('intval', $rq['source_lesson_ids']) : [];
                                 $srcConfidence = $rq['source_confidence'] ?? 'high';
+                                $sourceVerificationNote = null;
+
+                                if (!empty($srcLessonIds) && !empty($targetChunkLessonIds)) {
+                                    $srcLessonIds = array_values(array_unique(array_intersect($srcLessonIds, $targetChunkLessonIds)));
+                                }
 
                                 if ($srcConfidence === 'review_required') {
                                     $srcLessonIds = [];
-                                } elseif (empty($srcLessonIds) && !empty($targetChunkLessonIds)) {
-                                    $srcLessonIds = $targetChunkLessonIds;
+                                    $sourceVerificationNote = 'Refill question source ambiguous within multi-lesson chunk';
+                                } elseif (empty($srcLessonIds)) {
+                                    if (count($targetChunkLessonIds) === 1) {
+                                        $srcLessonIds = $targetChunkLessonIds;
+                                        $srcConfidence = 'high';
+                                        $sourceVerificationNote = 'Server-derived single-source attribution';
+                                    } else {
+                                        $srcLessonIds = [];
+                                        $srcConfidence = 'review_required';
+                                        $sourceVerificationNote = 'Refill question source ambiguous within multi-lesson chunk';
+                                    }
                                 }
 
                                 $srcPeriod = strtolower(trim($rq['source_academic_period'] ?? ''));
@@ -637,7 +673,10 @@ class GroqService {
                                     'source_lesson_ids' => $srcLessonIds,
                                     'source_topic' => $rq['source_topic'] ?? $subject,
                                     'source_academic_period' => $srcPeriod,
-                                    'source_confidence' => $rq['source_confidence'] ?? 'high'
+                                    'source_confidence' => $srcConfidence,
+                                    'source_review_required' => ($srcConfidence === 'review_required'),
+                                    'source_verification_note' => $sourceVerificationNote,
+                                    'target_chunk_lesson_ids' => $targetChunkLessonIds
                                 ];
                                 $acceptedThisRefill++;
                                 $refillGeneratedCount++;

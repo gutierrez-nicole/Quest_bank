@@ -33,12 +33,12 @@ echo "    QUESTBANK EPIC 2.2 FINAL REPAIRS 9-12 VERIFICATION     \n";
 echo "===========================================================\n";
 
 try {
-    // DB Connection Check
     $pdo = getDBConnection();
-    if (!$pdo) {
-        throw new Exception("Database connection failed: getDBConnection() returned null.");
-    }
     logTest("Setup: Database Connection Established", true, "Database handle active");
+} catch (Throwable $e) {
+    fwrite(STDERR, "SETUP FAILED: Database unavailable.\n");
+    exit(1);
+}
 
     // Teacher check
     $stmtT = $pdo->prepare("SELECT id FROM users WHERE role = 'teacher' LIMIT 1");
@@ -129,10 +129,10 @@ echo "VERIFICATION SUMMARY: {$passed} PASSED, {$failed} FAILED\n";
 echo "-----------------------------------------------------------\n";
 
 // STRICT EXIT CODES RULE (Final Blocker 6)
-if ($failed > 0) {
-    echo "RESULT: FAILURE DETECTED — Exiting with Exit Code 1.\n";
-    exit(1);
-} else {
+if ($passed > 0 && $failed === 0) {
     echo "RESULT: SUCCESS — All assertions passed cleanly. Exiting with Exit Code 0.\n";
     exit(0);
+} else {
+    echo "RESULT: FAILURE DETECTED — Exiting with Exit Code 1.\n";
+    exit(1);
 }
