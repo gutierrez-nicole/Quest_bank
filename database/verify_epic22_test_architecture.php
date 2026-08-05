@@ -5,6 +5,9 @@
 
 putenv('APP_ENV=testing');
 putenv('TEST_BOOTSTRAP_ACTIVE=1');
+require_once __DIR__ . '/../tests/helpers/test_preflight.php';
+runPreflightChecks(['pdo', 'pdo_mysql', 'mbstring', 'curl', 'json', 'fileinfo', 'zip', 'xml']);
+
 require_once __DIR__ . '/../app/bootstrap.php';
 
 function logTest($name, $passed, $detail = '') {

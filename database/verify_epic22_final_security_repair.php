@@ -6,6 +6,10 @@
  * Strict Exit Code Rules: Exits 0 ONLY IF all setup, connection, and assertions pass.
  */
 putenv('APP_ENV=testing');
+
+require_once __DIR__ . '/../tests/helpers/test_preflight.php';
+runPreflightChecks(['pdo', 'pdo_mysql', 'mbstring', 'curl', 'json', 'fileinfo', 'zip', 'xml']);
+
 require_once __DIR__ . '/../app/bootstrap.php';
 
 $passed = 0;

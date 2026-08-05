@@ -22,6 +22,10 @@ require_once __DIR__ . '/../app/testing_bootstrap.php';
 if (!defined('TEST_CHUNK_LIMIT')) {
     define('TEST_CHUNK_LIMIT', 6000);
 }
+
+require_once __DIR__ . '/../tests/helpers/test_preflight.php';
+runPreflightChecks(['pdo', 'pdo_mysql', 'mbstring', 'curl', 'json', 'fileinfo', 'zip', 'xml']);
+
 require_once __DIR__ . '/../app/bootstrap.php';
 require_once __DIR__ . '/../app/services/GroqService.php';
 

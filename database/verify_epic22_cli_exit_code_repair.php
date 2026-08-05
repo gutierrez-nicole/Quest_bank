@@ -11,6 +11,9 @@
  * 6. Web DB failure returns HTTP 500 safely with no leaked credentials
  */
 
+require_once __DIR__ . '/../tests/helpers/test_preflight.php';
+runPreflightChecks(['pdo', 'pdo_mysql', 'mbstring', 'curl', 'json', 'fileinfo', 'zip', 'xml']);
+
 $passed = 0;
 $failed = 0;
 

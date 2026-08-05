@@ -61,14 +61,14 @@ class GroqService {
             preg_match('/Period:\s*([^\r\n]+)/i', $userPrompt, $pMatch);
             $promptPeriod = !empty($pMatch[1]) ? strtolower(trim($pMatch[1])) : null;
 
-            $isMissingSourceMock = (preg_match('/Missing Source/i', $userPrompt) || preg_match('/MOCK_MISSING_SOURCE/i', $userPrompt));
+            $isMissingSourceMock = (bool)preg_match('/MOCK_MISSING_SOURCE/i', $userPrompt);
             if ($isMissingSourceMock && preg_match('/chunk \((\d+) of/i', $userPrompt, $cm)) {
                 if (intval($cm[1]) > 1) {
                     $isMissingSourceMock = false;
                 }
             }
-            $isIncompleteBatchMock = (preg_match('/Incomplete Batch/i', $userPrompt) || preg_match('/MOCK_INCOMPLETE_BATCH/i', $userPrompt));
-            $isRefillMidtermMock = (preg_match('/Refill Midterm/i', $userPrompt) || preg_match('/MOCK_REFILL_MIDTERM/i', $userPrompt));
+            $isIncompleteBatchMock = (bool)preg_match('/MOCK_INCOMPLETE_BATCH/i', $userPrompt);
+            $isRefillMidtermMock = (bool)preg_match('/MOCK_REFILL_MIDTERM/i', $userPrompt);
 
             // Detect midterm CHUNK content via lesson period marker, not exam title
             // 'Period: midterm' appears in lesson content; avoid matching 'MOCK_REFILL_MIDTERM' in title
@@ -396,6 +396,7 @@ class GroqService {
             $affectedLessonIds = [];
             $affectedPeriods = [];
             $chunkGenerationResults = [];
+            $executedSimulatedScenario = null;
 
             // Calculate exact integer question allocation per chunk
             $baseAlloc = (int)floor($numQuestions / $totalChunks);
@@ -466,6 +467,13 @@ class GroqService {
                         'error_code' => $res['error_code'] ?? 'MOCK_CHUNK_FAILURE',
                         'message' => $errMsg
                     ];
+                    if (self::isTestModeActive()) {
+                        if (preg_match('/MOCK_INCOMPLETE_BATCH/i', $examTitle)) {
+                            $executedSimulatedScenario = 'incomplete_midterm_chunk';
+                        } elseif (preg_match('/MOCK_REFILL_MIDTERM/i', $examTitle)) {
+                            $executedSimulatedScenario = 'midterm_refill';
+                        }
+                    }
                 } else {
                     $content = $res['data']['choices'][0]['message']['content'] ?? '';
                     $cleanContent = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', trim($content));
@@ -500,6 +508,9 @@ class GroqService {
                             if ($srcConfidence === 'review_required') {
                                 $srcLessonIds = [];
                                 $sourceVerificationNote = 'Refill question source ambiguous within multi-lesson chunk';
+                                if (self::isTestModeActive() && preg_match('/MOCK_MISSING_SOURCE/i', $examTitle)) {
+                                    $executedSimulatedScenario = 'missing_source';
+                                }
                             } elseif (empty($srcLessonIds)) {
                                 if (count($chunkLessonIds) === 1) {
                                     $srcLessonIds = $chunkLessonIds;
@@ -509,6 +520,9 @@ class GroqService {
                                     $srcLessonIds = [];
                                     $srcConfidence = 'review_required';
                                     $sourceVerificationNote = 'Refill question source ambiguous within multi-lesson chunk';
+                                    if (self::isTestModeActive() && preg_match('/MOCK_MISSING_SOURCE/i', $examTitle)) {
+                                        $executedSimulatedScenario = 'missing_source';
+                                    }
                                 }
                             }
 
@@ -717,6 +731,9 @@ class GroqService {
                                 if ($srcConfidence === 'review_required') {
                                     $srcLessonIds = [];
                                     $sourceVerificationNote = 'Refill question source ambiguous within multi-lesson chunk';
+                                    if (self::isTestModeActive() && preg_match('/MOCK_MISSING_SOURCE/i', $examTitle)) {
+                                        $executedSimulatedScenario = 'missing_source';
+                                    }
                                 } elseif (empty($srcLessonIds)) {
                                     if (count($targetChunkLessonIds) === 1) {
                                         $srcLessonIds = $targetChunkLessonIds;
@@ -726,6 +743,9 @@ class GroqService {
                                         $srcLessonIds = [];
                                         $srcConfidence = 'review_required';
                                         $sourceVerificationNote = 'Refill question source ambiguous within multi-lesson chunk';
+                                        if (self::isTestModeActive() && preg_match('/MOCK_MISSING_SOURCE/i', $examTitle)) {
+                                            $executedSimulatedScenario = 'missing_source';
+                                        }
                                     }
                                 }
 
@@ -849,14 +869,7 @@ class GroqService {
             if (!isset($refillTargetPeriods)) $refillTargetPeriods = [];
             if (!isset($refillGeneratedCount)) $refillGeneratedCount = 0;
 
-            $simulatedScenario = null;
-            if (preg_match('/MOCK_MISSING_SOURCE|Missing Source/i', $examTitle)) {
-                $simulatedScenario = 'missing_source';
-            } elseif (preg_match('/MOCK_INCOMPLETE_BATCH|Incomplete Batch/i', $examTitle)) {
-                $simulatedScenario = 'incomplete_midterm_chunk';
-            } elseif (preg_match('/MOCK_REFILL_MIDTERM|Refill Midterm/i', $examTitle)) {
-                $simulatedScenario = 'midterm_refill';
-            }
+            $simulatedScenario = self::isTestModeActive() ? $executedSimulatedScenario : null;
 
             return [
                 'success' => true,
