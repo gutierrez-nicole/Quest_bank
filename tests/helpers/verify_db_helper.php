@@ -144,7 +144,8 @@ if ($action === 'verify_exam_saved') {
             'source_academic_periods' => array_values(array_unique($qPeriods)),
             'is_review_required' => empty($mainLessonId) ? 1 : 0,
             'source_verified_by' => $qSources[0]['source_verified_by'] ?? null,
-            'source_verified_at' => $qSources[0]['source_verified_at'] ?? null
+            'source_verified_at' => $qSources[0]['source_verified_at'] ?? null,
+            'source_verification_note' => $qSources[0]['source_verification_note'] ?? null
         ];
     }
 

@@ -9,6 +9,7 @@ $_ENV['APP_ENV'] = 'testing';
 $_ENV['TEST_BOOTSTRAP_ACTIVE'] = '1';
 $_SERVER['APP_ENV'] = 'testing';
 $_SERVER['TEST_BOOTSTRAP_ACTIVE'] = '1';
+
 require_once __DIR__ . '/../app/bootstrap.php';
 require_once __DIR__ . '/../includes/security.php';
 
@@ -32,13 +33,11 @@ echo "===========================================================\n";
 echo "    QUESTBANK EPIC 2.2 FINAL REPAIRS 9-12 VERIFICATION     \n";
 echo "===========================================================\n";
 
+$batchId10 = null;
+
 try {
     $pdo = getDBConnection();
     logTest("Setup: Database Connection Established", true, "Database handle active");
-} catch (Throwable $e) {
-    fwrite(STDERR, "SETUP FAILED: Database unavailable.\n");
-    exit(1);
-}
 
     // Teacher check
     $stmtT = $pdo->prepare("SELECT id FROM users WHERE role = 'teacher' LIMIT 1");
@@ -99,11 +98,8 @@ try {
               $rec10['acknowledgement_token_hash'] === $tokenHash10;
     logTest("TEST 2d (Repair 10): Audit Persistence with Token Hash", $pass2d, "persisted acknowledgement_token_hash and teacher metadata");
 
-    // Cleanup test batch
-    $pdo->prepare("DELETE FROM ai_generation_batches WHERE generation_batch_id = ?")->execute([$batchId10]);
-
     // --- TEST 3: FINAL REPAIR 11 — Exact Question Shortfall Handling ---
-    GroqService::$testMode = true;
+    GroqService::enableTestingModeFromBootstrap();
     $res11 = GroqService::generateQuestions("Short lesson snippet about soil effective stress.", 10, 'Soil Mechanics', 'Shortfall Exam', 'Geotechnical', 'multiple_choice', 'medium', 'TEST_MOCK_KEY');
     
     $pass3 = isset($res11['metadata']['requested_question_count']) &&
@@ -121,14 +117,23 @@ try {
 
 } catch (Throwable $e) {
     $failed++;
+    fwrite(STDERR, "SETUP OR EXECUTION FAILED: " . $e->getMessage() . "\n");
     echo "  [CRITICAL FAILURE EXCEPTION] " . $e->getMessage() . "\n" . $e->getTraceAsString() . "\n";
+} finally {
+    if (isset($pdo) && $pdo instanceof PDO) {
+        if (!empty($batchId10)) {
+            try {
+                $pdo->prepare("DELETE FROM ai_generation_batches WHERE generation_batch_id = ?")->execute([$batchId10]);
+            } catch (Throwable $ignored) {}
+        }
+    }
 }
 
 echo "\n-----------------------------------------------------------\n";
 echo "VERIFICATION SUMMARY: {$passed} PASSED, {$failed} FAILED\n";
 echo "-----------------------------------------------------------\n";
 
-// STRICT EXIT CODES RULE (Final Blocker 6)
+// STRICT EXIT CODES RULE
 if ($passed > 0 && $failed === 0) {
     echo "RESULT: SUCCESS — All assertions passed cleanly. Exiting with Exit Code 0.\n";
     exit(0);

@@ -65,7 +65,7 @@ $combinedText = $prelimText . "\n\n" . $midtermText;
 // -------------------------------------------------------------------------
 // TEST 1: Scenario 1 — Missing Source (MOCK_MISSING_SOURCE)
 // -------------------------------------------------------------------------
-GroqService::$testMode = true;
+GroqService::enableTestingModeFromBootstrap();
 $res1 = GroqService::generateQuestions($combinedText, 5, 'Structural Engineering', 'MOCK_MISSING_SOURCE Structural Exam', 'Structural', 'multiple_choice', 'medium');
 
 $t1_pass = false;
@@ -182,8 +182,7 @@ if ($res3['success'] && count($res3['questions']) === 5) {
 putenv('APP_ENV=production');
 $_ENV['APP_ENV'] = 'production';
 $_SERVER['APP_ENV'] = 'production';
-GroqService::$testMode = false;
-GroqService::$testBootstrapActive = false;
+GroqService::enableTestingModeFromBootstrap();
 
 $res4 = GroqService::generateQuestions($combinedText, 5, 'Structural Engineering', 'MOCK_INCOMPLETE_BATCH Production Security Test', 'Structural', 'multiple_choice', 'medium');
 
@@ -209,8 +208,7 @@ $_ENV['APP_ENV'] = 'testing';
 $_ENV['TEST_BOOTSTRAP_ACTIVE'] = '1';
 $_SERVER['APP_ENV'] = 'testing';
 $_SERVER['TEST_BOOTSTRAP_ACTIVE'] = '1';
-GroqService::$testMode = true;
-GroqService::$testBootstrapActive = true;
+GroqService::enableTestingModeFromBootstrap();
 
 echo "\n-----------------------------------------------------------\n";
 echo "VERIFICATION SUMMARY: {$passedCount} PASSED, {$failedCount} FAILED\n";

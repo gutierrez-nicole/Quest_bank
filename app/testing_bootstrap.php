@@ -18,9 +18,7 @@ $isBootstrapActive = (getenv('TEST_BOOTSTRAP_ACTIVE') === '1')
     || (isset($_SERVER['TEST_BOOTSTRAP_ACTIVE']) && $_SERVER['TEST_BOOTSTRAP_ACTIVE'] === '1');
 
 if ($currentEnv === 'testing' && $isBootstrapActive) {
-    GroqService::$testMode = true;
-    GroqService::$testBootstrapActive = true;
+    GroqService::enableTestingModeFromBootstrap();
 } else {
-    GroqService::$testMode = false;
-    GroqService::$testBootstrapActive = false;
+    GroqService::disableTestingMode();
 }

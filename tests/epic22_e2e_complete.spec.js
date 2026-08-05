@@ -239,11 +239,14 @@ test.describe('Epic 2.2 Authoritative E2E & Edge-Workflow Suite', () => {
 
         await expect(page.locator('[data-testid="generation-audit-summary"]')).toBeVisible({ timeout: 15000 });
 
+        // Locate exact generated question card containing SOURCE_REVIEW_REQUIRED_MARKER
+        const markerCard = page.locator('[data-testid="generated-question-item"]', { hasText: 'SOURCE_REVIEW_REQUIRED_MARKER' });
+        await expect(markerCard).toHaveCount(1);
+
         // Assert exact affected question card displays 'Source verification required'
-        const unverifiedBadges = page.locator('[data-testid="source-verification-required"]');
-        expect(await unverifiedBadges.count()).toBe(1);
-        await expect(unverifiedBadges.first()).toBeVisible();
-        await expect(unverifiedBadges.first()).toContainText('Source verification required.');
+        const markerBadge = markerCard.locator('[data-testid="source-verification-required"]');
+        await expect(markerBadge).toBeVisible();
+        await expect(markerBadge).toContainText('Source verification required.');
 
         // Attempt save without choosing a source -> Assert rejection
         await page.evaluate((title) => { const el = document.querySelector('input[name="save_title"]'); if (el) el.value = title; }, `[${state.runId}] Unresolved Source Save Attempt`);
@@ -252,16 +255,9 @@ test.describe('Epic 2.2 Authoritative E2E & Edge-Workflow Suite', () => {
 
         await expect(page.locator('[data-testid="error-alert-banner"]')).toContainText('has no verified lesson source', { timeout: 15000 });
 
-        // Select valid sources for all unverified manual-source-select dropdowns
-        const manualSelects = page.locator('[data-testid="manual-source-select"]');
-        const selectCount = await manualSelects.count();
-        expect(selectCount).toBeGreaterThan(0);
-        for (let i = 0; i < selectCount; i++) {
-            const val = await manualSelects.nth(i).inputValue();
-            if (!val) {
-                await manualSelects.nth(i).selectOption({ index: 1 });
-            }
-        }
+        // Assign expected lesson to the marker question only
+        const markerSelect = markerCard.locator('[data-testid="manual-source-select"]');
+        await markerSelect.selectOption({ index: 1 });
 
         const batchId = await page.getAttribute('input[name="save_generation_batch_id"]', 'value');
         expect(batchId).toBeTruthy();
@@ -275,18 +271,27 @@ test.describe('Epic 2.2 Authoritative E2E & Edge-Workflow Suite', () => {
         const dbData = JSON.parse(dbRes);
         expect(dbData.success).toBe(true);
 
-        let manualCount = 0;
+        let markedVerifiedCount = 0;
+        let unmarkedVerifiedCount = 0;
+
         for (const q of dbData.questions) {
             expect(q.source_relations_count).toBeGreaterThan(0);
-            if (q.source_verified_by !== null) {
+            const isMarker = (q.question || '').includes('SOURCE_REVIEW_REQUIRED_MARKER');
+            if (isMarker) {
+                expect(q.source_relations_count).toBe(1);
                 expect(q.source_verified_by).toBe(state.teacherId);
                 expect(q.source_verified_at).toBeTruthy();
-                manualCount++;
+                expect(q.source_verification_note).toBe('Teacher verified');
+                markedVerifiedCount++;
             } else {
                 expect(q.source_verified_by).toBeNull();
+                expect(q.source_verified_at).toBeNull();
+                unmarkedVerifiedCount++;
             }
         }
-        expect(manualCount).toBe(1);
+
+        expect(markedVerifiedCount).toBe(1);
+        expect(unmarkedVerifiedCount).toBe(dbData.questions.length - 1);
     });
 
     test('5. Real Incomplete-Batch Browser Acknowledgment Workflow', async ({ page }) => {

@@ -34,8 +34,8 @@ $_SERVER['APP_ENV'] = 'production';
 $_SERVER['TEST_BOOTSTRAP_ACTIVE'] = '1';
 include __DIR__ . '/../app/testing_bootstrap.php';
 
-$test1Pass = (GroqService::$testMode === false && GroqService::$testBootstrapActive === false);
-logTest("TEST 1: Production APP_ENV Never Enables Test Mode", $test1Pass, "APP_ENV=production resulting testMode: " . (GroqService::$testMode ? 'true' : 'false'));
+$test1Pass = (GroqService::isTestModeActive() === false);
+logTest("TEST 1: Production APP_ENV Never Enables Test Mode", $test1Pass, "APP_ENV=production resulting testMode: " . (GroqService::isTestModeActive() ? 'true' : 'false'));
 
 // -----------------------------------------------------------------
 // TEST 2: Development APP_ENV never enables test mode
@@ -48,8 +48,8 @@ $_SERVER['APP_ENV'] = 'development';
 $_SERVER['TEST_BOOTSTRAP_ACTIVE'] = '1';
 include __DIR__ . '/../app/testing_bootstrap.php';
 
-$test2Pass = (GroqService::$testMode === false && GroqService::$testBootstrapActive === false);
-logTest("TEST 2: Development APP_ENV Never Enables Test Mode", $test2Pass, "APP_ENV=development resulting testMode: " . (GroqService::$testMode ? 'true' : 'false'));
+$test2Pass = (GroqService::isTestModeActive() === false);
+logTest("TEST 2: Development APP_ENV Never Enables Test Mode", $test2Pass, "APP_ENV=development resulting testMode: " . (GroqService::isTestModeActive() ? 'true' : 'false'));
 
 // -----------------------------------------------------------------
 // TEST 3: Testing APP_ENV without explicit test bootstrap does not enable mock mode
@@ -62,8 +62,8 @@ $_SERVER['APP_ENV'] = 'testing';
 $_SERVER['TEST_BOOTSTRAP_ACTIVE'] = '0';
 include __DIR__ . '/../app/testing_bootstrap.php';
 
-$test3Pass = (GroqService::$testMode === false && GroqService::$testBootstrapActive === false);
-logTest("TEST 3: Testing APP_ENV Without Test Bootstrap Rejects Mock Mode", $test3Pass, "TEST_BOOTSTRAP_ACTIVE=0 resulting testMode: " . (GroqService::$testMode ? 'true' : 'false'));
+$test3Pass = (GroqService::isTestModeActive() === false);
+logTest("TEST 3: Testing APP_ENV Without Test Bootstrap Rejects Mock Mode", $test3Pass, "TEST_BOOTSTRAP_ACTIVE=0 resulting testMode: " . (GroqService::isTestModeActive() ? 'true' : 'false'));
 
 // -----------------------------------------------------------------
 // TEST 4: Testing bootstrap enables mock mode
@@ -76,8 +76,8 @@ $_SERVER['APP_ENV'] = 'testing';
 $_SERVER['TEST_BOOTSTRAP_ACTIVE'] = '1';
 include __DIR__ . '/../app/testing_bootstrap.php';
 
-$test4Pass = (GroqService::$testMode === true && GroqService::$testBootstrapActive === true);
-logTest("TEST 4: Testing Bootstrap Enables Mock Mode Cleanly", $test4Pass, "TEST_BOOTSTRAP_ACTIVE=1 resulting testMode: " . (GroqService::$testMode ? 'true' : 'false'));
+$test4Pass = (GroqService::isTestModeActive() === true);
+logTest("TEST 4: Testing Bootstrap Enables Mock Mode Cleanly", $test4Pass, "TEST_BOOTSTRAP_ACTIVE=1 resulting testMode: " . (GroqService::isTestModeActive() ? 'true' : 'false'));
 
 // -----------------------------------------------------------------
 // TEST 5: Production request containing MOCK_* title does NOT activate mock behavior

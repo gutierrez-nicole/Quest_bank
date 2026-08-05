@@ -18,7 +18,7 @@ require_once __DIR__ . '/../app/bootstrap.php';
 require_once __DIR__ . '/../app/services/GroqService.php';
 require_once __DIR__ . '/../includes/security.php';
 
-GroqService::$testMode = true;
+GroqService::enableTestingModeFromBootstrap();
 
 echo "===========================================================\n";
 echo " QUESTBANK EPIC 2.2 FINAL PRODUCTION REPAIR VERIFICATION   \n";

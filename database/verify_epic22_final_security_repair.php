@@ -28,13 +28,12 @@ echo "===========================================================\n";
 echo " QUESTBANK EPIC 2.2 FINAL SECURITY REPAIR VERIFICATION      \n";
 echo "===========================================================\n";
 
+$batchId1 = $batchId2 = $batchId4 = $batchId5 = $batchId6 = null;
+$lessonA = null;
+
 try {
     $pdo = getDBConnection();
     logTest("Setup: Database Connection Established", true, "Database handle active");
-} catch (Throwable $e) {
-    fwrite(STDERR, "SETUP FAILED: Database unavailable.\n");
-    exit(1);
-}
 
     // Fetch test teacher russel
     $stmtT = $pdo->prepare("SELECT id FROM users WHERE role = 'teacher' LIMIT 1");
@@ -216,13 +215,23 @@ try {
     $pass8 = ($batchInsertSuccess === false);
     logTest("TEST 8: Audit Batch Insertion Failure Detection", $pass8, "Duplicate batch ID insertion correctly caught and returned false");
 
-    // Cleanup test records
-    $pdo->prepare("DELETE FROM ai_generation_batches WHERE generation_batch_id IN (?, ?, ?, ?, ?)")->execute([$batchId1, $batchId2, $batchId4, $batchId5, $batchId6]);
-    $pdo->prepare("DELETE FROM lesson_materials WHERE id = ?")->execute([$lessonA]);
-
 } catch (Throwable $e) {
     $failed++;
+    fwrite(STDERR, "SETUP OR EXECUTION FAILED: " . $e->getMessage() . "\n");
     echo "  [CRITICAL FAILURE EXCEPTION] " . $e->getMessage() . "\n" . $e->getTraceAsString() . "\n";
+} finally {
+    if (isset($pdo) && $pdo instanceof PDO) {
+        try {
+            $toDelete = array_filter([$batchId1, $batchId2, $batchId4, $batchId5, $batchId6]);
+            if (!empty($toDelete)) {
+                $in = implode(',', array_fill(0, count($toDelete), '?'));
+                $pdo->prepare("DELETE FROM ai_generation_batches WHERE generation_batch_id IN ($in)")->execute($toDelete);
+            }
+            if ($lessonA) {
+                $pdo->prepare("DELETE FROM lesson_materials WHERE id = ?")->execute([$lessonA]);
+            }
+        } catch (Throwable $ignored) {}
+    }
 }
 
 echo "\n-----------------------------------------------------------\n";

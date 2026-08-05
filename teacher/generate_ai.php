@@ -241,11 +241,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
     }
 
     if (!empty(trim($final_lesson_content)) && $num_questions > 0 && empty($error_msg)) {
-        $currentAppEnv = getenv('APP_ENV') ?: ($_ENV['APP_ENV'] ?? ($_SERVER['APP_ENV'] ?? (defined('APP_ENV') ? APP_ENV : '')));
-        if ($currentAppEnv === 'testing' || strpos($exam_title, 'MOCK_') !== false || strpos($exam_title, 'Authoritative') !== false) {
-            GroqService::$testMode = true;
-            GroqService::$testBootstrapActive = true;
-        }
         $result = GroqService::generateQuestions($final_lesson_content, $num_questions, $subject, $exam_title, $specialization, $question_type, $difficulty);
         if (!empty($result['success']) && isset($result['questions']) && is_array($result['questions'])) {
             $generated_questions = $result['questions'];

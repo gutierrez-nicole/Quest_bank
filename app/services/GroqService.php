@@ -4,14 +4,39 @@ require_once __DIR__ . '/../config/config.php';
 
 class GroqService {
 
-    public static $testMode = false;
-    public static $testBootstrapActive = false;
+    private static $testMode = false;
+    private static $testBootstrapActive = false;
 
-    private static function sendRequest($payload, $apiKey = null) {
-        // Final Blocker 2: Mock provider executes ONLY IF APP_ENV === 'testing', testMode === true, AND testBootstrapActive === true
+    public static function enableTestingModeFromBootstrap(): void {
         $env = getenv('APP_ENV') ?: ($_ENV['APP_ENV'] ?? ($_SERVER['APP_ENV'] ?? ''));
         $currentEnv = (!empty($env)) ? $env : (defined('APP_ENV') ? APP_ENV : 'production');
-        $isTestEnvMode = (self::$testMode === true) && (self::$testBootstrapActive === true);
+
+        $isBootstrapActive = (getenv('TEST_BOOTSTRAP_ACTIVE') === '1') 
+            || (defined('TEST_BOOTSTRAP_ACTIVE') && TEST_BOOTSTRAP_ACTIVE === true)
+            || (isset($_SERVER['TEST_BOOTSTRAP_ACTIVE']) && $_SERVER['TEST_BOOTSTRAP_ACTIVE'] === '1');
+
+        if ($currentEnv === 'testing' && $isBootstrapActive) {
+            self::$testMode = true;
+            self::$testBootstrapActive = true;
+        } else {
+            self::$testMode = false;
+            self::$testBootstrapActive = false;
+        }
+    }
+
+    public static function disableTestingMode(): void {
+        self::$testMode = false;
+        self::$testBootstrapActive = false;
+    }
+
+    public static function isTestModeActive(): bool {
+        $env = getenv('APP_ENV') ?: ($_ENV['APP_ENV'] ?? ($_SERVER['APP_ENV'] ?? ''));
+        $currentEnv = (!empty($env)) ? $env : (defined('APP_ENV') ? APP_ENV : 'production');
+        return ($currentEnv === 'testing') && (self::$testMode === true) && (self::$testBootstrapActive === true);
+    }
+
+    private static function sendRequest($payload, $apiKey = null) {
+        $isTestEnvMode = self::isTestModeActive();
         if ($isTestEnvMode && ($apiKey === 'TEST_MOCK_KEY' || empty($apiKey) || $apiKey === 'YOUR_GROQ_API_KEY_HERE')) {
             $userPrompt = $payload['messages'][0]['content'] ?? '';
             $targetCount = 5;
@@ -262,11 +287,11 @@ class GroqService {
         $wordCount = str_word_count($lessonText);
         $estimatedTokens = (int)ceil($charLength / 4);
 
-        $chunkLimit = (defined('TEST_CHUNK_LIMIT') && TEST_CHUNK_LIMIT > 0) ? TEST_CHUNK_LIMIT : ((self::$testMode && self::$testBootstrapActive) ? 200 : (defined('AI_SAFE_INPUT_TOKENS') ? (AI_SAFE_INPUT_TOKENS * 4) : 96000));
+        $chunkLimit = (defined('TEST_CHUNK_LIMIT') && TEST_CHUNK_LIMIT > 0) ? TEST_CHUNK_LIMIT : (self::isTestModeActive() ? 200 : (defined('AI_SAFE_INPUT_TOKENS') ? (AI_SAFE_INPUT_TOKENS * 4) : 96000));
         $generationWarnings = [];
         $rawChunkResponses = [];
 
-        if ($charLength > $chunkLimit || (self::$testMode && self::$testBootstrapActive)) {
+        if ($charLength > $chunkLimit || self::isTestModeActive()) {
             // Final Repair 5: Second-level hierarchical splitting for single oversized lessons
             // Preferred boundaries: 1. Source lesson boundaries 2. Headings 3. Paragraphs 4. Sentences
             preg_match_all('/(SOURCE LESSON \d+[\s\S]*?)(?=(?:SOURCE LESSON \d+|\z))/i', $lessonText, $matches);
@@ -301,7 +326,7 @@ class GroqService {
             }
 
             $chunks = [];
-            if (self::$testMode && self::$testBootstrapActive && !empty($matches[1]) && count($matches[1]) > 1) {
+            if (self::isTestModeActive() && !empty($matches[1]) && count($matches[1]) > 1) {
                 $chunks = $matches[1];
             } else {
                 $currentChunk = "";
