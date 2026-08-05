@@ -3,6 +3,9 @@
  * Unified Verification Runner for QuestBank Epic 2.2 Final Repairs 9, 10, 11, 12
  * Strict Exit Code Rules: Exits 0 ONLY IF all setup, connection, and assertions pass.
  */
+require_once __DIR__ . '/../tests/helpers/test_preflight.php';
+requireDatabasePreflight();
+
 putenv('APP_ENV=testing');
 putenv('TEST_BOOTSTRAP_ACTIVE=1');
 $_ENV['APP_ENV'] = 'testing';
@@ -10,14 +13,12 @@ $_ENV['TEST_BOOTSTRAP_ACTIVE'] = '1';
 $_SERVER['APP_ENV'] = 'testing';
 $_SERVER['TEST_BOOTSTRAP_ACTIVE'] = '1';
 
-require_once __DIR__ . '/../tests/helpers/test_preflight.php';
-runPreflightChecks(['pdo', 'pdo_mysql', 'mbstring', 'curl', 'json', 'fileinfo', 'zip', 'xml']);
-
 require_once __DIR__ . '/../app/bootstrap.php';
 require_once __DIR__ . '/../includes/security.php';
 
 $passed = 0;
 $failed = 0;
+$skipped = 0;
 
 function logTest($name, $status, $detail = '') {
     global $passed, $failed;
@@ -133,7 +134,7 @@ try {
 }
 
 echo "\n-----------------------------------------------------------\n";
-echo "VERIFICATION SUMMARY: {$passed} PASSED, {$failed} FAILED\n";
+echo "VERIFICATION SUMMARY: {$passed} PASSED, {$failed} FAILED, {$skipped} SKIPPED\n";
 echo "-----------------------------------------------------------\n";
 
 // STRICT EXIT CODES RULE

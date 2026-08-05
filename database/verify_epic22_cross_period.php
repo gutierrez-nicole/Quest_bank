@@ -2,11 +2,15 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
+require_once __DIR__ . '/../tests/helpers/test_preflight.php';
+requireDatabasePreflight();
+
 require_once __DIR__ . '/../app/bootstrap.php';
 
 $pdo = getDBConnection();
 $passed = 0;
 $failed = 0;
+$skipped = 0;
 
 echo "===========================================================\n";
 echo "       QUESTBANK EPIC 2.2 CROSS-PERIOD LESSON POOL TEST    \n";
@@ -210,7 +214,7 @@ try {
 }
 
 echo "-----------------------------------------------------------\n";
-echo "VERIFICATION SUMMARY: {$passed} PASSED, {$failed} FAILED\n";
+echo "VERIFICATION SUMMARY: {$passed} PASSED, {$failed} FAILED, {$skipped} SKIPPED\n";
 echo "-----------------------------------------------------------\n";
 
 exit($failed > 0 ? 1 : 0);

@@ -1,18 +1,21 @@
 <?php
-/**
- * Verification Script for QuestBank Epic 2.2 Final Repairs 2-6
- */
+
+require_once __DIR__ . '/../tests/helpers/test_preflight.php';
+requireDatabasePreflight();
+
 putenv('APP_ENV=testing');
 putenv('TEST_BOOTSTRAP_ACTIVE=1');
 $_ENV['APP_ENV'] = 'testing';
 $_ENV['TEST_BOOTSTRAP_ACTIVE'] = '1';
 $_SERVER['APP_ENV'] = 'testing';
 $_SERVER['TEST_BOOTSTRAP_ACTIVE'] = '1';
+
 require_once __DIR__ . '/../app/bootstrap.php';
 
 $pdo = getDBConnection();
 $passed = 0;
 $failed = 0;
+$skipped = 0;
 
 echo "===========================================================\n";
 echo "    QUESTBANK EPIC 2.2 FINAL REPAIRS 2-6 VERIFICATION       \n";
@@ -133,7 +136,7 @@ try {
 }
 
 echo "\n-----------------------------------------------------------\n";
-echo "VERIFICATION SUMMARY: {$passed} PASSED, {$failed} FAILED\n";
+echo "VERIFICATION SUMMARY: {$passed} PASSED, {$failed} FAILED, {$skipped} SKIPPED\n";
 echo "-----------------------------------------------------------\n";
 
 exit($failed > 0 ? 1 : 0);

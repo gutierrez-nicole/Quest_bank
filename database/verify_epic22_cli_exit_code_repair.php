@@ -12,10 +12,16 @@
  */
 
 require_once __DIR__ . '/../tests/helpers/test_preflight.php';
-runPreflightChecks(['pdo', 'pdo_mysql', 'mbstring', 'curl', 'json', 'fileinfo', 'zip', 'xml']);
+requireDatabasePreflight();
 
 $passed = 0;
 $failed = 0;
+$skipped = 0;
+
+if (getenv('FORCE_ASSERT_FAIL') === '1') {
+    $failed++;
+    echo "  [FAIL] Forced Assertion Failure Test\n";
+}
 
 function logResult($testName, $isSuccess, $details = '') {
     global $passed, $failed;
@@ -172,7 +178,7 @@ $t6_pass = $t6_no_creds && $t6_has_safe_msg;
 logResult("6. Web DB Failure -> Safe HTTP 500 HTML (No Leaked Credentials)", $t6_pass, "Safe MSG: " . ($t6_has_safe_msg ? 'YES' : 'NO') . ", No Creds: " . ($t6_no_creds ? 'YES' : 'NO'));
 
 echo "\n-----------------------------------------------------------\n";
-echo "VERIFICATION SUMMARY: {$passed} PASSED, {$failed} FAILED\n";
+echo "VERIFICATION SUMMARY: {$passed} PASSED, {$failed} FAILED, {$skipped} SKIPPED\n";
 echo "-----------------------------------------------------------\n";
 
 if ($passed > 0 && $failed === 0) {

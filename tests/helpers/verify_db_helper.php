@@ -22,6 +22,59 @@ if ($action === 'seed') {
     exit(0);
 }
 
+function validateBatchConsistency(array $batch): void {
+    $failedChunkCount = intval($batch['failed_chunk_count'] ?? 0);
+    $failedChunkIndexes = is_array($batch['failed_chunk_indexes'] ?? null) ? $batch['failed_chunk_indexes'] : (json_decode($batch['failed_chunk_indexes'] ?? '[]', true) ?: []);
+    $failedChunkIndexes = array_map('intval', $failedChunkIndexes);
+
+    $failedChunks = is_array($batch['failed_chunks'] ?? null) ? $batch['failed_chunks'] : (json_decode($batch['failed_chunks'] ?? '[]', true) ?: []);
+    $affectedLessonIds = is_array($batch['affected_lesson_ids'] ?? null) ? $batch['affected_lesson_ids'] : (json_decode($batch['affected_lesson_ids'] ?? '[]', true) ?: []);
+    $affectedLessonIds = array_map('intval', $affectedLessonIds);
+
+    $affectedPeriods = is_array($batch['affected_periods'] ?? null) ? $batch['affected_periods'] : (json_decode($batch['affected_periods'] ?? '[]', true) ?: []);
+    $affectedPeriods = array_map('strtolower', array_map('trim', $affectedPeriods));
+
+    $firstFailedIndex = isset($batch['first_failed_chunk_index']) && $batch['first_failed_chunk_index'] !== null ? intval($batch['first_failed_chunk_index']) : (!empty($failedChunkIndexes) ? $failedChunkIndexes[0] : null);
+
+    // 1. failed_chunk_count != count(failed_chunk_indexes)
+    if ($failedChunkCount !== count($failedChunkIndexes)) {
+        throw new RuntimeException("failed_chunk_count ({$failedChunkCount}) does not match count(failed_chunk_indexes) (" . count($failedChunkIndexes) . ")");
+    }
+
+    // 2. Duplicate failed indexes
+    if (count($failedChunkIndexes) !== count(array_unique($failedChunkIndexes))) {
+        throw new RuntimeException("Duplicate failed_chunk_indexes detected: " . json_encode($failedChunkIndexes));
+    }
+
+    // 3. first_failed_chunk_index matches first entry
+    if (!empty($failedChunkIndexes) && $firstFailedIndex !== $failedChunkIndexes[0]) {
+        throw new RuntimeException("first_failed_chunk_index ({$firstFailedIndex}) does not match first failed_chunk_indexes entry ({$failedChunkIndexes[0]})");
+    }
+
+    // 4. Failed chunk details check
+    if ($failedChunkCount > 0 && count($failedChunks) !== $failedChunkCount) {
+        throw new RuntimeException("failed_chunks detail count (" . count($failedChunks) . ") does not match failed_chunk_count ({$failedChunkCount})");
+    }
+
+    foreach ($failedChunks as $fc) {
+        if (!is_array($fc) || !isset($fc['chunk_index'])) {
+            throw new RuntimeException("Invalid failed_chunks object structure");
+        }
+        $fcLessonIds = array_map('intval', $fc['lesson_ids'] ?? []);
+        foreach ($fcLessonIds as $lid) {
+            if (!in_array($lid, $affectedLessonIds, true)) {
+                throw new RuntimeException("Failed chunk lesson ID {$lid} missing from affected_lesson_ids");
+            }
+        }
+        $fcPeriods = array_map('strtolower', array_map('trim', $fc['periods'] ?? []));
+        foreach ($fcPeriods as $per) {
+            if (!in_array($per, $affectedPeriods, true)) {
+                throw new RuntimeException("Failed chunk period '{$per}' missing from affected_periods");
+            }
+        }
+    }
+}
+
 if ($action === 'verify_exam_saved') {
     $batchId = $argv[2] ?? '';
     
@@ -41,6 +94,13 @@ if ($action === 'verify_exam_saved') {
 
     if (empty($batch['saved_exam_id']) || empty($batch['batch_consumed_at'])) {
         echo json_encode(['success' => false, 'error' => "Batch '{$batchId}' has not been consumed or saved"]);
+        exit(1);
+    }
+
+    try {
+        validateBatchConsistency($batch);
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'error' => "Batch consistency assertion failed: " . $e->getMessage()]);
         exit(1);
     }
 
@@ -92,7 +152,6 @@ if ($action === 'verify_exam_saved') {
     foreach ($questions as $q) {
         $qId = intval($q['id']);
         
-        // Fetch source relations for this question
         $stmtQSources = $pdo->prepare("SELECT * FROM generated_question_sources WHERE question_id = ?");
         $stmtQSources->execute([$qId]);
         $qSources = $stmtQSources->fetchAll(PDO::FETCH_ASSOC);
@@ -110,7 +169,6 @@ if ($action === 'verify_exam_saved') {
         foreach ($qSources as $qs) {
             $lId = intval($qs['lesson_id'] ?? $qs['source_lesson_id'] ?? 0);
             
-            // Check for duplicate question-lesson pair
             $pairKey = "{$qId}_{$lId}";
             if (isset($seenQuestionLessonPairs[$pairKey])) {
                 echo json_encode(['success' => false, 'error' => "Duplicate question-lesson source relation detected for question '{$qId}' and lesson '{$lId}'"]);
@@ -118,7 +176,6 @@ if ($action === 'verify_exam_saved') {
             }
             $seenQuestionLessonPairs[$pairKey] = true;
 
-            // Check if source lesson belongs to batch selected lessons
             if (!empty($batchLessonIds) && !in_array($lId, $batchLessonIds, true)) {
                 echo json_encode(['success' => false, 'error' => "Unexpected source lesson ID '{$lId}' for question '{$qId}' not in batch selected lessons"]);
                 exit(1);
@@ -149,6 +206,12 @@ if ($action === 'verify_exam_saved') {
         ];
     }
 
+    $failedChunkIndexes = json_decode($batch['failed_chunk_indexes'] ?? '[]', true) ?: [];
+    $failedChunkIndexes = array_map('intval', $failedChunkIndexes);
+    $failedChunks = json_decode($batch['failed_chunks'] ?? '[]', true) ?: [];
+    $firstFailedIndex = isset($batch['first_failed_chunk_index']) && $batch['first_failed_chunk_index'] !== null ? intval($batch['first_failed_chunk_index']) : (!empty($failedChunkIndexes) ? $failedChunkIndexes[0] : null);
+    $failedChunkIndex = isset($batch['failed_chunk_index']) && $batch['failed_chunk_index'] !== null ? intval($batch['failed_chunk_index']) : $firstFailedIndex;
+
     $responseBatch = [
         'generation_batch_id' => $batch['generation_batch_id'],
         'teacher_id' => intval($batch['teacher_id']),
@@ -172,6 +235,10 @@ if ($action === 'verify_exam_saved') {
         'acknowledgement_reason' => $batch['acknowledgement_reason'] ?? null,
         'acknowledgement_token_hash' => $batch['acknowledgement_token_hash'] ?? null,
         'failed_chunk_count' => intval($batch['failed_chunk_count'] ?? 0),
+        'failed_chunk_indexes' => $failedChunkIndexes,
+        'first_failed_chunk_index' => $firstFailedIndex,
+        'failed_chunk_index' => $failedChunkIndex,
+        'failed_chunks' => $failedChunks,
         'affected_lesson_ids' => json_decode($batch['affected_lesson_ids'] ?? '[]', true) ?: [],
         'affected_periods' => json_decode($batch['affected_periods'] ?? '[]', true) ?: [],
         'failure_messages' => json_decode($batch['failure_messages'] ?? '[]', true) ?: [],
@@ -185,7 +252,6 @@ if ($action === 'verify_exam_saved') {
         'refill_warnings' => json_decode($batch['refill_warnings'] ?? '[]', true) ?: [],
         'simulated_scenario' => $batch['simulated_scenario'] ?? null,
         'simulated_test_scenario' => $batch['simulated_scenario'] ?? null,
-        'failed_chunk_index' => isset($batch['failed_chunk_index']) ? intval($batch['failed_chunk_index']) : null,
         'refill_target_chunk_index' => isset($batch['refill_target_chunk_index']) ? intval($batch['refill_target_chunk_index']) : null,
         'refill_target_lesson_ids' => json_decode($batch['refill_target_lesson_ids'] ?? '[]', true) ?: [],
         'refill_target_periods' => json_decode($batch['refill_target_periods'] ?? '[]', true) ?: [],
@@ -233,6 +299,20 @@ if ($action === 'get_batch') {
         echo json_encode(['success' => false, 'error' => "Batch '{$batchId}' not found"]);
         exit(1);
     }
+
+    try {
+        validateBatchConsistency($batch);
+    } catch (Throwable $e) {
+        echo json_encode(['success' => false, 'error' => "Batch consistency assertion failed: " . $e->getMessage()]);
+        exit(1);
+    }
+
+    $failedChunkIndexes = json_decode($batch['failed_chunk_indexes'] ?? '[]', true) ?: [];
+    $failedChunkIndexes = array_map('intval', $failedChunkIndexes);
+    $failedChunks = json_decode($batch['failed_chunks'] ?? '[]', true) ?: [];
+    $firstFailedIndex = isset($batch['first_failed_chunk_index']) && $batch['first_failed_chunk_index'] !== null ? intval($batch['first_failed_chunk_index']) : (!empty($failedChunkIndexes) ? $failedChunkIndexes[0] : null);
+    $failedChunkIndex = isset($batch['failed_chunk_index']) && $batch['failed_chunk_index'] !== null ? intval($batch['failed_chunk_index']) : $firstFailedIndex;
+
     $responseBatch = [
         'generation_batch_id' => $batch['generation_batch_id'],
         'teacher_id' => intval($batch['teacher_id']),
@@ -241,11 +321,14 @@ if ($action === 'get_batch') {
         'generated_question_count' => intval($batch['generated_question_count']),
         'failed_question_count' => intval($batch['failed_question_count']),
         'failed_chunk_count' => intval($batch['failed_chunk_count'] ?? 0),
+        'failed_chunk_indexes' => $failedChunkIndexes,
+        'first_failed_chunk_index' => $firstFailedIndex,
+        'failed_chunk_index' => $failedChunkIndex,
+        'failed_chunks' => $failedChunks,
         'affected_lesson_ids' => json_decode($batch['affected_lesson_ids'] ?? '[]', true) ?: [],
         'affected_periods' => json_decode($batch['affected_periods'] ?? '[]', true) ?: [],
         'failure_messages' => json_decode($batch['failure_messages'] ?? '[]', true) ?: [],
         'simulated_scenario' => $batch['simulated_scenario'] ?? null,
-        'failed_chunk_index' => isset($batch['failed_chunk_index']) ? intval($batch['failed_chunk_index']) : null,
         'refill_target_chunk_index' => isset($batch['refill_target_chunk_index']) ? intval($batch['refill_target_chunk_index']) : null,
         'refill_target_lesson_ids' => json_decode($batch['refill_target_lesson_ids'] ?? '[]', true) ?: [],
         'refill_target_periods' => json_decode($batch['refill_target_periods'] ?? '[]', true) ?: [],

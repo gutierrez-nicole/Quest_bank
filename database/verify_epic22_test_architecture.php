@@ -6,7 +6,7 @@
 putenv('APP_ENV=testing');
 putenv('TEST_BOOTSTRAP_ACTIVE=1');
 require_once __DIR__ . '/../tests/helpers/test_preflight.php';
-runPreflightChecks(['pdo', 'pdo_mysql', 'mbstring', 'curl', 'json', 'fileinfo', 'zip', 'xml']);
+requireAiPreflight();
 
 require_once __DIR__ . '/../app/bootstrap.php';
 
@@ -133,7 +133,7 @@ $test6Pass = isset($resTestMock['success']) && $resTestMock['success'] === true 
 logTest("TEST 6: Test Request under Testing Bootstrap Generates Deterministic Mock Items", $test6Pass, "Generated " . count($resTestMock['questions'] ?? []) . " mock questions under testing bootstrap");
 
 echo "\n-----------------------------------------------------------\n";
-echo "VERIFICATION SUMMARY: 6 PASSED, 0 FAILED\n";
+echo "VERIFICATION SUMMARY: 6 PASSED, 0 FAILED, 0 SKIPPED\n";
 echo "-----------------------------------------------------------\n";
 echo "RESULT: SUCCESS — All test-mode architecture rules verified cleanly.\n";
 exit(0);

@@ -51,13 +51,59 @@ if (!function_exists('requireCommands')) {
     }
 }
 
-if (!function_exists('runPreflightChecks')) {
-    function runPreflightChecks(array $extensions = [], array $commands = []): void {
-        $defaultExtensions = ['pdo', 'pdo_mysql', 'mbstring', 'curl', 'json', 'fileinfo', 'zip', 'xml'];
-        $requiredExtensions = array_unique(array_merge($defaultExtensions, $extensions));
-        requirePhpExtensions($requiredExtensions);
+/** Tier 1: Core CLI Verification */
+if (!function_exists('requireCorePreflight')) {
+    function requireCorePreflight(array $additionalExts = [], array $commands = []): void {
+        $exts = array_unique(array_merge(['json', 'mbstring'], $additionalExts));
+        requirePhpExtensions($exts);
         if (!empty($commands)) {
             requireCommands($commands);
+        }
+    }
+}
+
+/** Tier 2: Database Verification */
+if (!function_exists('requireDatabasePreflight')) {
+    function requireDatabasePreflight(array $additionalExts = [], array $commands = []): void {
+        $exts = array_unique(array_merge(['json', 'mbstring', 'pdo', 'pdo_mysql'], $additionalExts));
+        requirePhpExtensions($exts);
+        if (!empty($commands)) {
+            requireCommands($commands);
+        }
+    }
+}
+
+/** Tier 3: AI Provider Verification */
+if (!function_exists('requireAiPreflight')) {
+    function requireAiPreflight(array $additionalExts = [], array $commands = []): void {
+        $exts = array_unique(array_merge(['json', 'mbstring', 'pdo', 'pdo_mysql', 'curl'], $additionalExts));
+        requirePhpExtensions($exts);
+        if (!empty($commands)) {
+            requireCommands($commands);
+        }
+    }
+}
+
+/** Tier 4: Lesson Extraction Verification */
+if (!function_exists('requireExtractionPreflight')) {
+    function requireExtractionPreflight(array $additionalExts = [], array $commands = []): void {
+        $exts = array_unique(array_merge(['json', 'mbstring', 'pdo', 'pdo_mysql', 'zip', 'xml', 'fileinfo'], $additionalExts));
+        requirePhpExtensions($exts);
+        if (!empty($commands)) {
+            requireCommands($commands);
+        }
+    }
+}
+
+if (!function_exists('runPreflightChecks')) {
+    function runPreflightChecks(array $extensions = [], array $commands = []): void {
+        if (empty($extensions)) {
+            requireDatabasePreflight([], $commands);
+        } else {
+            requirePhpExtensions($extensions);
+            if (!empty($commands)) {
+                requireCommands($commands);
+            }
         }
     }
 }

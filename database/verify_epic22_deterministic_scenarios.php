@@ -10,6 +10,8 @@
  *
  * Strict Exit Code Rules: Exits 0 ONLY IF all setup, connection, and assertions pass.
  */
+require_once __DIR__ . '/../tests/helpers/test_preflight.php';
+requireAiPreflight();
 
 putenv('APP_ENV=testing');
 putenv('TEST_BOOTSTRAP_ACTIVE=1');
@@ -31,6 +33,7 @@ require_once __DIR__ . '/../app/services/GroqService.php';
 
 $passedCount = 0;
 $failedCount = 0;
+$skippedCount = 0;
 
 function logTest($title, $condition, $details = '') {
     global $passedCount, $failedCount;
@@ -215,7 +218,7 @@ $_SERVER['TEST_BOOTSTRAP_ACTIVE'] = '1';
 GroqService::enableTestingModeFromBootstrap();
 
 echo "\n-----------------------------------------------------------\n";
-echo "VERIFICATION SUMMARY: {$passedCount} PASSED, {$failedCount} FAILED\n";
+echo "VERIFICATION SUMMARY: {$passedCount} PASSED, {$failedCount} FAILED, {$skippedCount} SKIPPED\n";
 echo "-----------------------------------------------------------\n";
 
 if ($passedCount > 0 && $failedCount === 0) {

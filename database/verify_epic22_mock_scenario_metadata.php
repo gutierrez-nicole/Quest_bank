@@ -1,13 +1,14 @@
 <?php
 
 require_once __DIR__ . '/../tests/helpers/test_preflight.php';
-runPreflightChecks(['pdo', 'pdo_mysql', 'mbstring', 'curl', 'json', 'fileinfo', 'zip', 'xml']);
+requireAiPreflight();
 
 require_once __DIR__ . '/../app/bootstrap.php';
 require_once __DIR__ . '/../app/services/GroqService.php';
 
 $passed = 0;
 $failed = 0;
+$skipped = 0;
 
 function logTest($title, $condition, $details = '') {
     global $passed, $failed;
@@ -219,7 +220,7 @@ Content: Flexible pavement structural numbers and CBR values.
 }
 
 echo "\n-----------------------------------------------------------\n";
-echo "VERIFICATION SUMMARY: {$passed} PASSED, {$failed} FAILED\n";
+echo "VERIFICATION SUMMARY: {$passed} PASSED, {$failed} FAILED, {$skipped} SKIPPED\n";
 echo "-----------------------------------------------------------\n";
 
 if ($failed > 0) {

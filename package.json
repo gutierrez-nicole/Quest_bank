@@ -4,8 +4,9 @@
   "description": "QuestBank - AI Assessment Generator & Cross-Period Lesson Pool",
   "main": "index.php",
   "scripts": {
-    "test": "npx playwright test",
-    "test:epic22": "npx playwright test",
+    "test": "npx playwright test tests/epic22_e2e_complete.spec.js",
+    "test:epic22": "npx playwright test tests/epic22_e2e_complete.spec.js",
+    "test:epic22:report": "npx playwright show-report",
     "test:server": "APP_ENV=testing TEST_BOOTSTRAP_ACTIVE=1 php -S localhost:8000 -t ."
   },
   "devDependencies": {

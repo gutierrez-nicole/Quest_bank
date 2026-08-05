@@ -330,7 +330,23 @@ test.describe('Epic 2.2 Authoritative E2E & Edge-Workflow Suite', () => {
         expect(pBatch.simulated_scenario).toBe('incomplete_midterm_chunk');
         expect(pBatch.batch_status).toBe('incomplete');
         expect(pBatch.failed_chunk_count).toBe(1);
-        expect(pBatch.failed_chunk_index).not.toBeNull();
+
+        // Detailed failed-chunk assertions
+        expect(Array.isArray(pBatch.failed_chunk_indexes)).toBe(true);
+        expect(pBatch.failed_chunk_indexes.length).toBe(1);
+        expect(pBatch.failed_chunk_indexes[0]).toBe(1);
+        expect(pBatch.first_failed_chunk_index).toBe(1);
+        expect(pBatch.failed_chunk_index).toBe(1);
+
+        expect(Array.isArray(pBatch.failed_chunks)).toBe(true);
+        expect(pBatch.failed_chunks.length).toBe(1);
+
+        const fc0 = pBatch.failed_chunks[0];
+        expect(fc0.chunk_index).toBe(1);
+        expect(fc0.lesson_ids).toContain(state.lessons.midterm);
+        expect(fc0.periods).toContain('midterm');
+        expect(fc0.message).toMatch(/Simulated Midterm chunk failure/i);
+
         expect(pBatch.affected_lesson_ids).toContain(state.lessons.midterm);
         expect(pBatch.affected_periods).toContain('midterm');
         expect(pBatch.failure_messages.length).toBeGreaterThan(0);

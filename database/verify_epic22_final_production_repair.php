@@ -1,10 +1,8 @@
 <?php
-/**
- * Verification Runner for QuestBank Epic 2.2 Final Production Repair:
- * Coverage-Aware Shortfall Refill & Coverage Validation
- *
- * Strict Exit Code Rules: Exits 0 ONLY IF all setup, connection, and assertions pass.
- */
+
+require_once __DIR__ . '/../tests/helpers/test_preflight.php';
+requireAiPreflight();
+
 putenv('APP_ENV=testing');
 putenv('TEST_BOOTSTRAP_ACTIVE=1');
 $_ENV['APP_ENV'] = 'testing';
@@ -17,6 +15,10 @@ define('TEST_CHUNK_LIMIT', 6000);
 require_once __DIR__ . '/../app/bootstrap.php';
 require_once __DIR__ . '/../app/services/GroqService.php';
 require_once __DIR__ . '/../includes/security.php';
+
+$passCount = 0;
+$failCount = 0;
+$skipCount = 0;
 
 GroqService::enableTestingModeFromBootstrap();
 
@@ -191,7 +193,7 @@ logTest("TEST 7: Database Migration & Coverage Metadata Persistence", $pass7, "c
 $pdo->prepare("DELETE FROM ai_generation_batches WHERE generation_batch_id = ?")->execute([$batchIdTest]);
 
 echo "\n-----------------------------------------------------------\n";
-echo "VERIFICATION SUMMARY: {$passCount} PASSED, {$failCount} FAILED\n";
+echo "VERIFICATION SUMMARY: {$passCount} PASSED, {$failCount} FAILED, {$skipCount} SKIPPED\n";
 echo "-----------------------------------------------------------\n";
 
 if ($failCount === 0) {

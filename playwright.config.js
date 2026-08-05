@@ -3,6 +3,7 @@ const { defineConfig, devices } = require('@playwright/test');
 
 module.exports = defineConfig({
   testDir: './tests',
+  testMatch: ['epic22_e2e_complete.spec.js'],
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: 0,

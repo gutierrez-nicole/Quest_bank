@@ -1,12 +1,14 @@
 <?php
-/**
- * Verification Script for QuestBank Epic 2.2 Final Repair 1 (Remove Production Mock AI Fallback)
- */
+
+require_once __DIR__ . '/../tests/helpers/test_preflight.php';
+requireAiPreflight();
+
 require_once __DIR__ . '/../app/bootstrap.php';
 
 $pdo = getDBConnection();
 $passed = 0;
 $failed = 0;
+$skipped = 0;
 
 echo "===========================================================\n";
 echo " QUESTBANK EPIC 2.2 FINAL REPAIR 1 VERIFICATION (NO MOCK)  \n";
@@ -95,7 +97,7 @@ try {
 }
 
 echo "\n-----------------------------------------------------------\n";
-echo "VERIFICATION SUMMARY: {$passed} PASSED, {$failed} FAILED\n";
+echo "VERIFICATION SUMMARY: {$passed} PASSED, {$failed} FAILED, {$skipped} SKIPPED\n";
 echo "-----------------------------------------------------------\n";
 
 exit($failed > 0 ? 1 : 0);

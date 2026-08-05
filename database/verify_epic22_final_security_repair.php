@@ -5,15 +5,16 @@
  * 
  * Strict Exit Code Rules: Exits 0 ONLY IF all setup, connection, and assertions pass.
  */
-putenv('APP_ENV=testing');
-
 require_once __DIR__ . '/../tests/helpers/test_preflight.php';
-runPreflightChecks(['pdo', 'pdo_mysql', 'mbstring', 'curl', 'json', 'fileinfo', 'zip', 'xml']);
+requireDatabasePreflight();
+
+putenv('APP_ENV=testing');
 
 require_once __DIR__ . '/../app/bootstrap.php';
 
 $passed = 0;
 $failed = 0;
+$skipped = 0;
 
 function logTest($name, $status, $detail = '') {
     global $passed, $failed;
@@ -239,7 +240,7 @@ try {
 }
 
 echo "\n-----------------------------------------------------------\n";
-echo "VERIFICATION SUMMARY: {$passed} PASSED, {$failed} FAILED\n";
+echo "VERIFICATION SUMMARY: {$passed} PASSED, {$failed} FAILED, {$skipped} SKIPPED\n";
 echo "-----------------------------------------------------------\n";
 
 // STRICT EXIT CODES RULE
