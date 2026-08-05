@@ -294,8 +294,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
             try {
                 $stmtBatch = $pdo->prepare("
                     INSERT INTO ai_generation_batches 
-                    (generation_batch_id, teacher_id, selected_lesson_ids, selected_lesson_titles, selected_periods, selected_subject, semester, school_year, year_level, program, total_selected_words, estimated_tokens, ai_model, generation_duration, requested_question_count, generated_question_count, failed_question_count, warnings, batch_status, failed_chunk_count, affected_lesson_ids, failure_messages, chunk_generation_results, questions_per_lesson, questions_per_period, uncovered_lesson_ids, uncovered_periods, refill_attempt_count, refill_warnings, simulated_scenario, failed_chunk_index, refill_target_chunk_index, refill_target_lesson_ids, refill_target_periods, refill_generated_count, initial_questions_per_lesson, initial_questions_per_period, initial_uncovered_lesson_ids, initial_uncovered_periods, affected_periods)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (generation_batch_id, teacher_id, selected_lesson_ids, selected_lesson_titles, selected_periods, selected_subject, semester, school_year, year_level, program, total_selected_words, estimated_tokens, ai_model, generation_duration, requested_question_count, generated_question_count, failed_question_count, warnings, batch_status, failed_chunk_count, affected_lesson_ids, failure_messages, chunk_generation_results, questions_per_lesson, questions_per_period, uncovered_lesson_ids, uncovered_periods, refill_attempt_count, refill_warnings, simulated_scenario, failed_chunk_index, refill_target_chunk_index, refill_target_lesson_ids, refill_target_periods, refill_generated_count, initial_questions_per_lesson, initial_questions_per_period, initial_uncovered_lesson_ids, initial_uncovered_periods, affected_periods, failed_chunk_indexes, failed_chunks)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
                 $batchInsertedSuccess = $stmtBatch->execute([
                     $generation_batch_id,
@@ -337,7 +337,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
                     json_encode($result['metadata']['initial_questions_per_period'] ?? (object)[]),
                     json_encode($result['metadata']['initial_uncovered_lesson_ids'] ?? []),
                     json_encode($result['metadata']['initial_uncovered_periods'] ?? []),
-                    json_encode($result['metadata']['affected_periods'] ?? [])
+                    json_encode($result['metadata']['affected_periods'] ?? []),
+                    json_encode($result['metadata']['failed_chunk_indexes'] ?? []),
+                    json_encode($result['metadata']['failed_chunks'] ?? [])
                 ]);
             } catch (Throwable $e) {
                 $batchInsertedSuccess = false;
@@ -1339,6 +1341,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                         <span>Incomplete Generation Batch Acknowledgement Required</span>
                                     </div>
                                     <p class="text-[11px] text-amber-800 font-medium">Some lesson chunks failed during AI generation. To save this incomplete assessment, state your explicit reason below.</p>
+                                    <?php 
+                                    $failedIndices = $ai_meta_output['failed_chunk_indexes'] ?? [];
+                                    if (empty($failedIndices) && isset($ai_meta_output['failed_chunk_index']) && $ai_meta_output['failed_chunk_index'] !== null) {
+                                        $failedIndices = [$ai_meta_output['failed_chunk_index']];
+                                    }
+                                    if (!empty($failedIndices)):
+                                    ?>
+                                        <div class="text-[10px] text-amber-900 font-bold bg-amber-100/70 p-2 rounded-lg border border-amber-200" data-testid="failed-chunks-summary">
+                                            <span class="block text-[9px] uppercase text-amber-800 font-extrabold mb-0.5">Failed Chunk(s):</span>
+                                            <span data-testid="failed-chunk-indexes-list">
+                                                <?php echo htmlspecialchars(implode(', ', array_map(function($i) { return "Chunk #" . $i; }, $failedIndices))); ?>
+                                            </span>
+                                        </div>
+                                    <?php endif; ?>
                                     <input type="text" name="acknowledgement_reason" placeholder="e.g. Proceeding with partial prelim/midterm coverage for quiz setup" data-testid="ack-reason-input" class="w-full bg-white border border-amber-300 rounded-lg p-2 text-xs font-semibold text-stone-800 outline-none focus:border-amber-500">
                                 </div>
                             <?php endif; ?>

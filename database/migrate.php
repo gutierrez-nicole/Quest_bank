@@ -436,6 +436,8 @@ addColumn($pdo, 'ai_generation_batches', 'initial_questions_per_period', "LONGTE
 addColumn($pdo, 'ai_generation_batches', 'initial_uncovered_lesson_ids', "LONGTEXT DEFAULT NULL");
 addColumn($pdo, 'ai_generation_batches', 'initial_uncovered_periods', "LONGTEXT DEFAULT NULL");
 addColumn($pdo, 'ai_generation_batches', 'affected_periods', "LONGTEXT DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'failed_chunk_indexes', "LONGTEXT DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'failed_chunks', "LONGTEXT DEFAULT NULL");
 
 $defaultPassHash = password_hash('Password123!', PASSWORD_DEFAULT);
 

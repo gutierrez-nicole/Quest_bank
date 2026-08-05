@@ -78,6 +78,50 @@ class GroqService {
                 $isMidtermChunk = (bool)preg_match('/Midterm\s+(Module|Design|Chapter|Content|Section)/i', $userPrompt);
             }
 
+            // Detect chunk index from prompt
+            preg_match('/lesson chunk \((\d+) of/i', $userPrompt, $chunkNumMatch);
+            $currentChunkNum = !empty($chunkNumMatch[1]) ? (intval($chunkNumMatch[1]) - 1) : null;
+
+            if (preg_match('/MOCK_FAIL_CHUNK_0_2/i', $userPrompt) && ($currentChunkNum === 0 || $currentChunkNum === 2)) {
+                return [
+                    'success' => false,
+                    'error' => "Simulated Chunk {$currentChunkNum} failure [MOCK_FAIL_CHUNK_0_2]",
+                    'user_message' => "Simulated Chunk {$currentChunkNum} failure [MOCK_FAIL_CHUNK_0_2]",
+                    'error_code' => 'MOCK_CHUNK_FAILURE',
+                    'provider_status' => 500
+                ];
+            }
+
+            if (preg_match('/MOCK_FAIL_CHUNK_0/i', $userPrompt) && $currentChunkNum === 0) {
+                return [
+                    'success' => false,
+                    'error' => 'Simulated Chunk 0 failure [MOCK_FAIL_CHUNK_0]',
+                    'user_message' => 'Simulated Chunk 0 failure [MOCK_FAIL_CHUNK_0]',
+                    'error_code' => 'MOCK_CHUNK_FAILURE',
+                    'provider_status' => 500
+                ];
+            }
+
+            if (preg_match('/MOCK_FAIL_CHUNK_1/i', $userPrompt) && $currentChunkNum === 1) {
+                return [
+                    'success' => false,
+                    'error' => 'Simulated Chunk 1 failure [MOCK_FAIL_CHUNK_1]',
+                    'user_message' => 'Simulated Chunk 1 failure [MOCK_FAIL_CHUNK_1]',
+                    'error_code' => 'MOCK_CHUNK_FAILURE',
+                    'provider_status' => 500
+                ];
+            }
+
+            if (preg_match('/MOCK_FAIL_CHUNK_2/i', $userPrompt) && $currentChunkNum === 2) {
+                return [
+                    'success' => false,
+                    'error' => 'Simulated Chunk 2 failure [MOCK_FAIL_CHUNK_2]',
+                    'user_message' => 'Simulated Chunk 2 failure [MOCK_FAIL_CHUNK_2]',
+                    'error_code' => 'MOCK_CHUNK_FAILURE',
+                    'provider_status' => 500
+                ];
+            }
+
             // Scenario 2: Deterministic Incomplete Batch failure for Midterm chunk
             if ($isIncompleteBatchMock && $isMidtermChunk) {
                 return [
@@ -347,6 +391,8 @@ class GroqService {
             $seen = [];
             $totalChunks = count($chunks);
             $failedChunkCount = 0;
+            $failedChunkIndexes = [];
+            $failedChunksDetailed = [];
             $affectedLessonIds = [];
             $affectedPeriods = [];
             $chunkGenerationResults = [];
@@ -408,11 +454,18 @@ class GroqService {
 
                 if (isset($res['error']) || (isset($res['success']) && $res['success'] === false)) {
                     $chunkCallFailed = true;
-                    $failedChunkCount++;
+                    $failedChunkIndexes[] = (int)$chunkIdx;
                     $affectedLessonIds = array_merge($affectedLessonIds, $chunkLessonIds);
                     $affectedPeriods = array_merge($affectedPeriods, $chunkPeriods);
                     $errMsg = $res['user_message'] ?? $res['error'] ?? 'Chunk generation failed';
-                    $generationWarnings[] = "Chunk " . ($chunkIdx + 1) . " of {$totalChunks} failed: " . $errMsg;
+                    $generationWarnings[] = "Chunk #" . $chunkIdx . " (of {$totalChunks}) failed: " . $errMsg;
+                    $failedChunksDetailed[] = [
+                        'chunk_index' => (int)$chunkIdx,
+                        'lesson_ids' => $chunkLessonIds,
+                        'periods' => $chunkPeriods,
+                        'error_code' => $res['error_code'] ?? 'MOCK_CHUNK_FAILURE',
+                        'message' => $errMsg
+                    ];
                 } else {
                     $content = $res['data']['choices'][0]['message']['content'] ?? '';
                     $cleanContent = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', trim($content));
@@ -783,6 +836,10 @@ class GroqService {
 
             $executionTime = round((microtime(true) - $startTime) * 1000, 2);
 
+            $failedChunkIndexes = array_values(array_unique(array_map('intval', $failedChunkIndexes)));
+            $failedChunkCount = count($failedChunkIndexes);
+            $firstFailedChunkIndex = !empty($failedChunkIndexes) ? $failedChunkIndexes[0] : null;
+
             if (!isset($initialQuestionsPerLesson)) $initialQuestionsPerLesson = $questionsPerLesson;
             if (!isset($initialQuestionsPerPeriod)) $initialQuestionsPerPeriod = $questionsPerPeriod;
             if (!isset($initialUncoveredLessonIds)) $initialUncoveredLessonIds = [];
@@ -814,6 +871,12 @@ class GroqService {
                     'chunk_count' => count($chunks),
                     'batch_status' => $batchStatus,
                     'failed_chunk_count' => $failedChunkCount,
+                    'failed_chunk_indexes' => $failedChunkIndexes,
+                    'first_failed_chunk_index' => $firstFailedChunkIndex,
+                    'failed_chunk_index' => $firstFailedChunkIndex,
+                    'failed_chunk_lesson_ids' => array_values(array_unique($affectedLessonIds)),
+                    'failed_chunk_periods' => array_values(array_unique($affectedPeriods)),
+                    'failed_chunks' => $failedChunksDetailed,
                     'requested_question_count' => $numQuestions,
                     'generated_question_count' => $finalGeneratedCount,
                     'failed_question_count' => max($failedChunkCount, $shortfallCount),
@@ -824,14 +887,13 @@ class GroqService {
                     'chunk_generation_results' => array_values($chunkGenerationResults),
                     'questions_per_lesson' => $questionsPerLesson,
                     'questions_per_period' => $questionsPerPeriod,
-                    'uncovered_lesson_ids' => array_values($uncoveredLessonIds),
-                    'uncovered_periods' => array_values($uncoveredPeriods),
+                    'uncovered_lesson_ids' => array_values(array_unique($uncoveredLessonIds)),
+                    'uncovered_periods' => array_values(array_unique($uncoveredPeriods)),
                     'refill_attempt_count' => $refillAttemptCount,
                     'refill_generated_count' => $refillGeneratedCount ?? 0,
                     'refill_warnings' => $refillWarnings,
                     'simulated_scenario' => $simulatedScenario,
                     'simulated_test_scenario' => $simulatedScenario,
-                    'failed_chunk_index' => ($failedChunkCount > 0 ? 1 : null),
                     'refill_target_chunk_index' => $refillTargetChunkIndex ?? null,
                     'refill_target_lesson_ids' => $refillTargetLessonIds ?? [],
                     'refill_target_periods' => $refillTargetPeriods ?? [],
