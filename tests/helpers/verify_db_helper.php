@@ -77,7 +77,12 @@ if ($action === 'verify_exam_saved') {
     $sources = $stmtSources->fetchAll(PDO::FETCH_ASSOC);
 
     // Decode batch selected lessons
-    $batchLessonIds = !empty($batch['selected_lesson_ids']) ? array_map('intval', explode(',', $batch['selected_lesson_ids'])) : [];
+    $decodedLids = json_decode($batch['selected_lesson_ids'] ?? '', true);
+    if (is_array($decodedLids)) {
+        $batchLessonIds = array_map('intval', $decodedLids);
+    } else {
+        $batchLessonIds = !empty($batch['selected_lesson_ids']) ? array_map('intval', explode(',', $batch['selected_lesson_ids'])) : [];
+    }
 
     $detailedQuestions = [];
     $seenQuestionLessonPairs = [];
@@ -101,7 +106,7 @@ if ($action === 'verify_exam_saved') {
         $qPeriods = [];
 
         foreach ($qSources as $qs) {
-            $lId = intval($qs['source_lesson_id']);
+            $lId = intval($qs['lesson_id'] ?? $qs['source_lesson_id'] ?? 0);
             
             // Check for duplicate question-lesson pair
             $pairKey = "{$qId}_{$lId}";
@@ -123,17 +128,19 @@ if ($action === 'verify_exam_saved') {
             }
         }
 
+        $mainLessonId = intval($q['lesson_id'] ?? $q['source_lesson_id'] ?? 0);
+
         $detailedQuestions[] = [
             'id' => $qId,
-            'question' => $q['question'],
-            'type' => $q['type'],
-            'points' => intval($q['points']),
-            'source_topic' => $q['source_topic'],
-            'source_lesson_id' => intval($q['source_lesson_id']),
+            'question' => $q['question_text'] ?? $q['question'] ?? null,
+            'type' => $q['question_type'] ?? $q['type'] ?? null,
+            'points' => intval($q['points'] ?? 1),
+            'source_topic' => $q['topic'] ?? $q['source_topic'] ?? null,
+            'source_lesson_id' => $mainLessonId,
             'source_relations_count' => $qRelationCount,
             'exact_source_lesson_ids' => array_values(array_unique($qExactLessonIds)),
             'source_academic_periods' => array_values(array_unique($qPeriods)),
-            'is_review_required' => empty($q['source_lesson_id']) ? 1 : 0,
+            'is_review_required' => empty($mainLessonId) ? 1 : 0,
             'source_verified_by' => $qSources[0]['source_verified_by'] ?? null,
             'source_verified_at' => $qSources[0]['source_verified_at'] ?? null
         ];
@@ -153,14 +160,38 @@ if ($action === 'verify_exam_saved') {
         'requested_question_count' => intval($batch['requested_question_count']),
         'generated_question_count' => intval($batch['generated_question_count']),
         'failed_question_count' => intval($batch['failed_question_count']),
-        'source_lesson_count' => intval($batch['source_lesson_count']),
+        'source_lesson_count' => intval($batch['source_lesson_count'] ?? 0),
         'batch_consumed_at' => $batch['batch_consumed_at'],
         'batch_consumed_by' => intval($batch['batch_consumed_by']),
         'saved_exam_id' => intval($batch['saved_exam_id']),
         'teacher_acknowledged_by' => !empty($batch['teacher_acknowledged_by']) ? intval($batch['teacher_acknowledged_by']) : null,
         'teacher_acknowledged_at' => $batch['teacher_acknowledged_at'] ?? null,
         'acknowledgement_reason' => $batch['acknowledgement_reason'] ?? null,
-        'acknowledgement_token_hash' => $batch['acknowledgement_token_hash'] ?? null
+        'acknowledgement_token_hash' => $batch['acknowledgement_token_hash'] ?? null,
+        'failed_chunk_count' => intval($batch['failed_chunk_count'] ?? 0),
+        'affected_lesson_ids' => json_decode($batch['affected_lesson_ids'] ?? '[]', true) ?: [],
+        'affected_periods' => json_decode($batch['affected_periods'] ?? '[]', true) ?: [],
+        'failure_messages' => json_decode($batch['failure_messages'] ?? '[]', true) ?: [],
+        'chunk_generation_results' => json_decode($batch['chunk_generation_results'] ?? '[]', true) ?: [],
+        'questions_per_lesson' => json_decode($batch['questions_per_lesson'] ?? '{}', true) ?: [],
+        'questions_per_period' => json_decode($batch['questions_per_period'] ?? '{}', true) ?: [],
+        'uncovered_lesson_ids' => json_decode($batch['uncovered_lesson_ids'] ?? '[]', true) ?: [],
+        'uncovered_periods' => json_decode($batch['uncovered_periods'] ?? '[]', true) ?: [],
+        'refill_attempt_count' => intval($batch['refill_attempt_count'] ?? 0),
+        'refill_generated_count' => intval($batch['refill_generated_count'] ?? 0),
+        'refill_warnings' => json_decode($batch['refill_warnings'] ?? '[]', true) ?: [],
+        'simulated_scenario' => $batch['simulated_scenario'] ?? null,
+        'simulated_test_scenario' => $batch['simulated_scenario'] ?? null,
+        'failed_chunk_index' => isset($batch['failed_chunk_index']) ? intval($batch['failed_chunk_index']) : null,
+        'refill_target_chunk_index' => isset($batch['refill_target_chunk_index']) ? intval($batch['refill_target_chunk_index']) : null,
+        'refill_target_lesson_ids' => json_decode($batch['refill_target_lesson_ids'] ?? '[]', true) ?: [],
+        'refill_target_periods' => json_decode($batch['refill_target_periods'] ?? '[]', true) ?: [],
+        'initial_questions_per_lesson' => json_decode($batch['initial_questions_per_lesson'] ?? '{}', true) ?: [],
+        'initial_questions_per_period' => json_decode($batch['initial_questions_per_period'] ?? '{}', true) ?: [],
+        'initial_uncovered_lesson_ids' => json_decode($batch['initial_uncovered_lesson_ids'] ?? '[]', true) ?: [],
+        'initial_uncovered_periods' => json_decode($batch['initial_uncovered_periods'] ?? '[]', true) ?: [],
+        'final_questions_per_lesson' => json_decode($batch['questions_per_lesson'] ?? '{}', true) ?: [],
+        'final_questions_per_period' => json_decode($batch['questions_per_period'] ?? '{}', true) ?: []
     ];
 
     $responseExam = [

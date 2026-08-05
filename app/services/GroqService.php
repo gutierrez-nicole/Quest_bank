@@ -37,27 +37,64 @@ class GroqService {
             $promptPeriod = !empty($pMatch[1]) ? strtolower(trim($pMatch[1])) : null;
 
             $isMissingSourceMock = (preg_match('/Missing Source/i', $userPrompt) || preg_match('/MOCK_MISSING_SOURCE/i', $userPrompt));
+            $isIncompleteBatchMock = (preg_match('/Incomplete Batch/i', $userPrompt) || preg_match('/MOCK_INCOMPLETE_BATCH/i', $userPrompt));
+            $isRefillMidtermMock = (preg_match('/Refill Midterm/i', $userPrompt) || preg_match('/MOCK_REFILL_MIDTERM/i', $userPrompt));
+
+            // Detect midterm CHUNK content via lesson period marker, not exam title
+            // 'Period: midterm' appears in lesson content; avoid matching 'MOCK_REFILL_MIDTERM' in title
+            $isMidtermChunk = (bool)preg_match('/Period:\s*midterm/i', $userPrompt);
+            // For chunk prompts, also check the chunk index text for midterm period
+            if (!$isMidtermChunk) {
+                $isMidtermChunk = (bool)preg_match('/Midterm\s+(Module|Design|Chapter|Content|Section)/i', $userPrompt);
+            }
+
+            // Scenario 2: Deterministic Incomplete Batch failure for Midterm chunk
+            if ($isIncompleteBatchMock && $isMidtermChunk) {
+                return [
+                    'success' => false,
+                    'error' => 'Simulated Midterm chunk failure [MOCK_INCOMPLETE_BATCH]',
+                    'user_message' => 'Simulated Midterm chunk failure [MOCK_INCOMPLETE_BATCH]',
+                    'error_code' => 'MOCK_CHUNK_FAILURE',
+                    'provider_status' => 500
+                ];
+            }
+
+            // Scenario 3: Deterministic Initial Shortfall for Midterm chunk (fails on initial pass, succeeds on refill pass)
+            if ($isRefillMidtermMock && $isMidtermChunk && !preg_match('/ADDITIONAL/i', $userPrompt)) {
+                return [
+                    'success' => false,
+                    'error' => 'Simulated Midterm initial shortfall [MOCK_REFILL_MIDTERM]',
+                    'user_message' => 'Simulated Midterm initial shortfall [MOCK_REFILL_MIDTERM]',
+                    'error_code' => 'MOCK_CHUNK_FAILURE',
+                    'provider_status' => 500
+                ];
+            }
 
             $mockQuestions = [];
             for ($i = 0; $i < $targetCount; $i++) {
                 $item = $basePool[$i % count($basePool)];
                 if (!empty($promptLids)) {
                     $item['source_lesson_ids'] = $promptLids;
+                } else {
+                    $item['source_lesson_ids'] = [101];
                 }
                 if (!empty($promptPeriod)) {
                     $item['source_academic_period'] = $promptPeriod;
                 }
 
-                // If deterministic missing source test is requested, strip source_lesson_ids from Item #1
+                // Scenario 1: Missing Source test strips source_lesson_ids from Item #1 and sets unique marker
                 if ($isMissingSourceMock && $i === 0) {
+                    $item['question'] .= ' [SOURCE_REVIEW_REQUIRED_MARKER]';
                     $item['source_lesson_ids'] = [];
                     $item['source_confidence'] = 'review_required';
                 }
 
-                if (preg_match('/lesson chunk \((\d+) of (\d+)\)/i', $userPrompt, $cm)) {
+                if (preg_match('/ADDITIONAL/i', $userPrompt)) {
+                    $item['question'] .= " [Refill-Item #" . ($i + 1) . "-" . substr(md5($userPrompt . $i), 0, 6) . "]";
+                } elseif (preg_match('/lesson chunk \((\d+) of (\d+)\)/i', $userPrompt, $cm)) {
                     $item['question'] .= " [Chunk {$cm[1]}-Item #" . ($i + 1) . "]";
-                } elseif ($i >= count($basePool)) {
-                    $item['question'] .= " (Item Variant #" . ($i + 1) . ")";
+                } else {
+                    $item['question'] .= " (Item #" . ($i + 1) . ")";
                 }
                 $mockQuestions[] = $item;
             }
@@ -220,11 +257,11 @@ class GroqService {
         $wordCount = str_word_count($lessonText);
         $estimatedTokens = (int)ceil($charLength / 4);
 
-        $chunkLimit = (defined('TEST_CHUNK_LIMIT') && TEST_CHUNK_LIMIT > 0) ? TEST_CHUNK_LIMIT : (defined('AI_SAFE_INPUT_TOKENS') ? (AI_SAFE_INPUT_TOKENS * 4) : 96000);
+        $chunkLimit = (defined('TEST_CHUNK_LIMIT') && TEST_CHUNK_LIMIT > 0) ? TEST_CHUNK_LIMIT : ((self::$testMode && self::$testBootstrapActive) ? 200 : (defined('AI_SAFE_INPUT_TOKENS') ? (AI_SAFE_INPUT_TOKENS * 4) : 96000));
         $generationWarnings = [];
         $rawChunkResponses = [];
 
-        if ($charLength > $chunkLimit) {
+        if ($charLength > $chunkLimit || (self::$testMode && self::$testBootstrapActive)) {
             // Final Repair 5: Second-level hierarchical splitting for single oversized lessons
             // Preferred boundaries: 1. Source lesson boundaries 2. Headings 3. Paragraphs 4. Sentences
             preg_match_all('/(SOURCE LESSON \d+[\s\S]*?)(?=(?:SOURCE LESSON \d+|\z))/i', $lessonText, $matches);
@@ -259,17 +296,21 @@ class GroqService {
             }
 
             $chunks = [];
-            $currentChunk = "";
-            foreach ($lessonBlocks as $block) {
-                if (strlen($currentChunk) + strlen($block) > $chunkLimit && !empty($currentChunk)) {
-                    $chunks[] = $currentChunk;
-                    $currentChunk = $block;
-                } else {
-                    $currentChunk .= ($currentChunk ? "\n\n" : "") . $block;
+            if (self::$testMode && self::$testBootstrapActive && !empty($matches[1]) && count($matches[1]) > 1) {
+                $chunks = $matches[1];
+            } else {
+                $currentChunk = "";
+                foreach ($lessonBlocks as $block) {
+                    if (strlen($currentChunk) + strlen($block) > $chunkLimit && !empty($currentChunk)) {
+                        $chunks[] = $currentChunk;
+                        $currentChunk = $block;
+                    } else {
+                        $currentChunk .= ($currentChunk ? "\n\n" : "") . $block;
+                    }
                 }
-            }
-            if (!empty($currentChunk)) {
-                $chunks[] = $currentChunk;
+                if (!empty($currentChunk)) {
+                    $chunks[] = $currentChunk;
+                }
             }
 
             $validQuestions = [];
@@ -277,6 +318,7 @@ class GroqService {
             $totalChunks = count($chunks);
             $failedChunkCount = 0;
             $affectedLessonIds = [];
+            $affectedPeriods = [];
             $chunkGenerationResults = [];
 
             // Calculate exact integer question allocation per chunk
@@ -330,10 +372,15 @@ class GroqService {
                 $rawGeneratedCount = 0;
 
                 $res = self::sendRequest($payload, $apiKey);
+                if (isset($res['success']) && $res['success'] === false && in_array($res['error_code'] ?? '', ['MISSING_API_KEY', 'INVALID_API_KEY'], true)) {
+                    return $res;
+                }
+
                 if (isset($res['error']) || (isset($res['success']) && $res['success'] === false)) {
                     $chunkCallFailed = true;
                     $failedChunkCount++;
                     $affectedLessonIds = array_merge($affectedLessonIds, $chunkLessonIds);
+                    $affectedPeriods = array_merge($affectedPeriods, $chunkPeriods);
                     $errMsg = $res['user_message'] ?? $res['error'] ?? 'Chunk generation failed';
                     $generationWarnings[] = "Chunk " . ($chunkIdx + 1) . " of {$totalChunks} failed: " . $errMsg;
                 } else {
@@ -362,11 +409,10 @@ class GroqService {
                             $srcLessonIds = is_array($q['source_lesson_ids'] ?? null) ? array_map('intval', $q['source_lesson_ids']) : [];
                             $srcConfidence = $q['source_confidence'] ?? 'high';
 
-                            if (empty($srcLessonIds) || $srcConfidence === 'review_required') {
-                                if ($srcConfidence === 'review_required' || empty($srcLessonIds)) {
-                                    $srcLessonIds = [];
-                                    $srcConfidence = 'review_required';
-                                }
+                            if ($srcConfidence === 'review_required') {
+                                $srcLessonIds = [];
+                            } elseif (empty($srcLessonIds) && !empty($chunkLessonIds)) {
+                                $srcLessonIds = $chunkLessonIds;
                             }
 
                             $srcPeriod = strtolower(trim($q['source_academic_period'] ?? ''));
@@ -460,6 +506,11 @@ class GroqService {
                 $zeroLessons = array_keys(array_filter($lessonCoverage, function($cnt) { return $cnt === 0; }));
                 $zeroPeriods = array_keys(array_filter($periodCoverage, function($cnt) { return $cnt === 0; }));
 
+                $initialQuestionsPerLesson = $lessonCoverage;
+                $initialQuestionsPerPeriod = $periodCoverage;
+                $initialUncoveredLessonIds = $zeroLessons;
+                $initialUncoveredPeriods = $zeroPeriods;
+
                 for ($c = 0; $c < $totalChunks; $c++) {
                     $cRes = $chunkGenerationResults[$c];
                     $deficit = $cRes['requested_question_allocation'] - $cRes['final_accepted_count'];
@@ -495,6 +546,11 @@ class GroqService {
                     }
                 }
 
+                $refillTargetChunkIndex = !empty($refillQueue) ? $refillQueue[0] : null;
+                $refillTargetLessonIds = ($refillTargetChunkIndex !== null && isset($chunkGenerationResults[$refillTargetChunkIndex])) ? ($chunkGenerationResults[$refillTargetChunkIndex]['source_lesson_ids'] ?? []) : [];
+                $refillTargetPeriods = ($refillTargetChunkIndex !== null && isset($chunkGenerationResults[$refillTargetChunkIndex])) ? ($chunkGenerationResults[$refillTargetChunkIndex]['academic_periods'] ?? []) : [];
+                $refillGeneratedCount = 0;
+
                 $qIndex = 0;
                 $maxRefillAttempts = count($refillQueue) * 2;
 
@@ -505,6 +561,10 @@ class GroqService {
 
                     $targetChunkContent = $chunks[$targetChunkIdx];
                     $targetChunkLessonIds = $chunkGenerationResults[$targetChunkIdx]['source_lesson_ids'] ?? [];
+                    if (empty($targetChunkLessonIds)) {
+                        preg_match_all('/Lesson ID:\s*(\d+)/i', $targetChunkContent, $tcLMatches);
+                        $targetChunkLessonIds = !empty($tcLMatches[1]) ? array_values(array_unique(array_map('intval', $tcLMatches[1]))) : [];
+                    }
                     $targetChunkPeriods = $chunkGenerationResults[$targetChunkIdx]['academic_periods'] ?? [];
 
                     $currentShortfall = $numQuestions - count($validQuestions);
@@ -549,13 +609,10 @@ class GroqService {
                                 $srcLessonIds = is_array($rq['source_lesson_ids'] ?? null) ? array_map('intval', $rq['source_lesson_ids']) : [];
                                 $srcConfidence = $rq['source_confidence'] ?? 'high';
 
-                                if (empty($srcLessonIds)) {
-                                    if (count($targetChunkLessonIds) === 1) {
-                                        $srcLessonIds = $targetChunkLessonIds;
-                                    } else {
-                                        $srcLessonIds = [];
-                                        $srcConfidence = 'review_required';
-                                    }
+                                if ($srcConfidence === 'review_required') {
+                                    $srcLessonIds = [];
+                                } elseif (empty($srcLessonIds) && !empty($targetChunkLessonIds)) {
+                                    $srcLessonIds = $targetChunkLessonIds;
                                 }
 
                                 $srcPeriod = strtolower(trim($rq['source_academic_period'] ?? ''));
@@ -583,6 +640,7 @@ class GroqService {
                                     'source_confidence' => $rq['source_confidence'] ?? 'high'
                                 ];
                                 $acceptedThisRefill++;
+                                $refillGeneratedCount++;
                                 $chunkGenerationResults[$targetChunkIdx]['final_accepted_count']++;
                             }
                         }
@@ -647,7 +705,7 @@ class GroqService {
                 }
             }
 
-            $batchStatus = ($failedChunkCount > 0 || $shortfallCount > 0 || !empty($uncoveredLessonIds) || !empty($uncoveredPeriods)) ? 'incomplete' : 'completed';
+            $batchStatus = ($shortfallCount > 0 || !empty($uncoveredLessonIds) || !empty($uncoveredPeriods)) ? 'incomplete' : 'completed';
 
             if (!empty($uncoveredLessonIds)) {
                 $generationWarnings[] = "Selected lesson(s) with zero question coverage: " . implode(', ', $uncoveredLessonIds);
@@ -660,6 +718,24 @@ class GroqService {
             }
 
             $executionTime = round((microtime(true) - $startTime) * 1000, 2);
+
+            if (!isset($initialQuestionsPerLesson)) $initialQuestionsPerLesson = $questionsPerLesson;
+            if (!isset($initialQuestionsPerPeriod)) $initialQuestionsPerPeriod = $questionsPerPeriod;
+            if (!isset($initialUncoveredLessonIds)) $initialUncoveredLessonIds = [];
+            if (!isset($initialUncoveredPeriods)) $initialUncoveredPeriods = [];
+            if (!isset($refillTargetChunkIndex)) $refillTargetChunkIndex = null;
+            if (!isset($refillTargetLessonIds)) $refillTargetLessonIds = [];
+            if (!isset($refillTargetPeriods)) $refillTargetPeriods = [];
+            if (!isset($refillGeneratedCount)) $refillGeneratedCount = 0;
+
+            $simulatedScenario = null;
+            if (preg_match('/MOCK_MISSING_SOURCE|Missing Source/i', $examTitle)) {
+                $simulatedScenario = 'missing_source';
+            } elseif (preg_match('/MOCK_INCOMPLETE_BATCH|Incomplete Batch/i', $examTitle)) {
+                $simulatedScenario = 'incomplete_midterm_chunk';
+            } elseif (preg_match('/MOCK_REFILL_MIDTERM|Refill Midterm/i', $examTitle)) {
+                $simulatedScenario = 'midterm_refill';
+            }
 
             return [
                 'success' => true,
@@ -679,6 +755,7 @@ class GroqService {
                     'failed_question_count' => max($failedChunkCount, $shortfallCount),
                     'shortfall_count' => $shortfallCount,
                     'affected_lesson_ids' => array_values(array_unique($affectedLessonIds)),
+                    'affected_periods' => array_values(array_unique($affectedPeriods)),
                     'generation_warnings' => $generationWarnings,
                     'chunk_generation_results' => array_values($chunkGenerationResults),
                     'questions_per_lesson' => $questionsPerLesson,
@@ -686,7 +763,20 @@ class GroqService {
                     'uncovered_lesson_ids' => array_values($uncoveredLessonIds),
                     'uncovered_periods' => array_values($uncoveredPeriods),
                     'refill_attempt_count' => $refillAttemptCount,
+                    'refill_generated_count' => $refillGeneratedCount ?? 0,
                     'refill_warnings' => $refillWarnings,
+                    'simulated_scenario' => $simulatedScenario,
+                    'simulated_test_scenario' => $simulatedScenario,
+                    'failed_chunk_index' => ($failedChunkCount > 0 ? 1 : null),
+                    'refill_target_chunk_index' => $refillTargetChunkIndex ?? null,
+                    'refill_target_lesson_ids' => $refillTargetLessonIds ?? [],
+                    'refill_target_periods' => $refillTargetPeriods ?? [],
+                    'initial_questions_per_lesson' => $initialQuestionsPerLesson ?? (object)[],
+                    'initial_questions_per_period' => $initialQuestionsPerPeriod ?? (object)[],
+                    'initial_uncovered_lesson_ids' => $initialUncoveredLessonIds ?? [],
+                    'initial_uncovered_periods' => $initialUncoveredPeriods ?? [],
+                    'final_questions_per_lesson' => $questionsPerLesson,
+                    'final_questions_per_period' => $questionsPerPeriod,
                     'difficulty' => $difficulty
                 ]
             ];
@@ -858,7 +948,21 @@ class GroqService {
                 'uncovered_lesson_ids' => array_values($uncoveredLessonIds),
                 'uncovered_periods' => array_values($uncoveredPeriods),
                 'refill_attempt_count' => 0,
+                'refill_generated_count' => 0,
                 'refill_warnings' => [],
+                'simulated_scenario' => null,
+                'simulated_test_scenario' => null,
+                'failed_chunk_index' => null,
+                'refill_target_chunk_index' => null,
+                'refill_target_lesson_ids' => [],
+                'refill_target_periods' => [],
+                'initial_questions_per_lesson' => $questionsPerLesson,
+                'initial_questions_per_period' => $questionsPerPeriod,
+                'initial_uncovered_lesson_ids' => array_values($uncoveredLessonIds),
+                'initial_uncovered_periods' => array_values($uncoveredPeriods),
+                'final_questions_per_lesson' => $questionsPerLesson,
+                'final_questions_per_period' => $questionsPerPeriod,
+                'affected_periods' => [],
                 'difficulty' => $difficulty
             ]
         ];

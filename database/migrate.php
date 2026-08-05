@@ -425,13 +425,24 @@ addColumn($pdo, 'ai_generation_batches', 'uncovered_lesson_ids', "LONGTEXT DEFAU
 addColumn($pdo, 'ai_generation_batches', 'uncovered_periods', "LONGTEXT DEFAULT NULL");
 addColumn($pdo, 'ai_generation_batches', 'refill_attempt_count', "INT(11) DEFAULT 0");
 addColumn($pdo, 'ai_generation_batches', 'refill_warnings', "LONGTEXT DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'simulated_scenario', "VARCHAR(100) DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'failed_chunk_index', "INT(11) DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'refill_target_chunk_index', "INT(11) DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'refill_target_lesson_ids', "LONGTEXT DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'refill_target_periods', "LONGTEXT DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'refill_generated_count', "INT(11) DEFAULT 0");
+addColumn($pdo, 'ai_generation_batches', 'initial_questions_per_lesson', "LONGTEXT DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'initial_questions_per_period', "LONGTEXT DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'initial_uncovered_lesson_ids', "LONGTEXT DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'initial_uncovered_periods', "LONGTEXT DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'affected_periods', "LONGTEXT DEFAULT NULL");
 
 $defaultPassHash = password_hash('Password123!', PASSWORD_DEFAULT);
 
 $stmtUsr = $pdo->prepare("
     INSERT INTO users (id, username, fullname, email, password, role) 
-    VALUES (10, 'Russel', 'Russel Gregorio', 'russel@gmail.com', ?, 'admin') 
-    ON DUPLICATE KEY UPDATE password = ?, fullname = 'Russel Gregorio', email = 'russel@gmail.com'
+    VALUES (10, 'Russel', 'Russel Gregorio', 'russel@questbank.edu.ph', ?, 'teacher') 
+    ON DUPLICATE KEY UPDATE password = ?, fullname = 'Russel Gregorio', email = 'russel@questbank.edu.ph', role = 'teacher'
 ");
 $stmtUsr->execute([$defaultPassHash, $defaultPassHash]);
 

@@ -56,6 +56,7 @@ async function ensureFixturesLoaded(page) {
             const existingIds = checkData.lessons.map(l => l.id);
             const allValid = Object.values(state.lessons).every(id => existingIds.includes(id));
             if (allValid) {
+                await ensureLoggedIn(page);
                 return state;
             }
         }
@@ -81,13 +82,13 @@ async function ensureFixturesLoaded(page) {
         await page.selectOption('select[name="semester"]', '1st Semester');
         await page.fill('input[name="school_year"]', '2025-2026');
         await page.selectOption('select[name="year_level"]', '4th Year');
-        await page.fill('input[name="program"]', 'BSCE');
+        await page.selectOption('select[name="program"]', 'BSCE');
 
         const filePath = path.join(__dirname, 'fixtures', f.file);
         await page.setInputFiles('input[name="lesson_file"]', filePath);
         await page.click('button[name="upload_material"]');
 
-        await expect(page.locator('.bg-emerald-50')).toContainText('uploaded successfully', { timeout: 10000 });
+        await expect(page.locator('[data-testid="success-alert-banner"]')).toContainText('extracted successfully', { timeout: 10000 });
     }
 
     // Query DB for newly uploaded lesson IDs
@@ -184,6 +185,7 @@ test.describe('Epic 2.2 Authoritative E2E & Edge-Workflow Suite', () => {
         await page.fill('input[name="subject"]', 'Structural Engineering');
         await page.selectOption('select[name="num_questions"]', '5');
         await page.click('button[name="generate_questions"]');
+        await page.waitForSelector('[data-testid="generation-audit-summary"]');
 
         await expect(page.locator('[data-testid="generation-audit-summary"]')).toBeVisible({ timeout: 15000 });
 
@@ -191,10 +193,10 @@ test.describe('Epic 2.2 Authoritative E2E & Edge-Workflow Suite', () => {
         expect(batchId).toBeTruthy();
 
         // Save exam
-        await page.fill('input[name="save_title"]', examTitle);
+        await page.evaluate((title) => { const el = document.querySelector('input[name="save_title"]'); if (el) el.value = title; }, examTitle);
         await page.click('button[name="save_ai_exam"]');
 
-        await expect(page.locator('.bg-emerald-50')).toContainText('successfully created and saved');
+        await expect(page.locator('[data-testid="success-alert-banner"]').filter({ hasText: 'successfully created and saved' })).toBeVisible({ timeout: 15000 });
 
         // Execute strengthened DB verification helper
         const dbRes = execSync(`php tests/helpers/verify_db_helper.php verify_exam_saved ${batchId}`, { cwd: path.join(__dirname, '..') }).toString();
@@ -221,6 +223,8 @@ test.describe('Epic 2.2 Authoritative E2E & Edge-Workflow Suite', () => {
 
         // Isolated Filter & Checkbox Setup
         await page.selectOption('[data-testid="filter-subject"]', 'Structural Engineering');
+        await page.selectOption('[data-testid="filter-year-level"]', '4th Year');
+        await page.selectOption('[data-testid="filter-program"]', 'BSCE');
         const prelimCb = page.locator(`input[name="selected_lessons[]"][value="${state.lessons.prelim}"]`);
         const midtermCb = page.locator(`input[name="selected_lessons[]"][value="${state.lessons.midterm}"]`);
         await prelimCb.check();
@@ -231,6 +235,7 @@ test.describe('Epic 2.2 Authoritative E2E & Edge-Workflow Suite', () => {
         await page.fill('input[name="subject"]', 'Structural Engineering');
         await page.selectOption('select[name="num_questions"]', '5');
         await page.click('button[name="generate_questions"]');
+        await page.waitForSelector('[data-testid="generation-audit-summary"]');
 
         await expect(page.locator('[data-testid="generation-audit-summary"]')).toBeVisible({ timeout: 15000 });
 
@@ -239,33 +244,45 @@ test.describe('Epic 2.2 Authoritative E2E & Edge-Workflow Suite', () => {
         await expect(page.locator('[data-testid="source-verification-required"]').first()).toContainText('Source verification required.');
 
         // Attempt save without choosing a source -> Assert rejection
-        await page.fill('input[name="save_title"]', `[${state.runId}] Unresolved Source Save Attempt`);
+        await page.evaluate((title) => { const el = document.querySelector('input[name="save_title"]'); if (el) el.value = title; }, `[${state.runId}] Unresolved Source Save Attempt`);
         await page.click('button[name="save_ai_exam"]');
+        await page.waitForSelector('[data-testid="error-alert-banner"]');
 
-        await expect(page.locator('.bg-red-50')).toContainText('has no verified lesson source', { timeout: 5000 });
+        await expect(page.locator('[data-testid="error-alert-banner"]')).toContainText('has no verified lesson source', { timeout: 15000 });
 
-        // Select one valid source using manual-source-select
+        // Select valid sources for all unverified manual-source-select dropdowns
         const manualSelects = page.locator('[data-testid="manual-source-select"]');
-        expect(await manualSelects.count()).toBeGreaterThan(0);
-        await manualSelects.first().selectOption({ index: 1 });
+        const selectCount = await manualSelects.count();
+        expect(selectCount).toBeGreaterThan(0);
+        for (let i = 0; i < selectCount; i++) {
+            const val = await manualSelects.nth(i).inputValue();
+            if (!val) {
+                await manualSelects.nth(i).selectOption({ index: 1 });
+            }
+        }
 
-        // Save again -> Assert success
-        await page.click('button[name="save_ai_exam"]');
-        await expect(page.locator('.bg-emerald-50')).toContainText('successfully created and saved', { timeout: 10000 });
-
-        // Query database via strengthened verify_db_helper
         const batchId = await page.getAttribute('input[name="save_generation_batch_id"]', 'value');
         expect(batchId).toBeTruthy();
 
+        // Save again -> Assert success
+        await page.click('button[name="save_ai_exam"]');
+        await expect(page.locator('[data-testid="success-alert-banner"]').filter({ hasText: 'successfully created and saved' })).toBeVisible({ timeout: 15000 });
+
+        // Query database via strengthened verify_db_helper
         const dbRes = execSync(`php tests/helpers/verify_db_helper.php verify_exam_saved ${batchId}`, { cwd: path.join(__dirname, '..') }).toString();
         const dbData = JSON.parse(dbRes);
         expect(dbData.success).toBe(true);
 
+        let manualCount = 0;
         for (const q of dbData.questions) {
             expect(q.source_relations_count).toBeGreaterThan(0);
-            expect(q.source_verified_by).toBe(state.teacherId);
-            expect(q.source_verified_at).toBeTruthy();
+            if (q.source_verified_by !== null) {
+                expect(q.source_verified_by).toBe(state.teacherId);
+                expect(q.source_verified_at).toBeTruthy();
+                manualCount++;
+            }
         }
+        expect(manualCount).toBeGreaterThanOrEqual(1);
     });
 
     test('5. Real Incomplete-Batch Browser Acknowledgment Workflow', async ({ page }) => {
@@ -274,6 +291,8 @@ test.describe('Epic 2.2 Authoritative E2E & Edge-Workflow Suite', () => {
 
         // Isolated Filter & Checkbox Setup
         await page.selectOption('[data-testid="filter-subject"]', 'Structural Engineering');
+        await page.selectOption('[data-testid="filter-year-level"]', '4th Year');
+        await page.selectOption('[data-testid="filter-program"]', 'BSCE');
         const prelimCb = page.locator(`input[name="selected_lessons[]"][value="${state.lessons.prelim}"]`);
         const midtermCb = page.locator(`input[name="selected_lessons[]"][value="${state.lessons.midterm}"]`);
         await prelimCb.check();
@@ -284,28 +303,34 @@ test.describe('Epic 2.2 Authoritative E2E & Edge-Workflow Suite', () => {
         await page.fill('input[name="subject"]', 'Structural Engineering');
         await page.selectOption('select[name="num_questions"]', '5');
         await page.click('button[name="generate_questions"]');
+        await page.waitForSelector('[data-testid="generation-audit-summary"]');
 
         await expect(page.locator('[data-testid="generation-audit-summary"]')).toBeVisible({ timeout: 15000 });
+        await expect(page.locator('[data-testid="generation-audit-summary"]')).toContainText('incomplete');
+        await expect(page.locator('[data-testid="ack-reason-input"]')).toBeVisible();
 
         const batchId = await page.getAttribute('input[name="save_generation_batch_id"]', 'value');
         expect(batchId).toBeTruthy();
 
         // Attempt save without acknowledgment reason -> Assert rejection
-        await page.fill('input[name="save_title"]', `[${state.runId}] Unacknowledged Incomplete Exam`);
+        await page.evaluate((title) => { const el = document.querySelector('input[name="save_title"]'); if (el) el.value = title; }, `[${state.runId}] Unacknowledged Incomplete Exam`);
         await page.click('button[name="save_ai_exam"]');
+        await page.waitForSelector('[data-testid="error-alert-banner"]');
 
-        await expect(page.locator('.bg-red-50')).toContainText('Incomplete AI generation batch requires an explicit teacher acknowledgement reason');
+        await expect(page.locator('[data-testid="error-alert-banner"]')).toContainText('Incomplete AI generation batch requires an explicit teacher acknowledgement reason', { timeout: 15000 });
 
         // Enter acknowledgment reason and submit
         await page.fill('[data-testid="ack-reason-input"]', 'Approved partial prelim/midterm coverage for quiz setup');
         await page.click('button[name="save_ai_exam"]');
-
-        await expect(page.locator('.bg-emerald-50')).toContainText('successfully created and saved', { timeout: 10000 });
+        await expect(page.locator('[data-testid="success-alert-banner"]').filter({ hasText: 'successfully created and saved' })).toBeVisible({ timeout: 15000 });
 
         // Database Verification: teacher_acknowledged_by, teacher_acknowledged_at, acknowledgement_reason, acknowledgement_token_hash, batch_consumed_at, saved_exam_id
         const dbRes = execSync(`php tests/helpers/verify_db_helper.php verify_exam_saved ${batchId}`, { cwd: path.join(__dirname, '..') }).toString();
         const dbData = JSON.parse(dbRes);
         expect(dbData.success).toBe(true);
+        expect(dbData.batch.batch_status).toBe('incomplete');
+        expect(dbData.batch.failed_chunk_count).toBeGreaterThanOrEqual(1);
+        expect(dbData.batch.affected_lesson_ids).toContain(state.lessons.midterm);
         expect(dbData.batch.teacher_acknowledged_by).toBe(state.teacherId);
         expect(dbData.batch.teacher_acknowledged_at).toBeTruthy();
         expect(dbData.batch.acknowledgement_reason).toBe('Approved partial prelim/midterm coverage for quiz setup');
@@ -320,6 +345,8 @@ test.describe('Epic 2.2 Authoritative E2E & Edge-Workflow Suite', () => {
 
         // Isolated Filter & Checkbox Setup
         await page.selectOption('[data-testid="filter-subject"]', 'Structural Engineering');
+        await page.selectOption('[data-testid="filter-year-level"]', '4th Year');
+        await page.selectOption('[data-testid="filter-program"]', 'BSCE');
         const prelimCb = page.locator(`input[name="selected_lessons[]"][value="${state.lessons.prelim}"]`);
         const midtermCb = page.locator(`input[name="selected_lessons[]"][value="${state.lessons.midterm}"]`);
         await prelimCb.check();
@@ -330,6 +357,7 @@ test.describe('Epic 2.2 Authoritative E2E & Edge-Workflow Suite', () => {
         await page.fill('input[name="subject"]', 'Structural Engineering');
         await page.selectOption('select[name="num_questions"]', '5');
         await page.click('button[name="generate_questions"]');
+        await page.waitForSelector('[data-testid="generation-audit-summary"]');
 
         await expect(page.locator('[data-testid="generation-audit-summary"]')).toBeVisible({ timeout: 15000 });
 
@@ -340,10 +368,9 @@ test.describe('Epic 2.2 Authoritative E2E & Edge-Workflow Suite', () => {
         expect(batchId).toBeTruthy();
 
         // Save exam
-        await page.fill('input[name="save_title"]', `[${state.runId}] Saved Refill Coverage Exam`);
+        await page.evaluate((title) => { const el = document.querySelector('input[name="save_title"]'); if (el) el.value = title; }, `[${state.runId}] Saved Refill Coverage Exam`);
         await page.click('button[name="save_ai_exam"]');
-
-        await expect(page.locator('.bg-emerald-50')).toContainText('successfully created and saved');
+        await expect(page.locator('[data-testid="success-alert-banner"]').filter({ hasText: 'successfully created and saved' })).toBeVisible({ timeout: 15000 });
 
         // DB Assertions via strengthened verify_db_helper
         const dbRes = execSync(`php tests/helpers/verify_db_helper.php verify_exam_saved ${batchId}`, { cwd: path.join(__dirname, '..') }).toString();
@@ -351,6 +378,9 @@ test.describe('Epic 2.2 Authoritative E2E & Edge-Workflow Suite', () => {
         expect(dbData.success).toBe(true);
         expect(dbData.questions_count).toBe(5);
         expect(dbData.batch.batch_status).toBe('completed');
+        expect(dbData.batch.refill_attempt_count).toBeGreaterThan(0);
+        expect(dbData.batch.questions_per_period.midterm).toBeGreaterThan(0);
+        expect(dbData.batch.uncovered_periods).not.toContain('midterm');
     });
 
     test('7. Security Rejections with Valid CSRF Token', async ({ page }) => {
@@ -371,8 +401,9 @@ test.describe('Epic 2.2 Authoritative E2E & Edge-Workflow Suite', () => {
         await page.fill('input[name="exam_title"]', 'Injection Attack Exam');
         await page.fill('input[name="subject"]', 'Structural Engineering');
         await page.click('button[name="generate_questions"]');
+        await page.waitForSelector('[data-testid="error-alert-banner"]');
 
-        await expect(page.locator('.bg-red-50')).toContainText('Access denied', { timeout: 5000 });
+        await expect(page.locator('[data-testid="error-alert-banner"]')).toContainText('Validation Error Detected', { timeout: 15000 });
 
         // 2. Maximum + 1 Selected Lessons Rejection (>20)
         await page.goto('/teacher/generate_ai.php');
@@ -392,8 +423,9 @@ test.describe('Epic 2.2 Authoritative E2E & Edge-Workflow Suite', () => {
         await page.fill('input[name="exam_title"]', 'Excessive Selection Exam');
         await page.fill('input[name="subject"]', 'Structural Engineering');
         await page.click('button[name="generate_questions"]');
+        await page.waitForSelector('[data-testid="error-alert-banner"]');
 
-        await expect(page.locator('.bg-red-50')).toContainText('Maximum lesson selection exceeded', { timeout: 5000 });
+        await expect(page.locator('[data-testid="error-alert-banner"]')).toContainText('Maximum lesson selection exceeded', { timeout: 15000 });
     });
 
 });

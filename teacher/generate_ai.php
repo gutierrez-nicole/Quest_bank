@@ -42,6 +42,8 @@ $filter_school_years = array_values(array_unique(array_filter(array_column($all_
 $filter_year_levels = array_values(array_unique(array_filter(array_column($all_teacher_lessons, 'year_level'))));
 $filter_programs = array_values(array_unique(array_filter(array_column($all_teacher_lessons, 'program'))));
 
+$secretKey = (defined('DB_PASS') ? DB_PASS : '') . '_questbank_secret_salt_2026';
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']) || isset($_POST['selected_lessons']) || !empty($_POST['lesson_text']))) {
     validateCSRFToken();
     $input_source = $_POST['input_source'] ?? 'manual';
@@ -240,7 +242,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
 
     if (!empty(trim($final_lesson_content)) && $num_questions > 0 && empty($error_msg)) {
         $result = GroqService::generateQuestions($final_lesson_content, $num_questions, $subject, $exam_title, $specialization, $question_type, $difficulty);
-        if (isset($result['success'])) {
+        if (!empty($result['success']) && isset($result['questions']) && is_array($result['questions'])) {
             $generated_questions = $result['questions'];
             $estimatedTokens = (int)ceil(strlen($final_lesson_content) / 4);
 
@@ -287,12 +289,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
             }
 
             // Final Security Repair: Failure to persist ai_generation_batches MUST be treated as generation failure
+            $simulatedScenario = $result['metadata']['simulated_scenario'] ?? null;
             $batchInsertedSuccess = false;
             try {
                 $stmtBatch = $pdo->prepare("
                     INSERT INTO ai_generation_batches 
-                    (generation_batch_id, teacher_id, selected_lesson_ids, selected_lesson_titles, selected_periods, selected_subject, semester, school_year, year_level, program, total_selected_words, estimated_tokens, ai_model, generation_duration, requested_question_count, generated_question_count, failed_question_count, warnings, batch_status, failed_chunk_count, affected_lesson_ids, failure_messages, chunk_generation_results, questions_per_lesson, questions_per_period, uncovered_lesson_ids, uncovered_periods, refill_attempt_count, refill_warnings)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (generation_batch_id, teacher_id, selected_lesson_ids, selected_lesson_titles, selected_periods, selected_subject, semester, school_year, year_level, program, total_selected_words, estimated_tokens, ai_model, generation_duration, requested_question_count, generated_question_count, failed_question_count, warnings, batch_status, failed_chunk_count, affected_lesson_ids, failure_messages, chunk_generation_results, questions_per_lesson, questions_per_period, uncovered_lesson_ids, uncovered_periods, refill_attempt_count, refill_warnings, simulated_scenario, failed_chunk_index, refill_target_chunk_index, refill_target_lesson_ids, refill_target_periods, refill_generated_count, initial_questions_per_lesson, initial_questions_per_period, initial_uncovered_lesson_ids, initial_uncovered_periods, affected_periods)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
                 $batchInsertedSuccess = $stmtBatch->execute([
                     $generation_batch_id,
@@ -323,7 +326,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
                     json_encode($result['metadata']['uncovered_lesson_ids'] ?? []),
                     json_encode($result['metadata']['uncovered_periods'] ?? []),
                     intval($result['metadata']['refill_attempt_count'] ?? 0),
-                    json_encode($result['metadata']['refill_warnings'] ?? [])
+                    json_encode($result['metadata']['refill_warnings'] ?? []),
+                    $simulatedScenario,
+                    $result['metadata']['failed_chunk_index'] ?? null,
+                    $result['metadata']['refill_target_chunk_index'] ?? null,
+                    json_encode($result['metadata']['refill_target_lesson_ids'] ?? []),
+                    json_encode($result['metadata']['refill_target_periods'] ?? []),
+                    intval($result['metadata']['refill_generated_count'] ?? 0),
+                    json_encode($result['metadata']['initial_questions_per_lesson'] ?? (object)[]),
+                    json_encode($result['metadata']['initial_questions_per_period'] ?? (object)[]),
+                    json_encode($result['metadata']['initial_uncovered_lesson_ids'] ?? []),
+                    json_encode($result['metadata']['initial_uncovered_periods'] ?? []),
+                    json_encode($result['metadata']['affected_periods'] ?? [])
                 ]);
             } catch (Throwable $e) {
                 $batchInsertedSuccess = false;
@@ -602,6 +616,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
             }
         }
     }
+
+    if (!empty($error_msg) && !empty($batchRecord)) {
+        $saveLessonIds = json_decode($batchRecord['selected_lesson_ids'], true) ?: [];
+        if (!empty($saveLessonIds)) {
+            $inLids = implode(',', array_map('intval', $saveLessonIds));
+            $stmtSel = $pdo->prepare("SELECT id, title, academic_period, subject, semester, school_year, year_level, program, word_count, lesson_text FROM lesson_materials WHERE id IN ($inLids)");
+            $stmtSel->execute();
+            $selLessons = $stmtSel->fetchAll(PDO::FETCH_ASSOC);
+        }
+
+        $ai_meta_output = [
+            'generation_batch_id' => $save_generation_batch_id,
+            'lesson_ids' => $saveLessonIds,
+            'covered_periods' => explode(',', $batchRecord['selected_periods'] ?? ''),
+            'estimated_tokens' => intval($batchRecord['estimated_tokens'] ?? 0),
+            'generation_time_ms' => floatval($batchRecord['generation_duration'] ?? 0) * 1000,
+            'batch_status' => $batchRecord['batch_status'] ?? 'completed',
+            'failed_chunk_count' => intval($batchRecord['failed_chunk_count'] ?? 0),
+            'affected_lesson_ids' => json_decode($batchRecord['affected_lesson_ids'] ?? '[]', true) ?: [],
+            'generation_warnings' => json_decode($batchRecord['failure_messages'] ?? '[]', true) ?: [],
+            'ack_token' => $_POST['ack_token'] ?? null
+        ];
+
+        if (!empty($_POST['questions']) && is_array($_POST['questions'])) {
+            $generated_questions = [];
+            foreach ($_POST['questions'] as $pq) {
+                $manualSrcId = !empty($pq['manual_source_id']) ? intval($pq['manual_source_id']) : null;
+                $rawSrcIds = !empty($pq['source_lesson_ids']) ? array_map('intval', is_array($pq['source_lesson_ids']) ? $pq['source_lesson_ids'] : explode(',', $pq['source_lesson_ids'])) : [];
+                $srcIds = $manualSrcId !== null ? [$manualSrcId] : $rawSrcIds;
+
+                $generated_questions[] = [
+                    'question' => $pq['text'] ?? $pq['question'] ?? '',
+                    'type' => $pq['type'] ?? 'multiple_choice',
+                    'opt_a' => $pq['opt_a'] ?? null,
+                    'opt_b' => $pq['opt_b'] ?? null,
+                    'opt_c' => $pq['opt_c'] ?? null,
+                    'opt_d' => $pq['opt_d'] ?? null,
+                    'correct_answer' => $pq['correct'] ?? $pq['correct_answer'] ?? '',
+                    'points' => intval($pq['points'] ?? 1),
+                    'source_lesson_ids' => $srcIds,
+                    'source_topic' => $pq['source_topic'] ?? '',
+                    'source_academic_period' => $pq['source_academic_period'] ?? '',
+                    'source_confidence' => !empty($srcIds) ? 'high' : 'review_required'
+                ];
+            }
+        }
+    }
 }
 ?>
 
@@ -665,14 +726,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
 
             
             <?php if (!empty($success_msg)): ?>
-                <div class="bg-emerald-50 border-l-4 border-emerald-500 p-4 rounded-xl text-xs font-semibold text-emerald-800 flex items-center justify-between shadow-sm animate-fadeIn">
+                <div class="bg-emerald-50 border-l-4 border-emerald-500 p-4 rounded-xl text-xs font-semibold text-emerald-800 flex items-center justify-between shadow-sm animate-fadeIn" data-testid="success-alert-banner">
                     <span class="flex items-center gap-2"><i class="fa-solid fa-circle-check text-emerald-600 text-sm"></i> <?php echo $success_msg; ?></span>
                     <button onclick="this.parentElement.remove();" class="text-emerald-500 hover:text-emerald-800"><i class="fa-solid fa-xmark"></i></button>
                 </div>
             <?php endif; ?>
 
             <?php if (!empty($error_msg) && empty($ai_error_details)): ?>
-                <div class="bg-rose-50 border-l-4 border-rose-500 p-4 rounded-xl text-xs font-semibold text-rose-800 flex items-center justify-between shadow-sm animate-fadeIn">
+                <div class="bg-rose-50 border-l-4 border-rose-500 p-4 rounded-xl text-xs font-semibold text-rose-800 flex items-center justify-between shadow-sm animate-fadeIn" data-testid="error-alert-banner">
                     <span class="flex items-center gap-2"><i class="fa-solid fa-circle-exclamation text-rose-600 text-sm"></i> <?php echo $error_msg; ?></span>
                     <button onclick="this.parentElement.remove();" class="text-rose-500 hover:text-rose-800"><i class="fa-solid fa-xmark"></i></button>
                 </div>
@@ -1196,9 +1257,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                     <i class="fa-solid fa-square-poll-vertical text-orange-400 text-sm"></i>
                                     <span class="text-xs font-black uppercase tracking-wider text-stone-200">AI Batch Audit Summary</span>
                                 </div>
-                                <span class="text-[10px] font-mono bg-stone-800 text-stone-300 px-2 py-0.5 rounded border border-stone-700">
-                                    ID: <?php echo htmlspecialchars(substr($ai_meta_output['generation_batch_id'] ?? '', 0, 12)); ?>
-                                </span>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[10px] font-mono bg-stone-800 text-stone-300 px-2 py-0.5 rounded border border-stone-700">
+                                        ID: <?php echo htmlspecialchars(substr($ai_meta_output['generation_batch_id'] ?? '', 0, 12)); ?>
+                                    </span>
+                                    <span class="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border <?php echo ($ai_meta_output['batch_status'] ?? '') === 'incomplete' ? 'bg-amber-950 text-amber-300 border-amber-800' : 'bg-emerald-950 text-emerald-300 border-emerald-800'; ?>" data-testid="audit-batch-status">
+                                        Status: <?php echo htmlspecialchars($ai_meta_output['batch_status'] ?? 'completed'); ?>
+                                    </span>
+                                </div>
                             </div>
                             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
                                 <div class="bg-stone-800/60 p-2 rounded-xl border border-stone-700/50">
@@ -1262,7 +1328,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                         <span>Incomplete Generation Batch Acknowledgement Required</span>
                                     </div>
                                     <p class="text-[11px] text-amber-800 font-medium">Some lesson chunks failed during AI generation. To save this incomplete assessment, state your explicit reason below.</p>
-                                    <input type="text" name="acknowledgement_reason" required placeholder="e.g. Proceeding with partial prelim/midterm coverage for quiz setup" data-testid="ack-reason-input" class="w-full bg-white border border-amber-300 rounded-lg p-2 text-xs font-semibold text-stone-800 outline-none focus:border-amber-500">
+                                    <input type="text" name="acknowledgement_reason" placeholder="e.g. Proceeding with partial prelim/midterm coverage for quiz setup" data-testid="ack-reason-input" class="w-full bg-white border border-amber-300 rounded-lg p-2 text-xs font-semibold text-stone-800 outline-none focus:border-amber-500">
                                 </div>
                             <?php endif; ?>
 

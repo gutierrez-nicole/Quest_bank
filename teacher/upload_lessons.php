@@ -174,10 +174,10 @@ $materials = $stmtMaterials->fetchAll(PDO::FETCH_ASSOC);
         </div>
 
         <?php if (!empty($success_msg)): ?>
-            <div class="bg-emerald-50 border-l-4 border-emerald-500 p-4 rounded-xl text-xs font-semibold text-emerald-700"><?php echo $success_msg; ?></div>
+            <div class="bg-emerald-50 border-l-4 border-emerald-500 p-4 rounded-xl text-xs font-semibold text-emerald-700" data-testid="success-alert-banner"><?php echo $success_msg; ?></div>
         <?php endif; ?>
         <?php if (!empty($error_msg)): ?>
-            <div class="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl text-xs font-semibold text-red-700"><?php echo $error_msg; ?></div>
+            <div class="bg-red-50 border-l-4 border-red-500 p-4 rounded-xl text-xs font-semibold text-red-700" data-testid="error-alert-banner"><?php echo $error_msg; ?></div>
         <?php endif; ?>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
