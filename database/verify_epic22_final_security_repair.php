@@ -2,43 +2,23 @@
 /**
  * Verification Runner for QuestBank Epic 2.2 Final Security Repair:
  * Server-Authoritative Generation Batch and Atomic Acknowledgment
- * 
- * Strict Exit Code Rules: Exits 0 ONLY IF all setup, connection, and assertions pass.
  */
-require_once __DIR__ . '/../tests/helpers/test_preflight.php';
+require_once __DIR__ . '/../tests/helpers/test_runner.php';
 requireDatabasePreflight();
 
 putenv('APP_ENV=testing');
 
 require_once __DIR__ . '/../app/bootstrap.php';
 
-$passed = 0;
-$failed = 0;
-$skipped = 0;
-
-function logTest($name, $status, $detail = '') {
-    global $passed, $failed;
-    if ($status) {
-        $passed++;
-        echo "  [PASS] $name\n";
-        if ($detail) echo "         -> $detail\n";
-    } else {
-        $failed++;
-        echo "  [FAIL] $name\n";
-        if ($detail) echo "         -> $detail\n";
-    }
-}
-
-echo "===========================================================\n";
-echo " QUESTBANK EPIC 2.2 FINAL SECURITY REPAIR VERIFICATION      \n";
-echo "===========================================================\n";
+$runner = new TestRunner('QuestBank Epic 2.2 Final Security Repair Verification');
 
 $batchId1 = $batchId2 = $batchId4 = $batchId5 = $batchId6 = null;
 $lessonA = null;
+$pdo = null;
 
 try {
     $pdo = getDBConnection();
-    logTest("Setup: Database Connection Established", true, "Database handle active");
+    $runner->setSetupCompleted($pdo !== null, "Database connection established");
 
     // Fetch test teacher russel
     $stmtT = $pdo->prepare("SELECT id FROM users WHERE role = 'teacher' LIMIT 1");
@@ -57,7 +37,7 @@ try {
     $stmtL->execute([$teacher_id]);
     $lessonA = $pdo->lastInsertId();
 
-    // --- TEST 1: Server-Authoritative Batch Loading (Hidden Metadata Manipulation Ignored) ---
+    // --- TEST 1: Server-Authoritative Batch Loading ---
     $batchId1 = bin2hex(random_bytes(16));
     $stmtInsBatch1 = $pdo->prepare("
         INSERT INTO ai_generation_batches 
@@ -66,7 +46,6 @@ try {
     ");
     $stmtInsBatch1->execute([$batchId1, $teacher_id, json_encode([$lessonA])]);
 
-    // Load batch server-side
     $stmtCheck1 = $pdo->prepare("SELECT * FROM ai_generation_batches WHERE generation_batch_id = ?");
     $stmtCheck1->execute([$batchId1]);
     $rec1 = $stmtCheck1->fetch(PDO::FETCH_ASSOC);
@@ -74,7 +53,7 @@ try {
     $loadedLids = json_decode($rec1['selected_lesson_ids'], true);
     $loadedLids = is_array($loadedLids) ? array_map('intval', $loadedLids) : [];
     $pass1 = !empty($rec1) && $rec1['batch_status'] === 'incomplete' && $loadedLids === [(int)$lessonA];
-    logTest("TEST 1: Server-Authoritative Batch Record Verified", $pass1, "Batch status incomplete and selected_lesson_ids loaded from DB");
+    $runner->assertTrue("TEST 1: Server-Authoritative Batch Record Verified", $pass1, "Batch status incomplete and selected_lesson_ids loaded from DB");
 
     // --- TEST 2: Another Teacher's Batch Rejection ---
     $otherTeacherId = $teacher_id + 99999;
@@ -90,14 +69,14 @@ try {
     $rec2 = $stmtCheck2->fetch(PDO::FETCH_ASSOC);
 
     $pass2 = !empty($rec2) && (int)$rec2['teacher_id'] !== (int)$teacher_id;
-    logTest("TEST 2: Cross-Teacher Batch Access Blocked", $pass2, "Batch owned by teacher {$otherTeacherId} correctly fails authorization for teacher {$teacher_id}");
+    $runner->assertTrue("TEST 2: Cross-Teacher Batch Access Blocked", $pass2, "Batch owned by teacher {$otherTeacherId} correctly fails authorization for teacher {$teacher_id}");
 
     // --- TEST 3: Nonexistent Batch Rejection ---
     $fakeBatchId = 'nonexistent_batch_xyz_999';
     $stmtCheck3 = $pdo->prepare("SELECT * FROM ai_generation_batches WHERE generation_batch_id = ?");
     $stmtCheck3->execute([$fakeBatchId]);
     $rec3 = $stmtCheck3->fetch(PDO::FETCH_ASSOC);
-    logTest("TEST 3: Nonexistent Batch Handled Cleanly", empty($rec3), "Query for invalid batch returned empty result");
+    $runner->assertTrue("TEST 3: Nonexistent Batch Handled Cleanly", empty($rec3), "Query for invalid batch returned empty result");
 
     // --- TEST 4: Already-Consumed Batch Rejection ---
     $batchId4 = bin2hex(random_bytes(16));
@@ -112,7 +91,7 @@ try {
     $rec4 = $stmtCheck4->fetch(PDO::FETCH_ASSOC);
 
     $pass4 = !empty($rec4) && !empty($rec4['batch_consumed_at']) && !empty($rec4['saved_exam_id']);
-    logTest("TEST 4: Already-Consumed Batch State Verified", $pass4, "batch_consumed_at and saved_exam_id non-null prevent re-consumption");
+    $runner->assertTrue("TEST 4: Already-Consumed Batch State Verified", $pass4, "batch_consumed_at and saved_exam_id non-null prevent re-consumption");
 
     // --- TEST 5: Failed Transaction Does NOT Consume Token or Batch ---
     $batchId5 = bin2hex(random_bytes(16));
@@ -125,13 +104,10 @@ try {
     $token5 = generateIncompleteAckToken($teacher_id, $batchId5, 1, [(int)$lessonA], 5, 4, ['Chunk failed'], $secretKey);
     $tokenHash5 = hash('sha256', $token5);
 
-    // Simulate transaction failure
     $pdo->beginTransaction();
     $ackVal5 = verifyIncompleteAckToken($token5, $teacher_id, $secretKey, $batchId5);
-    // Force rollback
     $pdo->rollBack();
 
-    // Verify token remains unused after rollback
     $stmtCheckTok5 = $pdo->prepare("SELECT COUNT(*) FROM used_confirmation_tokens WHERE token_hash = ?");
     $stmtCheckTok5->execute([$tokenHash5]);
     $tokCount5 = $stmtCheckTok5->fetchColumn();
@@ -141,7 +117,7 @@ try {
     $batchCons5 = $stmtCheckBatch5->fetchColumn();
 
     $pass5 = (int)$tokCount5 === 0 && empty($batchCons5);
-    logTest("TEST 5: Failed Transaction Token & Batch Preservation", $pass5, "Transaction rollback preserved token unused and batch unconsumed");
+    $runner->assertTrue("TEST 5: Failed Transaction Token & Batch Preservation", $pass5, "Transaction rollback preserved token unused and batch unconsumed");
 
     // --- TEST 6: Successful Save Consumes Token and Batch ATOMICALLY ---
     $batchId6 = bin2hex(random_bytes(16));
@@ -154,7 +130,6 @@ try {
     $token6 = generateIncompleteAckToken($teacher_id, $batchId6, 1, [(int)$lessonA], 5, 4, ['Chunk failed'], $secretKey);
     $tokenHash6 = hash('sha256', $token6);
 
-    // Execute atomic transaction save
     $pdo->beginTransaction();
 
     $stmtExam6 = $pdo->prepare("INSERT INTO exams (teacher_id, title, subject, total_items, generation_batch_id) VALUES (?, 'Atomic Save Exam', 'Soil Mechanics', 5, ?)");
@@ -172,7 +147,6 @@ try {
 
     $pdo->commit();
 
-    // Assert Atomic Consumption State
     $stmtCheckTok6 = $pdo->prepare("SELECT COUNT(*) FROM used_confirmation_tokens WHERE token_hash = ?");
     $stmtCheckTok6->execute([$tokenHash6]);
     $tokCount6 = $stmtCheckTok6->fetchColumn();
@@ -182,7 +156,7 @@ try {
     $batchCons6 = $stmtCheckBatch6->fetch(PDO::FETCH_ASSOC);
 
     $pass6 = (int)$tokCount6 === 1 && !empty($batchCons6['batch_consumed_at']) && (int)$batchCons6['saved_exam_id'] === (int)$examId6;
-    logTest("TEST 6: Successful Save Consumes Token & Batch Atomically", $pass6, "Exam saved, token marked used, batch_consumed_at & saved_exam_id updated atomically");
+    $runner->assertTrue("TEST 6: Successful Save Consumes Token & Batch Atomically", $pass6, "Exam saved, token marked used, batch_consumed_at & saved_exam_id updated atomically");
 
     // --- TEST 7: Duplicate Replayed Save Rejection ---
     $pdo->beginTransaction();
@@ -196,10 +170,9 @@ try {
     $pdo->rollBack();
 
     $pass7 = ($rowsUpdated === 0);
-    logTest("TEST 7: Duplicate Save Atomic Block", $pass7, "Replayed save attempt updated 0 rows because batch was already consumed");
+    $runner->assertTrue("TEST 7: Duplicate Save Atomic Block", $pass7, "Replayed save attempt updated 0 rows because batch was already consumed");
 
     // --- TEST 8: Audit Batch Insertion Failure Blocks Generation ---
-    // Primary key / unique key collision on generation_batch_id
     $dupBatchId = bin2hex(random_bytes(16));
     $pdo->prepare("
         INSERT INTO ai_generation_batches (generation_batch_id, teacher_id, selected_lesson_ids, selected_lesson_titles, selected_periods, selected_subject, total_selected_words, estimated_tokens, ai_model, generation_duration, requested_question_count, generated_question_count, failed_question_count, batch_status)
@@ -218,14 +191,12 @@ try {
     }
 
     $pass8 = ($batchInsertSuccess === false);
-    logTest("TEST 8: Audit Batch Insertion Failure Detection", $pass8, "Duplicate batch ID insertion correctly caught and returned false");
+    $runner->assertTrue("TEST 8: Audit Batch Insertion Failure Detection", $pass8, "Duplicate batch ID insertion correctly caught and returned false");
 
 } catch (Throwable $e) {
-    $failed++;
-    fwrite(STDERR, "SETUP OR EXECUTION FAILED: " . $e->getMessage() . "\n");
-    echo "  [CRITICAL FAILURE EXCEPTION] " . $e->getMessage() . "\n" . $e->getTraceAsString() . "\n";
+    $runner->recordException($e);
 } finally {
-    if (isset($pdo) && $pdo instanceof PDO) {
+    if ($pdo !== null) {
         try {
             $toDelete = array_filter([$batchId1, $batchId2, $batchId4, $batchId5, $batchId6]);
             if (!empty($toDelete)) {
@@ -235,19 +206,10 @@ try {
             if ($lessonA) {
                 $pdo->prepare("DELETE FROM lesson_materials WHERE id = ?")->execute([$lessonA]);
             }
-        } catch (Throwable $ignored) {}
+        } catch (Throwable $cleanupError) {
+            $runner->recordCleanupFailure("security_test_records", $cleanupError);
+        }
     }
 }
 
-echo "\n-----------------------------------------------------------\n";
-echo "VERIFICATION SUMMARY: {$passed} PASSED, {$failed} FAILED, {$skipped} SKIPPED\n";
-echo "-----------------------------------------------------------\n";
-
-// STRICT EXIT CODES RULE
-if ($passed > 0 && $failed === 0) {
-    echo "RESULT: SUCCESS — All assertions passed cleanly. Exiting with Exit Code 0.\n";
-    exit(0);
-} else {
-    echo "RESULT: FAILURE DETECTED — Exiting with Exit Code 1.\n";
-    exit(1);
-}
+$runner->finish();

@@ -1,39 +1,15 @@
 <?php
 /**
  * Verification Script for QuestBank Epic 2.2 CLI Test Exit-Code Repair
- *
- * Verifies:
- * 1. DB unavailable (invalid host/port) -> exit code 1
- * 2. Invalid credentials (bad password/user) -> exit code 1
- * 3. Missing database (bad dbname) -> exit code 1
- * 4. Assertion failure -> exit code 1
- * 5. All assertions pass -> exit code 0
- * 6. Web DB failure returns HTTP 500 safely with no leaked credentials
  */
 
-require_once __DIR__ . '/../tests/helpers/test_preflight.php';
+require_once __DIR__ . '/../tests/helpers/test_runner.php';
 requireDatabasePreflight();
 
-$passed = 0;
-$failed = 0;
-$skipped = 0;
+$runner = new TestRunner('QuestBank Epic 2.2 CLI Test Exit-Code Repair Verification');
 
 if (getenv('FORCE_ASSERT_FAIL') === '1') {
-    $failed++;
-    echo "  [FAIL] Forced Assertion Failure Test\n";
-}
-
-function logResult($testName, $isSuccess, $details = '') {
-    global $passed, $failed;
-    if ($isSuccess) {
-        $passed++;
-        echo "  [PASS] {$testName}\n";
-        if (!empty($details)) echo "         -> {$details}\n";
-    } else {
-        $failed++;
-        echo "  [FAIL] {$testName}\n";
-        if (!empty($details)) echo "         -> {$details}\n";
-    }
+    $runner->assertTrue("Forced Assertion Failure Test", false, "FORCE_ASSERT_FAIL=1");
 }
 
 function runPhpSubprocess($code, $envVars = []) {
@@ -61,14 +37,13 @@ function runPhpSubprocess($code, $envVars = []) {
     return ['code' => $exitCode, 'stdout' => $stdout, 'stderr' => $stderr];
 }
 
-echo "===========================================================\n";
-echo " QUESTBANK EPIC 2.2 CLI TEST EXIT-CODE REPAIR VERIFICATION  \n";
-echo "===========================================================\n";
+try {
+    $runner->setSetupCompleted(true, "CLI subprocess testing environment initialized");
 
-// -------------------------------------------------------------------------
-// TEST 1: DB Unavailable (Invalid Host/Port) -> exit 1
-// -------------------------------------------------------------------------
-$code1 = <<<'PHP'
+    // -------------------------------------------------------------------------
+    // TEST 1: DB Unavailable (Invalid Host/Port) -> exit 1
+    // -------------------------------------------------------------------------
+    $code1 = <<<'PHP'
 require_once __DIR__ . '/app/database.php';
 try {
     $pdo = getDBConnection();
@@ -78,14 +53,14 @@ try {
 }
 PHP;
 
-$res1 = runPhpSubprocess($code1, ['DB_HOST' => '127.0.0.1:99999']);
-$t1_pass = ($res1['code'] === 1) && (strpos($res1['stderr'], 'SETUP FAILED: Database unavailable.') !== false || strpos($res1['stderr'], 'Unable to connect to the database') !== false);
-logResult("1. DB Unavailable (Invalid Host/Port) -> Exit Code 1", $t1_pass, "Exit Code: {$res1['code']}, Stderr: " . trim($res1['stderr']));
+    $res1 = runPhpSubprocess($code1, ['DB_HOST' => '127.0.0.1:99999']);
+    $t1_pass = ($res1['code'] === 1) && (strpos($res1['stderr'], 'SETUP FAILED: Database unavailable.') !== false || strpos($res1['stderr'], 'Unable to connect to the database') !== false);
+    $runner->assertTrue("1. DB Unavailable (Invalid Host/Port) -> Exit Code 1", $t1_pass, "Exit Code: {$res1['code']}, Stderr: " . trim($res1['stderr']));
 
-// -------------------------------------------------------------------------
-// TEST 2: Invalid Credentials -> exit 1
-// -------------------------------------------------------------------------
-$code2 = <<<'PHP'
+    // -------------------------------------------------------------------------
+    // TEST 2: Invalid Credentials -> exit 1
+    // -------------------------------------------------------------------------
+    $code2 = <<<'PHP'
 require_once __DIR__ . '/app/database.php';
 try {
     $pdo = getDBConnection();
@@ -95,14 +70,14 @@ try {
 }
 PHP;
 
-$res2 = runPhpSubprocess($code2, ['DB_PASS' => 'completely_invalid_password_999']);
-$t2_pass = ($res2['code'] === 1) && (strpos($res2['stderr'], 'SETUP FAILED: Database unavailable.') !== false || strpos($res2['stderr'], 'Unable to connect to the database') !== false);
-logResult("2. Invalid Credentials (Bad Password) -> Exit Code 1", $t2_pass, "Exit Code: {$res2['code']}, Stderr: " . trim($res2['stderr']));
+    $res2 = runPhpSubprocess($code2, ['DB_PASS' => 'completely_invalid_password_999']);
+    $t2_pass = ($res2['code'] === 1) && (strpos($res2['stderr'], 'SETUP FAILED: Database unavailable.') !== false || strpos($res2['stderr'], 'Unable to connect to the database') !== false);
+    $runner->assertTrue("2. Invalid Credentials (Bad Password) -> Exit Code 1", $t2_pass, "Exit Code: {$res2['code']}, Stderr: " . trim($res2['stderr']));
 
-// -------------------------------------------------------------------------
-// TEST 3: Missing Database -> exit 1
-// -------------------------------------------------------------------------
-$code3 = <<<'PHP'
+    // -------------------------------------------------------------------------
+    // TEST 3: Missing Database -> exit 1
+    // -------------------------------------------------------------------------
+    $code3 = <<<'PHP'
 require_once __DIR__ . '/app/database.php';
 try {
     $pdo = getDBConnection();
@@ -112,14 +87,14 @@ try {
 }
 PHP;
 
-$res3 = runPhpSubprocess($code3, ['DB_NAME' => 'nonexistent_bankquest_db_999']);
-$t3_pass = ($res3['code'] === 1) && (strpos($res3['stderr'], 'SETUP FAILED: Database unavailable.') !== false || strpos($res3['stderr'], 'Unable to connect to the database') !== false);
-logResult("3. Missing Database (Bad DB Name) -> Exit Code 1", $t3_pass, "Exit Code: {$res3['code']}, Stderr: " . trim($res3['stderr']));
+    $res3 = runPhpSubprocess($code3, ['DB_NAME' => 'nonexistent_bankquest_db_999']);
+    $t3_pass = ($res3['code'] === 1) && (strpos($res3['stderr'], 'SETUP FAILED: Database unavailable.') !== false || strpos($res3['stderr'], 'Unable to connect to the database') !== false);
+    $runner->assertTrue("3. Missing Database (Bad DB Name) -> Exit Code 1", $t3_pass, "Exit Code: {$res3['code']}, Stderr: " . trim($res3['stderr']));
 
-// -------------------------------------------------------------------------
-// TEST 4: Assertion Failure -> exit 1
-// -------------------------------------------------------------------------
-$code4 = <<<'PHP'
+    // -------------------------------------------------------------------------
+    // TEST 4: Assertion Failure -> exit 1
+    // -------------------------------------------------------------------------
+    $code4 = <<<'PHP'
 $passedCount = 1;
 $failedCount = 1;
 if ($passedCount > 0 && $failedCount === 0) {
@@ -130,21 +105,21 @@ if ($passedCount > 0 && $failedCount === 0) {
 }
 PHP;
 
-$res4 = runPhpSubprocess($code4);
-$t4_pass = ($res4['code'] === 1);
-logResult("4. Assertion Failure -> Exit Code 1", $t4_pass, "Exit Code: {$res4['code']}");
+    $res4 = runPhpSubprocess($code4);
+    $t4_pass = ($res4['code'] === 1);
+    $runner->assertTrue("4. Assertion Failure -> Exit Code 1", $t4_pass, "Exit Code: {$res4['code']}");
 
-// -------------------------------------------------------------------------
-// TEST 5: All Assertions Pass -> exit 0
-// -------------------------------------------------------------------------
-$res5 = runPhpSubprocess("require __DIR__ . '/database/verify_epic22_deterministic_scenarios.php';");
-$t5_pass = ($res5['code'] === 0) && (strpos($res5['stdout'], 'RESULT: SUCCESS') !== false);
-logResult("5. All Assertions Pass -> Exit Code 0", $t5_pass, "Exit Code: {$res5['code']}");
+    // -------------------------------------------------------------------------
+    // TEST 5: All Assertions Pass -> exit 0
+    // -------------------------------------------------------------------------
+    $res5 = runPhpSubprocess("require __DIR__ . '/database/verify_epic22_deterministic_scenarios.php';");
+    $t5_pass = ($res5['code'] === 0) && (strpos($res5['stdout'], 'RESULT: SUCCESS') !== false);
+    $runner->assertTrue("5. All Assertions Pass -> Exit Code 0", $t5_pass, "Exit Code: {$res5['code']}");
 
-// -------------------------------------------------------------------------
-// TEST 6: Web DB Failure -> HTTP 500 Safe Response (No Credentials Leaked)
-// -------------------------------------------------------------------------
-$code6 = <<<'PHP'
+    // -------------------------------------------------------------------------
+    // TEST 6: Web DB Failure -> HTTP 500 Safe Response (No Credentials Leaked)
+    // -------------------------------------------------------------------------
+    $code6 = <<<'PHP'
 $_SERVER['REQUEST_METHOD'] = 'GET';
 require_once __DIR__ . '/app/config/config.php';
 
@@ -171,20 +146,14 @@ try {
 }
 PHP;
 
-$res6 = runPhpSubprocess($code6, ['DB_PASS' => 'secret_pass_321']);
-$t6_no_creds = (strpos($res6['stdout'], 'secret_pass_321') === false) && (strpos($res6['stdout'], 'secret_user') === false);
-$t6_has_safe_msg = (strpos($res6['stdout'], 'Service Temporarily Unavailable') !== false);
-$t6_pass = $t6_no_creds && $t6_has_safe_msg;
-logResult("6. Web DB Failure -> Safe HTTP 500 HTML (No Leaked Credentials)", $t6_pass, "Safe MSG: " . ($t6_has_safe_msg ? 'YES' : 'NO') . ", No Creds: " . ($t6_no_creds ? 'YES' : 'NO'));
+    $res6 = runPhpSubprocess($code6, ['DB_PASS' => 'secret_pass_321']);
+    $t6_no_creds = (strpos($res6['stdout'], 'secret_pass_321') === false) && (strpos($res6['stdout'], 'secret_user') === false);
+    $t6_has_safe_msg = (strpos($res6['stdout'], 'Service Temporarily Unavailable') !== false);
+    $t6_pass = $t6_no_creds && $t6_has_safe_msg;
+    $runner->assertTrue("6. Web DB Failure -> Safe HTTP 500 HTML (No Leaked Credentials)", $t6_pass, "Safe MSG: " . ($t6_has_safe_msg ? 'YES' : 'NO') . ", No Creds: " . ($t6_no_creds ? 'YES' : 'NO'));
 
-echo "\n-----------------------------------------------------------\n";
-echo "VERIFICATION SUMMARY: {$passed} PASSED, {$failed} FAILED, {$skipped} SKIPPED\n";
-echo "-----------------------------------------------------------\n";
-
-if ($passed > 0 && $failed === 0) {
-    echo "RESULT: SUCCESS — All CLI exit-code repair verification assertions passed cleanly.\n";
-    exit(0);
-} else {
-    echo "RESULT: FAILURE — {$failed} assertion(s) failed.\n";
-    exit(1);
+} catch (Throwable $e) {
+    $runner->recordException($e);
 }
+
+$runner->finish();

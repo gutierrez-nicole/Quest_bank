@@ -1,6 +1,6 @@
 <?php
 
-require_once __DIR__ . '/../tests/helpers/test_preflight.php';
+require_once __DIR__ . '/../tests/helpers/test_runner.php';
 requireAiPreflight();
 
 putenv('APP_ENV=testing');
@@ -12,59 +12,47 @@ $_SERVER['TEST_BOOTSTRAP_ACTIVE'] = '1';
 
 require_once __DIR__ . '/../app/bootstrap.php';
 
-$pdo = getDBConnection();
-$passed = 0;
-$failed = 0;
-$skipped = 0;
+$runner = new TestRunner('QuestBank Epic 2.2 Round 2 Refinements Verification');
 
-echo "===========================================================\n";
-echo "   QUESTBANK EPIC 2.2 ROUND 2 REFINEMENTS VERIFICATION    \n";
-echo "===========================================================\n";
-
-function logTest($name, $status, $detail = '') {
-    global $passed, $failed;
-    if ($status) {
-        $passed++;
-        echo "  [PASS] $name\n";
-        if ($detail) echo "         -> $detail\n";
-    } else {
-        $failed++;
-        echo "  [FAIL] $name\n";
-        if ($detail) echo "         -> $detail\n";
-    }
-}
-
-// Fetch test teacher
-$stmtT = $pdo->prepare("SELECT id FROM users WHERE role = 'teacher' LIMIT 1");
-$stmtT->execute();
-$teacher_id = $stmtT->fetchColumn();
-$secretKey = (defined('DB_PASS') ? DB_PASS : '') . '_questbank_secret_salt_2026';
-
-$created_lesson_ids = [];
-$created_exam_ids = [];
+$pdo = null;
+$batchId7 = null;
 
 try {
+    $pdo = getDBConnection();
+    $runner->setSetupCompleted($pdo !== null, "Database connection established");
+
+    // Fetch test teacher
+    $stmtT = $pdo->prepare("SELECT id FROM users WHERE role = 'teacher' LIMIT 1");
+    $stmtT->execute();
+    $teacher_id = $stmtT->fetchColumn();
+
+    if (!$teacher_id) {
+        throw new RuntimeException("No teacher found in database.");
+    }
+
+    $secretKey = (defined('DB_PASS') ? DB_PASS : '') . '_questbank_secret_salt_2026';
+
     // --- TEST 1: HMAC Signed Partial Token Verification ---
     $validToken = generatePartialToken($teacher_id, [10, 11], [10, 11], [99], 'Soil Mechanics', 'BSCE', '4th Year', '1st Semester', '2025-2026', ['prelim'], [], $secretKey);
     $ver1 = verifyPartialToken($validToken, $teacher_id, $secretKey);
-    logTest("TEST 1: Valid HMAC Partial Confirmation Token Verification", !empty($ver1) && $ver1['valid_ids'] === [10, 11], "Token verified for teacher {$teacher_id}");
+    $runner->assertTrue("TEST 1: Valid HMAC Partial Confirmation Token Verification", !empty($ver1) && $ver1['valid_ids'] === [10, 11], "Token verified for teacher {$teacher_id}");
 
     // --- TEST 2: Forged HMAC Token Rejection ---
     $forgedToken = base64_encode(json_encode(['payload' => ['teacher_id' => $teacher_id, 'valid_ids' => [10, 11, 999], 'timestamp' => time(), 'nonce' => 'fake'], 'sig' => 'invalid_forged_sig']));
     $ver2 = verifyPartialToken($forgedToken, $teacher_id, $secretKey);
-    logTest("TEST 2: Forged HMAC Signature Token Rejection", $ver2 === false, "Forged token rejected by verifyPartialToken()");
+    $runner->assertTrue("TEST 2: Forged HMAC Signature Token Rejection", $ver2 === false, "Forged token rejected by verifyPartialToken()");
 
     // --- TEST 3: Expired HMAC Token Rejection ---
     $expiredPayload = ['teacher_id' => $teacher_id, 'valid_ids' => [10], 'invalid_ids' => [], 'timestamp' => time() - 3600, 'nonce' => 'exp'];
     $expiredSig = hash_hmac('sha256', json_encode($expiredPayload), $secretKey);
     $expiredToken = base64_encode(json_encode(['payload' => $expiredPayload, 'sig' => $expiredSig]));
     $ver3 = verifyPartialToken($expiredToken, $teacher_id, $secretKey);
-    logTest("TEST 3: Expired HMAC Token Rejection", $ver3 === false, "Expired token (>15m) rejected");
+    $runner->assertTrue("TEST 3: Expired HMAC Token Rejection", $ver3 === false, "Expired token (>15m) rejected");
 
     // --- TEST 4: Tampered Teacher ID Token Rejection ---
     $wrongTeacherToken = generatePartialToken($teacher_id, [10], [10], [], 'Soil Mechanics', 'BSCE', '4th Year', '1st Semester', '2025-2026', ['prelim'], [], $secretKey);
     $ver4 = verifyPartialToken($wrongTeacherToken, 99999, $secretKey);
-    logTest("TEST 4: Tampered Teacher ID Token Rejection", $ver4 === false, "Token for teacher {$teacher_id} rejected for teacher 99999");
+    $runner->assertTrue("TEST 4: Tampered Teacher ID Token Rejection", $ver4 === false, "Token for teacher {$teacher_id} rejected for teacher 99999");
 
     // --- TEST 5: Exact Question Count Ceiling in Chunking Engine ---
     $largeText = "";
@@ -73,20 +61,20 @@ try {
     }
     $res5 = GroqService::generateQuestions($largeText, 7, 'Soil Mechanics', 'Ceiling Test Exam');
     $count5 = count($res5['questions'] ?? []);
-    logTest("TEST 5: Exact Question Count Ceiling Enforcement", isset($res5['success']) && $count5 === 7, "Requested 7 items, generated exactly {$count5} items");
+    $runner->assertTrue("TEST 5: Exact Question Count Ceiling Enforcement", isset($res5['success']) && $count5 === 7, "Requested 7 items, generated exactly {$count5} items");
 
     // --- TEST 6: Unverified Source Attribution Flagging ---
     $mockUnverifiedQ = [
         'question' => 'What is effective stress?',
         'type' => 'multiple_choice',
         'correct_answer' => 'A',
-        'source_lesson_ids' => [99999], // Unknown lesson ID
+        'source_lesson_ids' => [99999],
         'source_topic' => 'Soil Mechanics',
         'source_academic_period' => 'prelim',
         'source_confidence' => 'review_required'
     ];
     $isUnverified = ($mockUnverifiedQ['source_confidence'] === 'review_required');
-    logTest("TEST 6: Unverified Source Attribution Flagging", $isUnverified, "Unknown source ID 99999 flagged with review_required");
+    $runner->assertTrue("TEST 6: Unverified Source Attribution Flagging", $isUnverified, "Unknown source ID 99999 flagged with review_required");
 
     // --- TEST 7: Complete AI Generation Audit Persistence ---
     $batchId7 = bin2hex(random_bytes(16));
@@ -108,17 +96,18 @@ try {
                      $rec7['program'] === 'BSCE' && 
                      intval($rec7['failed_question_count']) === 2;
 
-    logTest("TEST 7: Complete Audit Persistence with Runtime Metadata", $auditComplete, "Persisted semester, SY, year level, program, and failed count = 2");
-
-    // Clean test batch
-    $pdo->prepare("DELETE FROM ai_generation_batches WHERE generation_batch_id = ?")->execute([$batchId7]);
+    $runner->assertTrue("TEST 7: Complete Audit Persistence with Runtime Metadata", $auditComplete, "Persisted semester, SY, year level, program, and failed count = 2");
 
 } catch (Throwable $e) {
-    echo "TEST EXCEPTION: " . $e->getMessage() . "\n" . $e->getTraceAsString() . "\n";
+    $runner->recordException($e);
+} finally {
+    if ($pdo !== null && !empty($batchId7)) {
+        try {
+            $pdo->prepare("DELETE FROM ai_generation_batches WHERE generation_batch_id = ?")->execute([$batchId7]);
+        } catch (Throwable $cleanupError) {
+            $runner->recordCleanupFailure("ai_generation_batches {$batchId7}", $cleanupError);
+        }
+    }
 }
 
-echo "\n-----------------------------------------------------------\n";
-echo "VERIFICATION SUMMARY: {$passed} PASSED, {$failed} FAILED, {$skipped} SKIPPED\n";
-echo "-----------------------------------------------------------\n";
-
-exit($failed > 0 ? 1 : 0);
+$runner->finish();

@@ -1,6 +1,6 @@
 <?php
 
-require_once __DIR__ . '/../tests/helpers/test_preflight.php';
+require_once __DIR__ . '/../tests/helpers/test_runner.php';
 requireDatabasePreflight();
 
 putenv('APP_ENV=testing');
@@ -12,35 +12,26 @@ $_SERVER['TEST_BOOTSTRAP_ACTIVE'] = '1';
 
 require_once __DIR__ . '/../app/bootstrap.php';
 
-$pdo = getDBConnection();
-$passed = 0;
-$failed = 0;
-$skipped = 0;
+$runner = new TestRunner('QuestBank Epic 2.2 Final Repairs 2-6 Verification');
 
-echo "===========================================================\n";
-echo "    QUESTBANK EPIC 2.2 FINAL REPAIRS 2-6 VERIFICATION       \n";
-echo "===========================================================\n";
-
-function logTest($name, $status, $detail = '') {
-    global $passed, $failed;
-    if ($status) {
-        $passed++;
-        echo "  [PASS] $name\n";
-        if ($detail) echo "         -> $detail\n";
-    } else {
-        $failed++;
-        echo "  [FAIL] $name\n";
-        if ($detail) echo "         -> $detail\n";
-    }
-}
-
-// Fetch test teacher
-$stmtT = $pdo->prepare("SELECT id FROM users WHERE role = 'teacher' LIMIT 1");
-$stmtT->execute();
-$teacher_id = $stmtT->fetchColumn();
-$secretKey = (defined('DB_PASS') ? DB_PASS : '') . '_questbank_secret_salt_2026';
+$pdo = null;
+$batchId5 = null;
 
 try {
+    $pdo = getDBConnection();
+    $runner->setSetupCompleted($pdo !== null, "Database connection established");
+
+    // Fetch test teacher
+    $stmtT = $pdo->prepare("SELECT id FROM users WHERE role = 'teacher' LIMIT 1");
+    $stmtT->execute();
+    $teacher_id = $stmtT->fetchColumn();
+
+    if (!$teacher_id) {
+        throw new RuntimeException("No teacher found in database.");
+    }
+
+    $secretKey = (defined('DB_PASS') ? DB_PASS : '') . '_questbank_secret_salt_2026';
+
     // --- TEST 1: Full Context HMAC Partial Confirmation Binding & Replay Prevention ---
     $origIds = [101, 102, 103];
     $validIds = [101, 102];
@@ -62,11 +53,11 @@ try {
     // 1a. Valid Verification
     $ctxValid = ['subject' => $subject, 'program' => $program, 'year_level' => $yearLevel, 'semester' => $semester, 'school_year' => $schoolYear];
     $ver1a = verifyPartialToken($token, $teacher_id, $secretKey, $ctxValid);
-    logTest("TEST 1a: Full Context HMAC Partial Token Valid Verification", !empty($ver1a) && $ver1a['valid_ids'] === [101, 102], "Subject, program, year level, semester, SY verified");
+    $runner->assertTrue("TEST 1a: Full Context HMAC Partial Token Valid Verification", !empty($ver1a) && $ver1a['valid_ids'] === [101, 102], "Subject, program, year level, semester, SY verified");
 
-    // 1b. Replay Prevention Check (Second verification with same token must fail because hash is recorded in used_confirmation_tokens)
+    // 1b. Replay Prevention Check
     $ver1b = verifyPartialToken($token, $teacher_id, $secretKey, $ctxValid);
-    logTest("TEST 1b: Replay Prevention (Replayed Token Rejection)", $ver1b === false, "Replayed token hash blocked by used_confirmation_tokens");
+    $runner->assertTrue("TEST 1b: Replay Prevention (Replayed Token Rejection)", $ver1b === false, "Replayed token hash blocked by used_confirmation_tokens");
 
     // 1c. Tampered Context Check
     $token2 = generatePartialToken(
@@ -76,27 +67,27 @@ try {
     );
     $ctxTampered = ['subject' => 'Fluid Mechanics', 'program' => $program, 'year_level' => $yearLevel, 'semester' => $semester, 'school_year' => $schoolYear];
     $ver1c = verifyPartialToken($token2, $teacher_id, $secretKey, $ctxTampered);
-    logTest("TEST 1c: Tampered Context (Subject Mismatch) Rejection", $ver1c === false, "Tampered subject 'Fluid Mechanics' rejected");
+    $runner->assertTrue("TEST 1c: Tampered Context (Subject Mismatch) Rejection", $ver1c === false, "Tampered subject 'Fluid Mechanics' rejected");
 
     // --- TEST 2: Server-Side Max Lesson Selection Limit ---
     $maxAllowed = defined('AI_MAX_SELECTED_LESSONS') ? AI_MAX_SELECTED_LESSONS : 20;
     $pool20 = range(1, $maxAllowed);
     $pool21 = range(1, $maxAllowed + 1);
 
-    logTest("TEST 2a: Exact Max Allowed Selection Allowed (20 Lessons)", count($pool20) <= $maxAllowed, "Pool count 20 <= max 20");
-    logTest("TEST 2b: Excessive Selection Rejection (21 Lessons)", count($pool21) > $maxAllowed, "Pool count 21 > max 20 triggers server error");
+    $runner->assertTrue("TEST 2a: Exact Max Allowed Selection Allowed (20 Lessons)", count($pool20) <= $maxAllowed, "Pool count 20 <= max 20");
+    $runner->assertTrue("TEST 2b: Excessive Selection Rejection (21 Lessons)", count($pool21) > $maxAllowed, "Pool count 21 > max 20 triggers server error");
 
     // --- TEST 3: Unverified Source Question Handling & Save Policy ---
     $unverifiedQ = [
         'question' => 'What is soil permeability?',
-        'source_lesson_ids' => [], // Empty source ID
+        'source_lesson_ids' => [],
         'source_confidence' => 'review_required'
     ];
     $saveLessonIds = [101, 102];
     $validSources = array_intersect($unverifiedQ['source_lesson_ids'], $saveLessonIds);
     $isBlockedFromSave = empty($validSources);
 
-    logTest("TEST 3: Unverified Source Question Blocks Exam Save", $isBlockedFromSave, "Unverified question without valid source_lesson_ids blocks final save");
+    $runner->assertTrue("TEST 3: Unverified Source Question Blocks Exam Save", $isBlockedFromSave, "Unverified question without valid source_lesson_ids blocks final save");
 
     // --- TEST 4: Oversized Lesson Hierarchical Subchunking ---
     $oversizedLesson = "SOURCE LESSON 1\nLesson ID: 501\nPeriod: Prelim\nTitle: Massive Geotechnical Chapter\n";
@@ -106,7 +97,7 @@ try {
 
     $res4 = GroqService::generateQuestions($oversizedLesson, 5, 'Soil Mechanics', 'Subchunk Exam');
     $pass4 = isset($res4['success']) && $res4['success'] === true && count($res4['questions']) === 5;
-    logTest("TEST 4: Hierarchical Subchunking for Single Oversized Lesson", $pass4, "Generated exactly 5 questions from multi-section oversized lesson");
+    $runner->assertTrue("TEST 4: Hierarchical Subchunking for Single Oversized Lesson", $pass4, "Generated exactly 5 questions from multi-section oversized lesson");
 
     // --- TEST 5: Failed Chunk Metadata & Batch Status Persistence ---
     $batchId5 = bin2hex(random_bytes(16));
@@ -126,17 +117,18 @@ try {
              intval($rec5['failed_chunk_count']) === 1 && 
              !empty($rec5['teacher_acknowledged_at']);
 
-    logTest("TEST 5: Failed Chunk Audit Persistence & Acknowledgment", $pass5, "batch_status: incomplete, failed_chunk_count: 1, acknowledged by teacher {$teacher_id}");
-
-    // Clean test batch
-    $pdo->prepare("DELETE FROM ai_generation_batches WHERE generation_batch_id = ?")->execute([$batchId5]);
+    $runner->assertTrue("TEST 5: Failed Chunk Audit Persistence & Acknowledgment", $pass5, "batch_status: incomplete, failed_chunk_count: 1, acknowledged by teacher {$teacher_id}");
 
 } catch (Throwable $e) {
-    echo "TEST EXCEPTION: " . $e->getMessage() . "\n" . $e->getTraceAsString() . "\n";
+    $runner->recordException($e);
+} finally {
+    if ($pdo !== null && !empty($batchId5)) {
+        try {
+            $pdo->prepare("DELETE FROM ai_generation_batches WHERE generation_batch_id = ?")->execute([$batchId5]);
+        } catch (Throwable $cleanupError) {
+            $runner->recordCleanupFailure("ai_generation_batches {$batchId5}", $cleanupError);
+        }
+    }
 }
 
-echo "\n-----------------------------------------------------------\n";
-echo "VERIFICATION SUMMARY: {$passed} PASSED, {$failed} FAILED, {$skipped} SKIPPED\n";
-echo "-----------------------------------------------------------\n";
-
-exit($failed > 0 ? 1 : 0);
+$runner->finish();

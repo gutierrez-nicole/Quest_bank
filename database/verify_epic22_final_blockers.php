@@ -1,9 +1,8 @@
 <?php
 /**
  * Unified Verification Runner for QuestBank Epic 2.2 Final Repairs 9, 10, 11, 12
- * Strict Exit Code Rules: Exits 0 ONLY IF all setup, connection, and assertions pass.
  */
-require_once __DIR__ . '/../tests/helpers/test_preflight.php';
+require_once __DIR__ . '/../tests/helpers/test_runner.php';
 requireDatabasePreflight();
 
 putenv('APP_ENV=testing');
@@ -16,32 +15,14 @@ $_SERVER['TEST_BOOTSTRAP_ACTIVE'] = '1';
 require_once __DIR__ . '/../app/bootstrap.php';
 require_once __DIR__ . '/../includes/security.php';
 
-$passed = 0;
-$failed = 0;
-$skipped = 0;
-
-function logTest($name, $status, $detail = '') {
-    global $passed, $failed;
-    if ($status) {
-        $passed++;
-        echo "  [PASS] $name\n";
-        if ($detail) echo "         -> $detail\n";
-    } else {
-        $failed++;
-        echo "  [FAIL] $name\n";
-        if ($detail) echo "         -> $detail\n";
-    }
-}
-
-echo "===========================================================\n";
-echo "    QUESTBANK EPIC 2.2 FINAL REPAIRS 9-12 VERIFICATION     \n";
-echo "===========================================================\n";
+$runner = new TestRunner('QuestBank Epic 2.2 Final Repairs 9-12 Verification');
 
 $batchId10 = null;
+$pdo = null;
 
 try {
     $pdo = getDBConnection();
-    logTest("Setup: Database Connection Established", true, "Database handle active");
+    $runner->setSetupCompleted($pdo !== null, "Database connection established");
 
     // Teacher check
     $stmtT = $pdo->prepare("SELECT id FROM users WHERE role = 'teacher' LIMIT 1");
@@ -53,17 +34,15 @@ try {
     $secretKey = (defined('DB_PASS') ? DB_PASS : '') . '_questbank_secret_salt_2026';
 
     // --- TEST 1: FINAL REPAIR 9 — Harden E2E Seeder Security ---
-    // 1a. Direct web execution without APP_ENV=testing or headers -> HTTP 403 rejection
     $seederProdOut = shell_exec("APP_ENV=production php " . escapeshellarg(__DIR__ . '/seed_e2e_fixtures.php'));
     $seederProdRes = json_decode($seederProdOut, true);
     $pass1a = isset($seederProdRes['error']) && strpos($seederProdRes['error'], 'Forbidden') !== false;
-    logTest("TEST 1a (Repair 9): Seeder Web Production Rejection (403)", $pass1a, "Production environment access cleanly rejected with 403");
+    $runner->assertTrue("TEST 1a (Repair 9): Seeder Web Production Rejection (403)", $pass1a, "Production environment access cleanly rejected with 403");
 
-    // 1b. Testing environment CLI execution -> Success
     $seederCliOut = shell_exec("APP_ENV=testing php " . escapeshellarg(__DIR__ . '/seed_e2e_fixtures.php'));
     $seederCliRes = json_decode($seederCliOut, true);
     $pass1b = isset($seederCliRes['success']) && $seederCliRes['success'] === true && !empty($seederCliRes['teacher_a_id']);
-    logTest("TEST 1b (Repair 9): Seeder Testing CLI Execution Success", $pass1b, "Seeder initialized test users teacher_a_id={$seederCliRes['teacher_a_id']} under testing mode");
+    $runner->assertTrue("TEST 1b (Repair 9): Seeder Testing CLI Execution Success", $pass1b, "Seeder initialized test users teacher_a_id={$seederCliRes['teacher_a_id']} under testing mode");
 
     // --- TEST 2: FINAL REPAIR 10 — Signed Acknowledgement for Incomplete Generation ---
     $batchId10 = bin2hex(random_bytes(16));
@@ -72,16 +51,16 @@ try {
     // 2a. Valid Token Verification
     $ver10a = verifyIncompleteAckToken($validAckToken, $teacher_id, $secretKey, $batchId10);
     $pass2a = !empty($ver10a) && $ver10a['teacher_id'] === (int)$teacher_id && $ver10a['generation_batch_id'] === $batchId10;
-    logTest("TEST 2a (Repair 10): Valid Incomplete Ack Token Verification", $pass2a, "Token verified cleanly with correct payload");
+    $runner->assertTrue("TEST 2a (Repair 10): Valid Incomplete Ack Token Verification", $pass2a, "Token verified cleanly with correct payload");
 
     // 2b. Replayed Token Rejection
     $ver10b_replay = verifyIncompleteAckToken($validAckToken, $teacher_id, $secretKey, $batchId10);
-    logTest("TEST 2b (Repair 10): Replayed Incomplete Ack Token Rejection", $ver10b_replay === false, "Replayed token rejected by used_confirmation_tokens storage");
+    $runner->assertTrue("TEST 2b (Repair 10): Replayed Incomplete Ack Token Rejection", $ver10b_replay === false, "Replayed token rejected by used_confirmation_tokens storage");
 
     // 2c. Tampered Batch ID Token Rejection
     $tamperedToken = generateIncompleteAckToken($teacher_id, 'fake_batch_id_999', 2, [101, 102], 10, 8, [], $secretKey);
     $ver10c = verifyIncompleteAckToken($tamperedToken, $teacher_id, $secretKey, $batchId10);
-    logTest("TEST 2c (Repair 10): Tampered Batch ID Token Rejection", $ver10c === false, "Batch ID mismatch rejected");
+    $runner->assertTrue("TEST 2c (Repair 10): Tampered Batch ID Token Rejection", $ver10c === false, "Batch ID mismatch rejected");
 
     // 2d. Audit Record Persistence with acknowledgement_token_hash
     $tokenHash10 = hash('sha256', $validAckToken);
@@ -100,7 +79,7 @@ try {
               $rec10['batch_status'] === 'incomplete' && 
               (int)$rec10['teacher_acknowledged_by'] === (int)$teacher_id && 
               $rec10['acknowledgement_token_hash'] === $tokenHash10;
-    logTest("TEST 2d (Repair 10): Audit Persistence with Token Hash", $pass2d, "persisted acknowledgement_token_hash and teacher metadata");
+    $runner->assertTrue("TEST 2d (Repair 10): Audit Persistence with Token Hash", $pass2d, "persisted acknowledgement_token_hash and teacher metadata");
 
     // --- TEST 3: FINAL REPAIR 11 — Exact Question Shortfall Handling ---
     GroqService::enableTestingModeFromBootstrap();
@@ -110,38 +89,25 @@ try {
              isset($res11['metadata']['generated_question_count']) &&
              isset($res11['metadata']['shortfall_count']);
 
-    logTest("TEST 3 (Repair 11): Shortfall Metadata Tracking & Contract", $pass3, "Metadata includes requested_question_count, generated_question_count, and shortfall_count");
+    $runner->assertTrue("TEST 3 (Repair 11): Shortfall Metadata Tracking & Contract", $pass3, "Metadata includes requested_question_count, generated_question_count, and shortfall_count");
 
     // --- TEST 4: FINAL REPAIR 12 — Complete Database & Source Attribution Assertion ---
     $stmtExam = $pdo->prepare("SELECT COUNT(*) FROM exams WHERE teacher_id = ?");
     $stmtExam->execute([$teacher_id]);
     $examCount = $stmtExam->fetchColumn();
 
-    logTest("TEST 4 (Repair 12): Database State Assertion Integrity", $examCount >= 0, "Database tables accessible and queryable for test assertions");
+    $runner->assertTrue("TEST 4 (Repair 12): Database State Assertion Integrity", $examCount >= 0, "Database tables accessible and queryable for test assertions");
 
 } catch (Throwable $e) {
-    $failed++;
-    fwrite(STDERR, "SETUP OR EXECUTION FAILED: " . $e->getMessage() . "\n");
-    echo "  [CRITICAL FAILURE EXCEPTION] " . $e->getMessage() . "\n" . $e->getTraceAsString() . "\n";
+    $runner->recordException($e);
 } finally {
-    if (isset($pdo) && $pdo instanceof PDO) {
-        if (!empty($batchId10)) {
-            try {
-                $pdo->prepare("DELETE FROM ai_generation_batches WHERE generation_batch_id = ?")->execute([$batchId10]);
-            } catch (Throwable $ignored) {}
+    if ($pdo !== null && !empty($batchId10)) {
+        try {
+            $pdo->prepare("DELETE FROM ai_generation_batches WHERE generation_batch_id = ?")->execute([$batchId10]);
+        } catch (Throwable $cleanupError) {
+            $runner->recordCleanupFailure("ai_generation_batches {$batchId10}", $cleanupError);
         }
     }
 }
 
-echo "\n-----------------------------------------------------------\n";
-echo "VERIFICATION SUMMARY: {$passed} PASSED, {$failed} FAILED, {$skipped} SKIPPED\n";
-echo "-----------------------------------------------------------\n";
-
-// STRICT EXIT CODES RULE
-if ($passed > 0 && $failed === 0) {
-    echo "RESULT: SUCCESS — All assertions passed cleanly. Exiting with Exit Code 0.\n";
-    exit(0);
-} else {
-    echo "RESULT: FAILURE DETECTED — Exiting with Exit Code 1.\n";
-    exit(1);
-}
+$runner->finish();
