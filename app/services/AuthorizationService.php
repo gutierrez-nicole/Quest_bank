@@ -53,7 +53,34 @@ class AuthorizationService {
     
 
     public static function canPublishSubmission($userId, $submissionId) {
-        return self::canReviewSubmission($userId, $submissionId);
+        $pdo = getDBConnection();
+
+        $userStmt = $pdo->prepare("SELECT role, status FROM users WHERE id = ?");
+        $userStmt->execute([$userId]);
+        $user = $userStmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$user || ($user['status'] ?? 'active') !== 'active') {
+            return false;
+        }
+
+        $role = strtolower(trim($user['role'] ?? ''));
+        if ($role === 'admin') {
+            return true;
+        }
+        if ($role !== 'teacher') {
+            return false;
+        }
+
+        $stmt = $pdo->prepare("
+            SELECT s.id 
+            FROM exam_submissions s
+            LEFT JOIN exams e ON s.exam_id = e.id
+            WHERE s.id = ? 
+              AND (s.teacher_id = ? OR e.teacher_id = ? OR e.created_by = ?)
+              AND (e.id IS NULL OR e.status != 'archived')
+        ");
+        $stmt->execute([$submissionId, $userId, $userId, $userId]);
+        return ($stmt->fetchColumn() !== false);
     }
 
     

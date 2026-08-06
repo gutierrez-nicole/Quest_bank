@@ -9,13 +9,45 @@ class ResultWorkflowService {
     
     const ALLOWED_TRANSITIONS = [
         'pending_review' => ['reviewed'],
-        'reviewed'       => ['finalized', 'published'],
+        'reviewed'       => ['finalized'],
         'finalized'      => ['published'],
         'published'      => ['archived'],
-        'archived'       => ['published']
+        'archived'       => []
     ];
 
-    
+    public static function assertReadyForPublication(int $submissionId): void {
+        $pdo = getDBConnection();
+        $stmt = $pdo->prepare("SELECT * FROM exam_submissions WHERE id = ?");
+        $stmt->execute([$submissionId]);
+        $sub = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$sub) {
+            throw new LogicException("Publication rejected: Submission #{$submissionId} not found.");
+        }
+
+        $ocrConf = floatval($sub['ocr_confidence'] ?? 100.00);
+        $manualRev = intval($sub['suggested_manual_review'] ?? 0);
+
+        $stmtAns = $pdo->prepare("SELECT COUNT(*) FROM submission_answers WHERE submission_id = ? AND requires_review = 1");
+        $stmtAns->execute([$submissionId]);
+        $unresolvedItems = intval($stmtAns->fetchColumn());
+
+        if ($ocrConf < 75.00) {
+            throw new LogicException("Publication rejected: Submission #{$submissionId} has low OCR confidence (" . number_format($ocrConf, 1) . "% < 75.0%).");
+        }
+
+        if ($manualRev === 1) {
+            throw new LogicException("Publication rejected: Submission #{$submissionId} is flagged for manual teacher review.");
+        }
+
+        if ($unresolvedItems > 0) {
+            throw new LogicException("Publication rejected: Submission #{$submissionId} has {$unresolvedItems} item(s) requiring manual review.");
+        }
+
+        if ($sub['percentage'] === null || $sub['total_score'] === null) {
+            throw new LogicException("Publication rejected: Submission #{$submissionId} has incomplete or uncalculated score totals.");
+        }
+    }
 
     public static function transitionStatus($submissionId, $targetStatus, $reviewerId, $remarks = '') {
         $pdo = getDBConnection();
@@ -79,13 +111,15 @@ class ResultWorkflowService {
 
         
         if ($targetStatus === 'published') {
-            if (!in_array($currentStatus, ['reviewed', 'finalized', 'archived'], true)) {
-                throw new LogicException("Publication rejected: Submission must be reviewed or finalized before publishing.");
+            if ($currentStatus !== 'finalized' && ($currentStatus !== 'archived' || $actorRole !== 'admin')) {
+                throw new LogicException("Publication rejected: Submission must be in 'finalized' status before publishing.");
             }
 
             if (empty($reviewerId)) {
                 throw new LogicException("Publication rejected: Valid reviewer ID is required.");
             }
+
+            self::assertReadyForPublication((int)$submissionId);
         }
 
         $publishedAt = ($targetStatus === 'published') ? date('Y-m-d H:i:s') : $sub['published_at'];
@@ -691,10 +725,12 @@ class ResultWorkflowService {
             $sId = (int)$sub['id'];
             $cStatus = strtolower(trim($sub['review_status'] ?? 'pending_review'));
 
-            if (!in_array($cStatus, ['reviewed', 'finalized'], true)) {
+            if ($cStatus !== 'finalized') {
                 $skippedCount++;
                 $skippedSubmissionIds[] = $sId;
-                $reason = "Ineligible review status '{$cStatus}' (submission must be reviewed or finalized before publication).";
+                $reason = ($cStatus === 'reviewed')
+                    ? "Submission #{$sId} is in 'reviewed' status and must be finalized before publication."
+                    : "Submission #{$sId} is in '{$cStatus}' status (must be reviewed and finalized before publication).";
                 $skippedDetails[] = [
                     'submission_id' => $sId,
                     'status' => $cStatus,
@@ -704,12 +740,13 @@ class ResultWorkflowService {
                 continue;
             }
 
-            $eligibleCount++;
-
             try {
+                self::assertReadyForPublication($sId);
                 self::transitionStatus($sId, 'published', $teacherId, $remarks);
+                $eligibleCount++;
                 $publishedCount++;
             } catch (Exception $e) {
+                $skippedCount++;
                 $failedCount++;
                 $skippedSubmissionIds[] = $sId;
                 $skippedDetails[] = [

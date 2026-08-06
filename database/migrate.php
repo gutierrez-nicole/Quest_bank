@@ -89,7 +89,7 @@ addColumn($pdo, 'exams', 'qualifying_deadline', "DATETIME DEFAULT NULL");
 
 echo "\n--- exam_submissions ---\n";
 $pdo->exec("ALTER TABLE `exam_submissions` MODIFY COLUMN `upload_type` VARCHAR(30) NOT NULL DEFAULT 'scanned'");
-$pdo->exec("ALTER TABLE `exam_submissions` MODIFY COLUMN `review_status` VARCHAR(30) NOT NULL DEFAULT 'draft'");
+$pdo->exec("ALTER TABLE `exam_submissions` MODIFY COLUMN `review_status` VARCHAR(30) NOT NULL DEFAULT 'pending_review'");
 $pdo->exec("ALTER TABLE `exam_submissions` MODIFY COLUMN `status` VARCHAR(20) NOT NULL DEFAULT 'Fail'");
 echo "  [*] Updated exam_submissions.upload_type, review_status, and status column types\n";
 addColumn($pdo, 'exam_submissions', 'exam_id', "INT(11) DEFAULT NULL");
@@ -109,7 +109,7 @@ addColumn($pdo, 'exam_submissions', 'processing_duration', "DECIMAL(8,2) DEFAULT
 addColumn($pdo, 'exam_submissions', 'processed_at', "DATETIME DEFAULT NULL");
 addColumn($pdo, 'exam_submissions', 'evaluation_result', "JSON DEFAULT NULL");
 addColumn($pdo, 'exam_submissions', 'teacher_override_log', "JSON DEFAULT NULL");
-addColumn($pdo, 'exam_submissions', 'review_status', "VARCHAR(30) NOT NULL DEFAULT 'draft'");
+addColumn($pdo, 'exam_submissions', 'review_status', "VARCHAR(30) NOT NULL DEFAULT 'pending_review'");
 addColumn($pdo, 'exam_submissions', 'reviewed_by', "INT(11) DEFAULT NULL");
 addColumn($pdo, 'exam_submissions', 'teacher_remarks', "TEXT DEFAULT NULL");
 addColumn($pdo, 'exam_submissions', 'reviewed_at', "DATETIME DEFAULT NULL");

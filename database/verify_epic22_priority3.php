@@ -40,8 +40,8 @@ try {
 
     // Create submissions in draft/reviewed/finalized statuses
     $stmtSub = $pdo->prepare("
-        INSERT INTO exam_submissions (exam_id, student_id, teacher_id, student_name, exam_title, total_score, total_possible_score, total_items, percentage, status, review_status)
-        VALUES (?, ?, ?, 'Test Student', 'Priority 3 Test Comprehensive Exam', ?, 100, 5, ?, ?, ?)
+        INSERT INTO exam_submissions (exam_id, student_id, teacher_id, student_name, exam_title, total_score, total_possible_score, total_items, percentage, status, review_status, ocr_confidence, suggested_manual_review)
+        VALUES (?, ?, ?, 'Test Student', 'Priority 3 Test Comprehensive Exam', ?, 100, 5, ?, ?, ?, 95.00, 0)
     ");
     
     $stmtSub->execute([$examId, $student1Id, $teacherId, 85.0, 85.0, 'Pass', 'reviewed']);
@@ -52,7 +52,8 @@ try {
     $sub2Id = $pdo->lastInsertId();
     $createdSubmissionIds[] = $sub2Id;
 
-    // 1a. Single submission publication
+    // 1a. Single submission publication (reviewed -> finalized -> published)
+    ResultWorkflowService::transitionStatus($sub1Id, 'finalized', $teacherId, 'Finalization test');
     $pubRes1 = ResultWorkflowService::transitionStatus($sub1Id, 'published', $teacherId, 'Single publication test');
     $runner->assertTrue("TEST 1a: Single submission transitioned to published", $pubRes1['success'] === true && $pubRes1['new_status'] === 'published', "Published at: {$pubRes1['published_at']}");
 
@@ -174,7 +175,7 @@ try {
 
     $runner->assertTrue("TEST 7: Subject and Academic Period filter queries execute cleanly", $filterCount >= 1, "Filter returned {$filterCount} matching records");
 
-    // ── TEST 8: Exam-Wide Publication Skipping Unreviewed Submissions ──
+    // ── TEST 8: Exam-Wide Publication Skipping Unfinalized & Unreviewed Submissions ──
     $stmtEx8 = $pdo->prepare("
         INSERT INTO exams (teacher_id, title, subject, specialization, time_limit, total_items, exam_category, status, term)
         VALUES (?, 'Priority 3 Exam Wide Skip Test', 'Hydraulics', 'Hydraulics', 30, 5, 'regular', 'active', 'midterm')
@@ -183,8 +184,8 @@ try {
     $exam8Id = $pdo->lastInsertId();
     $createdExamIds[] = $exam8Id;
 
-    // Sub A: reviewed (eligible)
-    $stmtSub->execute([$exam8Id, $student1Id, $teacherId, 80.0, 80.0, 'Pass', 'reviewed']);
+    // Sub A: finalized (eligible)
+    $stmtSub->execute([$exam8Id, $student1Id, $teacherId, 80.0, 80.0, 'Pass', 'finalized']);
     $subA = $pdo->lastInsertId();
     $createdSubmissionIds[] = $subA;
 
@@ -198,23 +199,29 @@ try {
     $subC = $pdo->lastInsertId();
     $createdSubmissionIds[] = $subC;
 
+    // Sub D: reviewed but not finalized (ineligible -> should be skipped)
+    $stmtSub->execute([$exam8Id, $student2Id, $teacherId, 75.0, 75.0, 'Pass', 'reviewed']);
+    $subD = $pdo->lastInsertId();
+    $createdSubmissionIds[] = $subD;
+
     $pubAllRes = ResultWorkflowService::publishEntireExam($exam8Id, $teacherId, 'Exam wide publication test');
 
     $pubAllValid = (
         $pubAllRes['eligible_count'] === 2 &&
         $pubAllRes['published_count'] === 2 &&
-        $pubAllRes['skipped_count'] === 1 &&
-        in_array($subC, $pubAllRes['skipped_submission_ids'])
+        $pubAllRes['skipped_count'] === 2 &&
+        in_array($subC, $pubAllRes['skipped_submission_ids']) &&
+        in_array($subD, $pubAllRes['skipped_submission_ids'])
     );
 
-    // Verify subC status remained pending_review (no auto-finalization jump)
     $subCStatus = $pdo->query("SELECT review_status FROM exam_submissions WHERE id = {$subC}")->fetchColumn();
-    $subCUnchanged = ($subCStatus === 'pending_review');
+    $subDStatus = $pdo->query("SELECT review_status FROM exam_submissions WHERE id = {$subD}")->fetchColumn();
+    $subCUnchanged = ($subCStatus === 'pending_review' && $subDStatus === 'reviewed');
 
     $runner->assertTrue(
-        "TEST 8: Exam-wide publication publishes eligible submissions and skips unreviewed without auto-finalizing",
+        "TEST 8: Exam-wide publication publishes finalized submissions and skips unfinalized with reason",
         $pubAllValid && $subCUnchanged,
-        "Eligible: {$pubAllRes['eligible_count']}, Published: {$pubAllRes['published_count']}, Skipped: {$pubAllRes['skipped_count']}. SubC Status: {$subCStatus}"
+        "Eligible: {$pubAllRes['eligible_count']}, Published: {$pubAllRes['published_count']}, Skipped: {$pubAllRes['skipped_count']}. SubC: {$subCStatus}, SubD: {$subDStatus}"
     );
 
     // ── TEST 9: One-To-Many Duplication Test (3 Linked Lessons) ──
@@ -251,6 +258,8 @@ try {
         ResultWorkflowService::transitionStatus($subA, 'published', $teacherId);
     } catch (SecurityException $e) {
         $archivedRepubBlocked = true;
+    } catch (InvalidArgumentException $e) {
+        $archivedRepubBlocked = true;
     }
     $runner->assertTrue("TEST 10: Teacher cannot republish archived submission without admin authorization", $archivedRepubBlocked, "Archived republish blocked for teacher cleanly");
 
@@ -263,6 +272,71 @@ try {
         }
     }
     $runner->assertTrue("TEST 11: Student leaderboard applies privacy masking to other students' names", $privacyMasked, "Other student name masked as Student #ID");
+
+    // ── TEST 12: Publication Readiness Assertions ──
+    // Create sub with low OCR confidence in finalized status
+    $stmtSub->execute([$examId, $student1Id, $teacherId, 80.0, 80.0, 'Pass', 'finalized']);
+    $lowOcrSubId = $pdo->lastInsertId();
+    $createdSubmissionIds[] = $lowOcrSubId;
+    $pdo->exec("UPDATE exam_submissions SET ocr_confidence = 50.00 WHERE id = {$lowOcrSubId}");
+
+    $lowOcrBlocked = false;
+    try {
+        ResultWorkflowService::assertReadyForPublication($lowOcrSubId);
+    } catch (LogicException $e) {
+        $lowOcrBlocked = true;
+    }
+    $runner->assertTrue("TEST 12a: Low OCR confidence (<75%) blocks publication readiness assertion", $lowOcrBlocked, "Low OCR confidence publication assertion rejected cleanly");
+
+    // Create sub with suggested_manual_review = 1
+    $stmtSub->execute([$examId, $student1Id, $teacherId, 80.0, 80.0, 'Pass', 'finalized']);
+    $manualRevSubId = $pdo->lastInsertId();
+    $createdSubmissionIds[] = $manualRevSubId;
+    $pdo->exec("UPDATE exam_submissions SET suggested_manual_review = 1 WHERE id = {$manualRevSubId}");
+
+    $manualRevBlocked = false;
+    try {
+        ResultWorkflowService::assertReadyForPublication($manualRevSubId);
+    } catch (LogicException $e) {
+        $manualRevBlocked = true;
+    }
+    $runner->assertTrue("TEST 12b: Suggested manual review flag blocks publication readiness assertion", $manualRevBlocked, "Manual review flag assertion rejected cleanly");
+
+    // Create sub with answer item requires_review = 1
+    $stmtQ = $pdo->prepare("INSERT INTO exam_questions (exam_id, question_type, question_text, correct_answer, points) VALUES (?, 'multiple_choice', 'Test Question for Review Assertion', 'A', 1.00)");
+    $stmtQ->execute([$examId]);
+    $testQId = $pdo->lastInsertId();
+
+    $stmtSub->execute([$examId, $student1Id, $teacherId, 80.0, 80.0, 'Pass', 'finalized']);
+    $unresolvedAnsSubId = $pdo->lastInsertId();
+    $createdSubmissionIds[] = $unresolvedAnsSubId;
+    $pdo->exec("INSERT INTO submission_answers (submission_id, exam_id, student_id, question_id, requires_review) VALUES ({$unresolvedAnsSubId}, {$examId}, {$student1Id}, {$testQId}, 1)");
+
+    $unresolvedAnsBlocked = false;
+    try {
+        ResultWorkflowService::assertReadyForPublication($unresolvedAnsSubId);
+    } catch (LogicException $e) {
+        $unresolvedAnsBlocked = true;
+    }
+    $runner->assertTrue("TEST 12c: Unresolved answer items (requires_review=1) block publication readiness", $unresolvedAnsBlocked, "Unresolved answer items assertion rejected cleanly");
+
+    // Direct reviewed -> published without finalized status must throw LogicException
+    $directRevPubBlocked = false;
+    try {
+        ResultWorkflowService::transitionStatus($subD, 'published', $teacherId);
+    } catch (LogicException $e) {
+        $directRevPubBlocked = true;
+    } catch (InvalidArgumentException $e) {
+        $directRevPubBlocked = true;
+    }
+    $runner->assertTrue("TEST 12d: Direct transition from 'reviewed' to 'published' rejected (requires 'finalized')", $directRevPubBlocked, "Direct reviewed->published blocked cleanly");
+
+    // ── TEST 13: Strengthened Authorization Checks ──
+    $canPubActive = AuthorizationService::canPublishSubmission($teacherId, $subB);
+    $runner->assertTrue("TEST 13a: Active owning teacher is authorized to publish", $canPubActive === true, "Authorized teacher can publish");
+
+    $canPubOther = AuthorizationService::canPublishSubmission($otherTeacherId, $subB);
+    $runner->assertTrue("TEST 13b: Unassigned teacher is denied publication authorization", $canPubOther === false, "Unassigned teacher publication denied");
 
 } catch (Throwable $e) {
     $runner->recordException($e);

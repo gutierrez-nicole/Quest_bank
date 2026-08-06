@@ -46,7 +46,7 @@ ALTER TABLE `exam_submissions`
   ADD COLUMN IF NOT EXISTS `page_count` INT(11) DEFAULT 1 AFTER `suggested_manual_review`,
   ADD COLUMN IF NOT EXISTS `evaluation_result` JSON DEFAULT NULL AFTER `page_count`,
   ADD COLUMN IF NOT EXISTS `teacher_override_log` JSON DEFAULT NULL AFTER `evaluation_result`,
-  ADD COLUMN IF NOT EXISTS `review_status` ENUM('draft','pending_review','reviewed','published','archived') NOT NULL DEFAULT 'draft' AFTER `teacher_override_log`,
+  ADD COLUMN IF NOT EXISTS `review_status` VARCHAR(30) NOT NULL DEFAULT 'pending_review' AFTER `teacher_override_log`,
   ADD COLUMN IF NOT EXISTS `reviewed_by` INT(11) DEFAULT NULL AFTER `review_status`,
   ADD COLUMN IF NOT EXISTS `teacher_remarks` TEXT DEFAULT NULL AFTER `reviewed_by`,
   ADD COLUMN IF NOT EXISTS `reviewed_at` DATETIME DEFAULT NULL AFTER `teacher_remarks`,
