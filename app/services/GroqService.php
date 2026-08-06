@@ -452,6 +452,63 @@ class GroqService {
         ];
     }
 
+    public static function validateQuestionItem(array $q): array {
+        $supportedTypes = ['multiple_choice', 'true_false', 'identification', 'fill_blank', 'matching', 'problem_solving', 'math_formula'];
+        
+        $type = strtolower(trim($q['type'] ?? $q['question_type'] ?? ''));
+        if ($type === 'fill_in_the_blank') $type = 'fill_blank';
+        if ($type === 'matching_type') $type = 'matching';
+
+        if (!in_array($type, $supportedTypes, true)) {
+            throw new InvalidArgumentException("Unsupported question type '{$type}'.");
+        }
+
+        $text = trim($q['text'] ?? $q['question'] ?? $q['question_text'] ?? '');
+        if (empty($text)) {
+            throw new InvalidArgumentException("Question text cannot be empty.");
+        }
+
+        $correct = trim($q['correct'] ?? $q['correct_answer'] ?? '');
+        if (empty($correct) && $type !== 'problem_solving' && $type !== 'math_formula') {
+            throw new InvalidArgumentException("Answer key is required for type '{$type}'.");
+        }
+
+        $points = floatval($q['points'] ?? 1);
+        if ($points <= 0) {
+            throw new InvalidArgumentException("Question points must be a positive number.");
+        }
+
+        if ($type === 'multiple_choice') {
+            $optA = trim($q['opt_a'] ?? $q['option_a'] ?? '');
+            $optB = trim($q['opt_b'] ?? $q['option_b'] ?? '');
+            if (empty($optA) || empty($optB)) {
+                throw new InvalidArgumentException("Multiple choice questions require options A and B at minimum.");
+            }
+        }
+
+        if ($type === 'matching') {
+            $pairs = $q['matching_pairs'] ?? null;
+            if (empty($pairs)) {
+                throw new InvalidArgumentException("Matching questions require matching pairs metadata.");
+            }
+        }
+
+        if ($type === 'math_formula') {
+            $formula = trim($q['formula_latex'] ?? '');
+            if (empty($formula) && empty($correct)) {
+                throw new InvalidArgumentException("Math formula questions require formula metadata or answer expression.");
+            }
+        }
+
+        return [
+            'valid' => true,
+            'type' => $type,
+            'text' => $text,
+            'correct' => $correct,
+            'points' => $points
+        ];
+    }
+
     public static function validateAndCalculateDifficulty(string $mode, array $distribution, int $totalQuestions, string $fallbackDifficulty = 'medium'): array {
         $supportedDiffs = ['easy', 'medium', 'hard'];
         if (!in_array($fallbackDifficulty, $supportedDiffs, true)) {
@@ -1204,7 +1261,10 @@ class GroqService {
                 }
             }
 
-            $batchStatus = ($shortfallCount > 0 || !empty($uncoveredLessonIds) || !empty($uncoveredPeriods) || $periodMismatch || $blueprintMismatch) ? 'incomplete' : 'completed';
+            $isCustomBlueprint = !empty($questionBlueprint) && array_sum(array_map('intval', (array)$questionBlueprint)) > 0;
+            $isCustomPeriodWeighting = ($periodWeightingMode === 'percentage' || $periodWeightingMode === 'fixed');
+
+            $batchStatus = ($shortfallCount > 0 || !empty($uncoveredLessonIds) || !empty($uncoveredPeriods) || ($isCustomPeriodWeighting && $periodMismatch) || ($isCustomBlueprint && $blueprintMismatch)) ? 'incomplete' : 'completed';
 
             if (!empty($uncoveredLessonIds)) {
                 $generationWarnings[] = "Selected lesson(s) with zero question coverage: " . implode(', ', $uncoveredLessonIds);

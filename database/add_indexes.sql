@@ -25,8 +25,8 @@ ALTER TABLE exam_submissions MODIFY total_score INT NOT NULL DEFAULT 0;
 ALTER TABLE exam_submissions MODIFY total_items INT NOT NULL DEFAULT 0;
 ALTER TABLE exam_submissions MODIFY percentage DECIMAL(5,2) NOT NULL DEFAULT 0.00;
 
--- Expanded ENUM for question types
-ALTER TABLE exam_questions MODIFY question_type ENUM('multiple_choice','true_false','identification','fill_in_the_blank','matching_type','problem_solving') NOT NULL;
+-- Expanded question_type column
+ALTER TABLE exam_questions MODIFY question_type VARCHAR(50) NOT NULL DEFAULT 'multiple_choice';
 
 -- Foreign Key Constraints (Referential Integrity)
 ALTER TABLE activity_logs ADD CONSTRAINT fk_activity_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;

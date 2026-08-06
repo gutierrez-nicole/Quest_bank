@@ -62,7 +62,7 @@ CREATE TABLE `exam_questions` (
   `id` int(11) NOT NULL,
   `exam_id` int(11) NOT NULL,
   `question_text` text NOT NULL,
-  `question_type` enum('multiple_choice','true_false','identification') NOT NULL,
+  `question_type` varchar(50) NOT NULL DEFAULT 'multiple_choice',
   `option_a` varchar(255) DEFAULT NULL,
   `option_b` varchar(255) DEFAULT NULL,
   `option_c` varchar(255) DEFAULT NULL,

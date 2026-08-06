@@ -51,18 +51,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_exam'])) {
             ");
             
             foreach ($questions as $q) {
+                // Server-side validation before saving
+                GroqService::validateQuestionItem($q);
+
+                $qType = strtolower(trim($q['type'] ?? 'multiple_choice'));
+                if ($qType === 'fill_in_the_blank') $qType = 'fill_blank';
+                if ($qType === 'matching_type') $qType = 'matching';
+
                 $qStmt->execute([
                     $exam_id,
                     trim(sanitizeInput($q['text'] ?? '')),
-                    $q['type'] ?? 'multiple_choice',
+                    $qType,
                     $q['opt_a'] ?? null,
                     $q['opt_b'] ?? null,
                     $q['opt_c'] ?? null,
                     $q['opt_d'] ?? null,
                     trim(sanitizeInput($q['correct'] ?? '')),
                     $q['formula_latex'] ?? null,
-                    isset($q['matching_pairs']) ? json_encode($q['matching_pairs']) : null,
-                    intval($q['points'] ?? 1)
+                    isset($q['matching_pairs']) ? (is_string($q['matching_pairs']) ? $q['matching_pairs'] : json_encode($q['matching_pairs'])) : null,
+                    max(1, intval($q['points'] ?? 1))
                 ]);
             }
 
@@ -353,8 +360,12 @@ unset($ex);
                         <label class="text-[10px] font-bold uppercase text-stone-500">Question Type</label>
                         <select name="questions[${questionCount}][type]" class="w-full bg-white border rounded p-1.5 outline-none">
                             <option value="multiple_choice">Multiple Choice</option>
-                            <option value="identification">Identification</option>
                             <option value="true_false">True / False</option>
+                            <option value="identification">Identification</option>
+                            <option value="fill_blank">Fill in the Blank</option>
+                            <option value="matching">Matching Type</option>
+                            <option value="problem_solving">Problem Solving</option>
+                            <option value="math_formula">Math Formula</option>
                         </select>
                     </div>
                     <div class="space-y-1">

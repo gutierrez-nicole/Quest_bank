@@ -156,6 +156,15 @@
       "reason": "Validates Period Weighting, Question Blueprint, Difficulty Distribution, Practical Deduplication & Replacement, and Summary Metadata.",
       "replacement": null
     },
+    {
+      "filename": "verify_epic22_priority2_compat.php",
+      "label": "Priority 2 Canonical 7-Type Compatibility",
+      "classification": "authoritative",
+      "dependency_tier": "full",
+      "timeout": 120,
+      "reason": "Validates full compatibility, student rendering, submission, auto-scoring, and review state across all 7 canonical question types.",
+      "replacement": null
+    },
 
     {
       "filename": "verification_archive/verify_epic22_preflight_consolidation.php",

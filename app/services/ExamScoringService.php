@@ -72,6 +72,7 @@ class ExamScoringService {
 
             case 'identification':
             case 'fill_blank':
+            case 'fill_in_the_blank':
             case 'short_answer':
                 $normStudent = strtolower(preg_replace('/\s+/', ' ', trim($studentAnswerStr)));
                 $normCorrect = strtolower(preg_replace('/\s+/', ' ', trim($correctAnswer)));
@@ -90,10 +91,43 @@ class ExamScoringService {
                 }
                 break;
 
+            case 'matching':
+            case 'matching_type':
+                $normStudent = strtolower(preg_replace('/\s+/', '', trim($studentAnswerStr)));
+                $normCorrect = strtolower(preg_replace('/\s+/', '', trim($correctAnswer)));
+                $matchingPairsRaw = $question['matching_pairs'] ?? null;
+                $normPairs = $matchingPairsRaw ? strtolower(preg_replace('/\s+/', '', is_array($matchingPairsRaw) ? json_encode($matchingPairsRaw) : $matchingPairsRaw)) : '';
+
+                if (($normCorrect !== '' && $normStudent === $normCorrect) || ($normPairs !== '' && $normStudent === $normPairs)) {
+                    $isCorrect = true;
+                    $reason = 'Correct matching pairs submitted.';
+                } else {
+                    $stdDec = json_decode($studentAnswerStr, true);
+                    $corDec = json_decode($correctAnswer, true) ?: (is_array($matchingPairsRaw) ? $matchingPairsRaw : json_decode($matchingPairsRaw ?? '', true));
+                    if (is_array($stdDec) && is_array($corDec) && $stdDec == $corDec) {
+                        $isCorrect = true;
+                        $reason = 'Matching pair selections match answer key.';
+                    } else {
+                        $reason = "Submitted matching pairs do not match answer key.";
+                    }
+                }
+                break;
+
             case 'problem_solving':
-            case 'math_formula':
                 $requiresReview = true;
-                $reason = 'Manual teacher evaluation required for problem solving / formula item.';
+                $reason = 'Manual teacher evaluation required for problem solving item.';
+                break;
+
+            case 'math_formula':
+                $normStudent = strtolower(preg_replace('/\s+/', '', trim($studentAnswerStr)));
+                $normCorrect = strtolower(preg_replace('/\s+/', '', trim($correctAnswer)));
+                if (!empty($normCorrect) && $normStudent === $normCorrect) {
+                    $isCorrect = true;
+                    $reason = 'Exact formula expression match.';
+                } else {
+                    $requiresReview = true;
+                    $reason = 'Manual teacher evaluation required for math formula item.';
+                }
                 break;
 
             default:

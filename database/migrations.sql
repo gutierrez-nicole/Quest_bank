@@ -13,6 +13,11 @@ ALTER TABLE `lesson_materials`
   ADD COLUMN IF NOT EXISTS `original_filename` VARCHAR(255) DEFAULT NULL AFTER `mime_type`,
   ADD COLUMN IF NOT EXISTS `stored_filename` VARCHAR(255) DEFAULT NULL AFTER `original_filename`;
 
+-- Ensure canonical question_type column format and data migration
+ALTER TABLE `exam_questions` MODIFY COLUMN `question_type` VARCHAR(50) NOT NULL DEFAULT 'multiple_choice';
+UPDATE `exam_questions` SET `question_type` = 'fill_blank' WHERE `question_type` IN ('fill_in_the_blank', 'fill_in_blank');
+UPDATE `exam_questions` SET `question_type` = 'matching' WHERE `question_type` IN ('matching_type', 'matching_pairs');
+
 -- Add missing columns to exam_questions if they don't exist
 ALTER TABLE `exam_questions`
   ADD COLUMN IF NOT EXISTS `points` INT(11) NOT NULL DEFAULT 1 AFTER `correct_answer`,

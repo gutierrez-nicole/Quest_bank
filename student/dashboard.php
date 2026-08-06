@@ -34,6 +34,62 @@ try {
         }
     }
 
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'get_exam_questions') {
+        header('Content-Type: application/json');
+        $exam_id = intval($_POST['exam_id'] ?? 0);
+        try {
+            $stmtEx = $pdo->prepare("SELECT id, title, subject, specialization, time_limit, exam_category FROM exams WHERE id = ?");
+            $stmtEx->execute([$exam_id]);
+            $examInfo = $stmtEx->fetch(PDO::FETCH_ASSOC);
+
+            if (!$examInfo) {
+                echo json_encode(['success' => false, 'error' => "Exam #{$exam_id} not found."]);
+                exit;
+            }
+
+            $stmtQ = $pdo->prepare("SELECT id, question_text, question_type, option_a, option_b, option_c, option_d, formula_latex, matching_pairs, points FROM exam_questions WHERE exam_id = ? ORDER BY id ASC");
+            $stmtQ->execute([$exam_id]);
+            $rawQuestions = $stmtQ->fetchAll(PDO::FETCH_ASSOC);
+
+            $formattedQuestions = [];
+            foreach ($rawQuestions as $idx => $q) {
+                $qType = strtolower(trim($q['question_type'] ?? 'multiple_choice'));
+                if ($qType === 'fill_in_the_blank') $qType = 'fill_blank';
+                if ($qType === 'matching_type') $qType = 'matching';
+
+                $matchingPairsParsed = null;
+                if (!empty($q['matching_pairs'])) {
+                    $matchingPairsParsed = is_array($q['matching_pairs']) ? $q['matching_pairs'] : json_decode($q['matching_pairs'], true);
+                }
+
+                $formattedQuestions[] = [
+                    'id' => (int)$q['id'],
+                    'num' => $idx + 1,
+                    'title' => $q['question_text'],
+                    'question_type' => $qType,
+                    'type' => $qType,
+                    'opt_a' => $q['option_a'],
+                    'opt_b' => $q['option_b'],
+                    'opt_c' => $q['option_c'],
+                    'opt_d' => $q['option_d'],
+                    'formula_latex' => $q['formula_latex'],
+                    'matching_pairs' => $matchingPairsParsed,
+                    'points' => floatval($q['points'] ?? 1)
+                ];
+            }
+
+            echo json_encode([
+                'success' => true,
+                'exam' => $examInfo,
+                'questions' => $formattedQuestions
+            ]);
+            exit;
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+            exit;
+        }
+    }
+
     
     $stmt = $pdo->prepare("
         SELECT u.fullname, u.username, u.email, s.student_number, s.course, s.year_level, s.section 
@@ -1240,135 +1296,218 @@ try {
 
         // 3. Online Exam Session Trigger & Security Scripts
         // 3. Dynamic Exam Session Engine & Question Pagination
-        const activeExamQuestions = [
-            {
-                num: 1,
-                title: "Which of the following describes the practice of continuous integration (CI) in software development?",
-                opt_a: "Frequently merging code changes into a central repository followed by automated builds.",
-                opt_b: "Deploying code manually to production servers every month.",
-                opt_c: "Writing code without testing until final release phase.",
-                opt_d: "Managing user interface styling frameworks only.",
-                correct: "A"
-            },
-            {
-                num: 2,
-                title: "What is the standard unit of Soil Shear Strength in Geotechnical Engineering analysis?",
-                opt_a: "Kilopascals (kPa)",
-                opt_b: "Kilonewtons (kN)",
-                opt_c: "Meters per second (m/s)",
-                opt_d: "Joules (J)",
-                correct: "A"
-            },
-            {
-                num: 3,
-                title: "Terzaghi's Bearing Capacity theory applies primarily to which class of foundation structures?",
-                opt_a: "Shallow Footings (Strip, Square, Circular)",
-                opt_b: "Deep Bored Piles",
-                opt_c: "Offshore Driven Caissons",
-                opt_d: "Pre-stressed Concrete Micropiles",
-                correct: "A"
-            },
-            {
-                num: 4,
-                title: "In Darcy's Law governing fluid flow in porous soil media, what parameter does coefficient 'k' represent?",
-                opt_a: "Hydraulic Conductivity (Permeability)",
-                opt_b: "Hydraulic Gradient",
-                opt_c: "Total Hydraulic Head",
-                opt_d: "Seepage Velocity Factor",
-                correct: "A"
-            },
-            {
-                num: 5,
-                title: "In reinforced concrete flexural design, what parameter does f'c specify?",
-                opt_a: "Specified compressive strength of concrete at 28 days",
-                opt_b: "Yield strength of main reinforcement bars",
-                opt_c: "Modulus of elasticity of concrete",
-                opt_d: "Maximum allowable shear stress",
-                correct: "A"
-            }
-        ];
-
+        let activeExamId = 0;
+        let activeExamQuestions = [];
         let currentQuestionIndex = 0;
         let userAnswers = {};
 
         function startExamSession(examId) {
+            activeExamId = examId;
             currentQuestionIndex = 0;
             userAnswers = {};
-            switchTab('take-exam');
-            startTimer(3600);
-            renderCurrentQuestion();
+
+            const formData = new FormData();
+            formData.append('action', 'get_exam_questions');
+            formData.append('exam_id', examId);
+
+            fetch('dashboard.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success && data.questions && data.questions.length > 0) {
+                    activeExamQuestions = data.questions;
+                    const timeLimit = (data.exam && data.exam.time_limit) ? parseInt(data.exam.time_limit) * 60 : 3600;
+                    if (data.exam && data.exam.title) {
+                        const titleEl = document.querySelector('#tab-take-exam h3');
+                        if (titleEl) titleEl.innerText = data.exam.title;
+                    }
+                    switchTab('take-exam');
+                    startTimer(timeLimit);
+                    renderCurrentQuestion();
+                } else {
+                    alert("Unable to load exam questions: " + (data.error || "No questions found for this exam."));
+                }
+            })
+            .catch(err => {
+                alert("Failed to load exam session: " + err.message);
+            });
         }
 
         function renderCurrentQuestion() {
+            if (!activeExamQuestions || activeExamQuestions.length === 0) return;
             const q = activeExamQuestions[currentQuestionIndex];
-            document.getElementById('current_q_num').innerText = q.num;
-            document.getElementById('question_title').innerText = q.title;
+            
+            const qNumEl = document.getElementById('current_q_num');
+            if (qNumEl) qNumEl.innerText = currentQuestionIndex + 1;
 
-            // Render Choices
+            const totalQEl = document.querySelector('#tab-take-exam span.text-xs.font-extrabold');
+            if (totalQEl) totalQEl.innerHTML = `Question <span id="current_q_num">${currentQuestionIndex + 1}</span> of ${activeExamQuestions.length}`;
+            
+            const qTypeLabel = (q.type || q.question_type || 'multiple_choice').replace(/_/g, ' ').toUpperCase();
+            const typeBadge = document.querySelector('#tab-take-exam span.text-\\[10px\\].bg-stone-100');
+            if (typeBadge) typeBadge.innerText = qTypeLabel;
+
+            const titleEl = document.getElementById('question_title');
+            if (titleEl) titleEl.innerText = q.title;
+
             const choicesContainer = document.getElementById('choices_container');
-            const selectedAns = userAnswers[currentQuestionIndex];
+            const selectedAns = userAnswers[q.id];
+            const qType = (q.type || q.question_type || 'multiple_choice').toLowerCase();
 
-            choicesContainer.innerHTML = `
-                <label onclick="saveAnswer('A')" class="flex items-center gap-3 p-4 border rounded-xl cursor-pointer transition-all ${selectedAns === 'A' ? 'border-orange-500 bg-orange-50/40 dark:bg-orange-950/30 font-bold' : 'border-stone-200 dark:border-stone-800 hover:border-orange-400 bg-stone-50/50 dark:bg-stone-800/20'}">
-                    <input type="radio" name="exam_q_choice" value="A" ${selectedAns === 'A' ? 'checked' : ''} class="accent-orange-600 w-4 h-4">
-                    <span class="text-xs">A. ${q.opt_a}</span>
-                </label>
-                <label onclick="saveAnswer('B')" class="flex items-center gap-3 p-4 border rounded-xl cursor-pointer transition-all ${selectedAns === 'B' ? 'border-orange-500 bg-orange-50/40 dark:bg-orange-950/30 font-bold' : 'border-stone-200 dark:border-stone-800 hover:border-orange-400 bg-stone-50/50 dark:bg-stone-800/20'}">
-                    <input type="radio" name="exam_q_choice" value="B" ${selectedAns === 'B' ? 'checked' : ''} class="accent-orange-600 w-4 h-4">
-                    <span class="text-xs">B. ${q.opt_b}</span>
-                </label>
-                <label onclick="saveAnswer('C')" class="flex items-center gap-3 p-4 border rounded-xl cursor-pointer transition-all ${selectedAns === 'C' ? 'border-orange-500 bg-orange-50/40 dark:bg-orange-950/30 font-bold' : 'border-stone-200 dark:border-stone-800 hover:border-orange-400 bg-stone-50/50 dark:bg-stone-800/20'}">
-                    <input type="radio" name="exam_q_choice" value="C" ${selectedAns === 'C' ? 'checked' : ''} class="accent-orange-600 w-4 h-4">
-                    <span class="text-xs">C. ${q.opt_c}</span>
-                </label>
-                <label onclick="saveAnswer('D')" class="flex items-center gap-3 p-4 border rounded-xl cursor-pointer transition-all ${selectedAns === 'D' ? 'border-orange-500 bg-orange-50/40 dark:bg-orange-950/30 font-bold' : 'border-stone-200 dark:border-stone-800 hover:border-orange-400 bg-stone-50/50 dark:bg-stone-800/20'}">
-                    <input type="radio" name="exam_q_choice" value="D" ${selectedAns === 'D' ? 'checked' : ''} class="accent-orange-600 w-4 h-4">
-                    <span class="text-xs">D. ${q.opt_d}</span>
-                </label>
-            `;
+            let html = '';
 
-            // Update Prev Button
-            const btnPrev = document.getElementById('btn_prev');
-            if (currentQuestionIndex === 0) {
-                btnPrev.disabled = true;
-                btnPrev.classList.add('opacity-50', 'cursor-not-allowed');
+            if (qType === 'multiple_choice') {
+                const options = [
+                    { key: 'A', text: q.opt_a },
+                    { key: 'B', text: q.opt_b },
+                    { key: 'C', text: q.opt_c },
+                    { key: 'D', text: q.opt_d }
+                ].filter(o => o.text && o.text.trim() !== '');
+
+                html = options.map(o => `
+                    <label onclick="saveAnswer(${q.id}, '${o.key}')" class="flex items-center gap-3 p-4 border rounded-xl cursor-pointer transition-all ${selectedAns === o.key ? 'border-orange-500 bg-orange-50/40 dark:bg-orange-950/30 font-bold' : 'border-stone-200 dark:border-stone-800 hover:border-orange-400 bg-stone-50/50 dark:bg-stone-800/20'}">
+                        <input type="radio" name="exam_q_${q.id}" value="${o.key}" ${selectedAns === o.key ? 'checked' : ''} class="accent-orange-600 w-4 h-4">
+                        <span class="text-xs">${o.key}. ${o.text}</span>
+                    </label>
+                `).join('');
+            } else if (qType === 'true_false') {
+                const tfOptions = ['True', 'False'];
+                html = tfOptions.map(opt => `
+                    <label onclick="saveAnswer(${q.id}, '${opt}')" class="flex items-center gap-3 p-4 border rounded-xl cursor-pointer transition-all ${selectedAns === opt ? 'border-orange-500 bg-orange-50/40 dark:bg-orange-950/30 font-bold' : 'border-stone-200 dark:border-stone-800 hover:border-orange-400 bg-stone-50/50 dark:bg-stone-800/20'}">
+                        <input type="radio" name="exam_q_${q.id}" value="${opt}" ${selectedAns === opt ? 'checked' : ''} class="accent-orange-600 w-4 h-4">
+                        <span class="text-xs font-bold">${opt}</span>
+                    </label>
+                `).join('');
+            } else if (qType === 'identification' || qType === 'fill_blank') {
+                const placeholder = qType === 'fill_blank' ? 'Fill in the missing blank term...' : 'Type your identification answer...';
+                html = `
+                    <div class="space-y-2">
+                        <label class="text-xs font-bold text-stone-600 dark:text-stone-300">Your Answer:</label>
+                        <input type="text" oninput="saveAnswer(${q.id}, this.value)" value="${selectedAns || ''}" placeholder="${placeholder}" class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-700 rounded-xl p-3 text-xs font-semibold outline-none focus:border-orange-500">
+                    </div>
+                `;
+            } else if (qType === 'matching') {
+                let pairs = q.matching_pairs;
+                if (typeof pairs === 'string') {
+                    try { pairs = JSON.parse(pairs); } catch(e) { pairs = null; }
+                }
+                if (pairs && typeof pairs === 'object') {
+                    let currentAnsObj = {};
+                    if (selectedAns) {
+                        if (typeof selectedAns === 'object') currentAnsObj = selectedAns;
+                        else {
+                            try { currentAnsObj = JSON.parse(selectedAns); } catch(e) { currentAnsObj = {}; }
+                        }
+                    }
+                    const premiseKeys = Object.keys(pairs);
+                    const targetValues = Object.values(pairs);
+                    
+                    html = '<div class="space-y-3">';
+                    html += '<p class="text-xs font-bold text-stone-600 dark:text-stone-300">Match each item on the left with the correct option on the right:</p>';
+                    premiseKeys.forEach((premise, pIdx) => {
+                        const selVal = currentAnsObj[premise] || '';
+                        html += `
+                            <div class="p-3 bg-stone-50 dark:bg-stone-800/50 border border-stone-200 dark:border-stone-800 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                                <span class="text-xs font-bold text-stone-800 dark:text-stone-200 flex-1">${pIdx + 1}. ${premise}</span>
+                                <select onchange="saveMatchingPairAnswer(${q.id}, '${premise.replace(/'/g, "\\'")}', this.value)" class="bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-700 rounded-lg p-2 text-xs font-semibold text-stone-800 dark:text-stone-200 outline-none focus:border-orange-500 max-w-xs">
+                                    <option value="">-- Select Match --</option>
+                                    ${targetValues.map(tv => `<option value="${tv}" ${selVal === tv ? 'selected' : ''}>${tv}</option>`).join('')}
+                                </select>
+                            </div>
+                        `;
+                    });
+                    html += '</div>';
+                } else {
+                    html = `
+                        <div class="space-y-2">
+                            <label class="text-xs font-bold text-stone-600 dark:text-stone-300">Enter matching response / pair pairings:</label>
+                            <input type="text" oninput="saveAnswer(${q.id}, this.value)" value="${selectedAns || ''}" placeholder="e.g. A-1, B-2" class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-700 rounded-xl p-3 text-xs font-semibold outline-none focus:border-orange-500">
+                        </div>
+                    `;
+                }
+            } else if (qType === 'problem_solving') {
+                html = `
+                    <div class="space-y-2">
+                        <label class="text-xs font-bold text-stone-600 dark:text-stone-300">Problem Solving Solution & Final Answer:</label>
+                        <textarea oninput="saveAnswer(${q.id}, this.value)" rows="5" placeholder="Provide your detailed step-by-step solution, calculations, and final answer..." class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-700 rounded-xl p-3 text-xs font-medium outline-none focus:border-orange-500 resize-y">${selectedAns || ''}</textarea>
+                    </div>
+                `;
+            } else if (qType === 'math_formula') {
+                html = `
+                    <div class="space-y-3">
+                        ${q.formula_latex ? `<div class="p-3 bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-xl text-xs font-mono text-stone-800 dark:text-stone-200"><strong>Formula Reference:</strong> <code>${q.formula_latex}</code></div>` : ''}
+                        <div class="space-y-1">
+                            <label class="text-xs font-bold text-stone-600 dark:text-stone-300">Formula Expression Response:</label>
+                            <textarea oninput="saveAnswer(${q.id}, this.value)" rows="4" placeholder="Enter mathematical formula expression or solution..." class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-700 rounded-xl p-3 text-xs font-mono outline-none focus:border-orange-500 resize-y">${selectedAns || ''}</textarea>
+                        </div>
+                    </div>
+                `;
             } else {
-                btnPrev.disabled = false;
-                btnPrev.classList.remove('opacity-50', 'cursor-not-allowed');
+                html = `
+                    <div class="space-y-2">
+                        <label class="text-xs font-bold text-stone-600 dark:text-stone-300">Your Answer:</label>
+                        <input type="text" oninput="saveAnswer(${q.id}, this.value)" value="${selectedAns || ''}" placeholder="Type your answer here..." class="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-700 rounded-xl p-3 text-xs font-semibold outline-none focus:border-orange-500">
+                    </div>
+                `;
             }
 
-            // Update Next Button
+            if (choicesContainer) choicesContainer.innerHTML = html;
+
+            const navGrid = document.getElementById('q_nav_grid');
+            if (navGrid) {
+                navGrid.innerHTML = activeExamQuestions.map((qItem, idx) => {
+                    const isCurrent = idx === currentQuestionIndex;
+                    const hasAns = userAnswers[qItem.id] !== undefined && userAnswers[qItem.id] !== '';
+                    let btnClass = "w-9 h-9 rounded-lg font-bold text-xs transition-all ";
+                    if (isCurrent) {
+                        btnClass += "bg-orange-600 text-white font-black shadow-md border-2 border-orange-400";
+                    } else if (hasAns) {
+                        btnClass += "bg-emerald-600 text-white shadow-sm";
+                    } else {
+                        btnClass += "bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 hover:border-orange-500 border";
+                    }
+                    return `<button onclick="jumpToQuestion(${idx})" class="${btnClass}">${idx + 1}</button>`;
+                }).join('');
+            }
+
+            const btnPrev = document.getElementById('btn_prev');
+            if (btnPrev) {
+                btnPrev.disabled = currentQuestionIndex === 0;
+                if (currentQuestionIndex === 0) btnPrev.classList.add('opacity-50', 'cursor-not-allowed');
+                else btnPrev.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+
             const btnNextText = document.getElementById('btn_next_text');
             const btnNextIcon = document.getElementById('btn_next_icon');
-            if (currentQuestionIndex === activeExamQuestions.length - 1) {
-                btnNextText.innerText = "Finish Exam";
-                btnNextIcon.className = "fa-solid fa-flag-checkered";
-            } else {
-                btnNextText.innerText = "Next Question";
-                btnNextIcon.className = "fa-solid fa-arrow-right";
-            }
-
-            // Update Navigation Grid Highlights
-            for (let i = 0; i < activeExamQuestions.length; i++) {
-                const navBtn = document.getElementById(`q_nav_${i}`);
-                if (navBtn) {
-                    if (i === currentQuestionIndex) {
-                        navBtn.className = "w-9 h-9 rounded-lg bg-orange-600 text-white font-black text-xs shadow-md border-2 border-orange-400 transition-all";
-                    } else if (userAnswers[i] !== undefined) {
-                        navBtn.className = "w-9 h-9 rounded-lg bg-emerald-600 text-white font-bold text-xs shadow-sm transition-all";
-                    } else {
-                        navBtn.className = "w-9 h-9 rounded-lg bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 font-bold text-xs hover:border-orange-500 border transition-all";
-                    }
+            if (btnNextText) {
+                if (currentQuestionIndex === activeExamQuestions.length - 1) {
+                    btnNextText.innerText = "Finish Exam";
+                    if (btnNextIcon) btnNextIcon.className = "fa-solid fa-flag-checkered";
+                } else {
+                    btnNextText.innerText = "Next Question";
+                    if (btnNextIcon) btnNextIcon.className = "fa-solid fa-arrow-right";
                 }
             }
 
-            // Update Progress Bar
             const progressPct = ((currentQuestionIndex + 1) / activeExamQuestions.length) * 100;
-            document.getElementById('exam_progress').style.width = `${progressPct}%`;
+            const progressEl = document.getElementById('exam_progress');
+            if (progressEl) progressEl.style.width = `${progressPct}%`;
         }
 
-        function saveAnswer(choice) {
-            userAnswers[currentQuestionIndex] = choice;
+        function saveAnswer(questionId, val) {
+            userAnswers[questionId] = val;
+            renderCurrentQuestion();
+        }
+
+        function saveMatchingPairAnswer(questionId, premise, targetVal) {
+            let current = userAnswers[questionId];
+            if (typeof current !== 'object' || current === null) {
+                try { current = JSON.parse(current) || {}; } catch(e) { current = {}; }
+            }
+            current[premise] = targetVal;
+            userAnswers[questionId] = current;
             renderCurrentQuestion();
         }
 

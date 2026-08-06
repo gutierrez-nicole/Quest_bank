@@ -49,6 +49,14 @@ addColumn($pdo, 'lesson_materials', 'original_filename', "VARCHAR(255) DEFAULT N
 addColumn($pdo, 'lesson_materials', 'stored_filename', "VARCHAR(255) DEFAULT NULL");
 
 echo "\n--- exam_questions ---\n";
+try {
+    $pdo->exec("ALTER TABLE exam_questions MODIFY question_type VARCHAR(50) NOT NULL DEFAULT 'multiple_choice'");
+    $pdo->exec("UPDATE exam_questions SET question_type = 'fill_blank' WHERE question_type IN ('fill_in_the_blank', 'fill_in_blank')");
+    $pdo->exec("UPDATE exam_questions SET question_type = 'matching' WHERE question_type IN ('matching_type', 'matching_pairs')");
+    echo "  [+] Updated exam_questions.question_type to VARCHAR(50) and converted legacy aliases\n";
+} catch (Exception $e) {
+    echo "  [!] Question type migration notice: " . $e->getMessage() . "\n";
+}
 addColumn($pdo, 'exam_questions', 'points', "INT(11) NOT NULL DEFAULT 1");
 addColumn($pdo, 'exam_questions', 'formula_latex', "TEXT DEFAULT NULL");
 addColumn($pdo, 'exam_questions', 'matching_pairs', "TEXT DEFAULT NULL");

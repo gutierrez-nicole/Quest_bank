@@ -567,10 +567,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                 $seenQuestions[] = mb_strtolower($qText);
                                 $qLessonId = $validQSources[0];
 
+                                GroqService::validateQuestionItem($q);
+
+                                $qType = strtolower(trim($q['type'] ?? 'multiple_choice'));
+                                if ($qType === 'fill_in_the_blank') $qType = 'fill_blank';
+                                if ($qType === 'matching_type') $qType = 'matching';
+
                                 $qStmt->execute([
                                     $exam_id,
                                     $qText,
-                                    $q['type'] ?? 'multiple_choice',
+                                    $qType,
                                     $q['opt_a'] ?? null,
                                     $q['opt_b'] ?? null,
                                     $q['opt_c'] ?? null,
@@ -578,7 +584,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                     $q['correct'] ?? $q['correct_answer'] ?? '',
                                     $q['formula_latex'] ?? null,
                                     isset($q['matching_pairs']) ? (is_string($q['matching_pairs']) ? $q['matching_pairs'] : json_encode($q['matching_pairs'])) : null,
-                                    intval($q['points'] ?? 1),
+                                    max(1, intval($q['points'] ?? 1)),
                                     $q['explanation'] ?? null,
                                     $difficulty,
                                     $q['source_topic'] ?? $subject,
@@ -1252,6 +1258,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                 <option value="multiple_choice" <?php echo (($_POST['question_type'] ?? '') === 'multiple_choice') ? 'selected' : ''; ?>>Multiple Choice (Options A-D)</option>
                                 <option value="true_false" <?php echo (($_POST['question_type'] ?? '') === 'true_false') ? 'selected' : ''; ?>>True or False</option>
                                 <option value="identification" <?php echo (($_POST['question_type'] ?? '') === 'identification') ? 'selected' : ''; ?>>Identification</option>
+                                <option value="fill_blank" <?php echo (($_POST['question_type'] ?? '') === 'fill_blank') ? 'selected' : ''; ?>>Fill in the Blank</option>
+                                <option value="matching" <?php echo (($_POST['question_type'] ?? '') === 'matching') ? 'selected' : ''; ?>>Matching Type</option>
+                                <option value="problem_solving" <?php echo (($_POST['question_type'] ?? '') === 'problem_solving') ? 'selected' : ''; ?>>Problem Solving</option>
+                                <option value="math_formula" <?php echo (($_POST['question_type'] ?? '') === 'math_formula') ? 'selected' : ''; ?>>Math Formula</option>
                             </select>
                         </div>
 
@@ -1582,6 +1592,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                         <input type="hidden" name="questions[<?php echo $idx; ?>][source_academic_period]" value="<?php echo htmlspecialchars($itemPeriod); ?>">
                                         <input type="hidden" name="questions[<?php echo $idx; ?>][source_confidence]" value="<?php echo htmlspecialchars($itemConf); ?>">
                                          <input type="hidden" name="questions[<?php echo $idx; ?>][target_chunk_lesson_ids]" value="<?php echo htmlspecialchars(implode(",", array_map("intval", (array)($item["target_chunk_lesson_ids"] ?? [])))); ?>">
+                                         <input type="hidden" name="questions[<?php echo $idx; ?>][formula_latex]" value="<?php echo htmlspecialchars($item['formula_latex'] ?? ''); ?>">
+                                         <input type="hidden" name="questions[<?php echo $idx; ?>][matching_pairs]" value="<?php echo htmlspecialchars(is_array($item['matching_pairs'] ?? null) ? json_encode($item['matching_pairs']) : ($item['matching_pairs'] ?? '')); ?>">
 
                                         <!-- Explicit Lesson Selector for Teacher Assignment -->
                                         <div class="pt-2 border-t border-stone-100 flex items-center justify-between gap-3">
