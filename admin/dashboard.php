@@ -5,6 +5,12 @@ AuthService::enforceRole('admin');
 $pdo = getDBConnection();
 
 try {
+    require_once __DIR__ . '/../app/services/AcademicStructureService.php';
+    require_once __DIR__ . '/../app/services/AuditLogService.php';
+
+    $active_sy = AcademicStructureService::getActiveSchoolYear();
+    $active_sem = AcademicStructureService::getActiveSemester();
+
     $stmt = $pdo->prepare("SELECT fullname, username, email FROM users WHERE id = ?");
     $stmt->execute([getCurrentUserId()]);
     $admin = $stmt->fetch();

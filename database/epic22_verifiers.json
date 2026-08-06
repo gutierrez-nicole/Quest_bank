@@ -183,6 +183,15 @@
       "reason": "Validates complete Priority 3 result history, performance summaries, teacher publication workflow, leaderboards, exports, filters, and security authorization.",
       "replacement": null
     },
+    {
+      "filename": "verify_epic22_priority4.php",
+      "label": "Priority 4 Complete Academic Administration",
+      "classification": "authoritative",
+      "dependency_tier": "full",
+      "timeout": 120,
+      "reason": "Validates School Years, Semesters, Academic Calendar, Exam Scheduling with conflict detection, Teacher Subject Assignments, Bulk CSV Import/Export, System Settings, and In-App Notifications.",
+      "replacement": null
+    },
 
     {
       "filename": "verification_archive/verify_epic22_preflight_consolidation.php",

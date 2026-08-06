@@ -644,22 +644,18 @@ try {
         $student_leaderboard = [];
     }
 
-    $notifications = [];
+    require_once __DIR__ . '/../app/services/NotificationService.php';
+    require_once __DIR__ . '/../app/services/ExamSchedulingService.php';
+
+    $notifications = NotificationService::getUserNotifications($student_id, 15);
+    $unread_notif_count = NotificationService::getUnreadCount($student_id);
+
+    $student_section = $student_info['section'] ?? 'A';
+    $upcoming_schedules = [];
     try {
-        $stmt = $pdo->prepare("
-            SELECT 
-                message,
-                type,
-                created_at
-            FROM notifications
-            WHERE user_id = ?
-            ORDER BY created_at DESC
-            LIMIT 5
-        ");
-        $stmt->execute([$student_id]);
-        $notifications = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    } catch (PDOException $e) {
-        $notifications = [];
+        $upcoming_schedules = ExamSchedulingService::getUpcomingSchedulesForSection($student_section);
+    } catch (Exception $e) {
+        $upcoming_schedules = [];
     }
 
     if (empty($notifications)) {

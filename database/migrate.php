@@ -463,6 +463,130 @@ addColumn($pdo, 'ai_generation_batches', 'question_blueprint_mismatch', "TINYINT
 addColumn($pdo, 'ai_generation_batches', 'difficulty_distribution_mismatch', "TINYINT(1) DEFAULT 0");
 addColumn($pdo, 'ai_generation_batches', 'unresolved_differences', "LONGTEXT DEFAULT NULL");
 
+echo "\n--- Priority 4 Tables ---\n";
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS `school_years` (
+      `id` INT(11) AUTO_INCREMENT PRIMARY KEY,
+      `school_year` VARCHAR(20) NOT NULL UNIQUE,
+      `start_date` DATE NOT NULL,
+      `end_date` DATE NOT NULL,
+      `status` VARCHAR(20) NOT NULL DEFAULT 'inactive',
+      `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+");
+echo "  [=] Table school_years verified\n";
+
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS `semesters` (
+      `id` INT(11) AUTO_INCREMENT PRIMARY KEY,
+      `school_year_id` INT(11) NOT NULL,
+      `semester_name` VARCHAR(50) NOT NULL,
+      `status` VARCHAR(20) NOT NULL DEFAULT 'inactive',
+      `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY `unique_sy_semester` (`school_year_id`, `semester_name`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+");
+echo "  [=] Table semesters verified\n";
+
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS `academic_calendar` (
+      `id` INT(11) AUTO_INCREMENT PRIMARY KEY,
+      `event_title` VARCHAR(150) NOT NULL,
+      `event_type` VARCHAR(50) NOT NULL DEFAULT 'school_activity',
+      `start_date` DATE NOT NULL,
+      `end_date` DATE NOT NULL,
+      `description` TEXT DEFAULT NULL,
+      `created_by` INT(11) DEFAULT NULL,
+      `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+");
+echo "  [=] Table academic_calendar verified\n";
+
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS `exam_schedules` (
+      `id` INT(11) AUTO_INCREMENT PRIMARY KEY,
+      `exam_id` INT(11) NOT NULL,
+      `teacher_id` INT(11) NOT NULL,
+      `section` VARCHAR(50) NOT NULL,
+      `exam_date` DATE NOT NULL,
+      `start_time` TIME NOT NULL,
+      `end_time` TIME NOT NULL,
+      `duration_minutes` INT(11) NOT NULL DEFAULT 60,
+      `room` VARCHAR(100) DEFAULT NULL,
+      `remarks` TEXT DEFAULT NULL,
+      `semester_id` INT(11) DEFAULT NULL,
+      `status` VARCHAR(20) NOT NULL DEFAULT 'scheduled',
+      `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+");
+echo "  [=] Table exam_schedules verified\n";
+
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS `sections` (
+      `id` INT(11) AUTO_INCREMENT PRIMARY KEY,
+      `section_code` VARCHAR(50) NOT NULL UNIQUE,
+      `adviser_id` INT(11) DEFAULT NULL,
+      `capacity` INT(11) NOT NULL DEFAULT 40,
+      `status` VARCHAR(20) NOT NULL DEFAULT 'active',
+      `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+");
+addColumn($pdo, 'sections', 'section_code', "VARCHAR(50) DEFAULT NULL");
+addColumn($pdo, 'sections', 'adviser_id', "INT(11) DEFAULT NULL");
+addColumn($pdo, 'sections', 'capacity', "INT(11) NOT NULL DEFAULT 40");
+addColumn($pdo, 'sections', 'status', "VARCHAR(20) NOT NULL DEFAULT 'active'");
+echo "  [=] Table sections verified\n";
+
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS `teacher_subject_assignments` (
+      `id` INT(11) AUTO_INCREMENT PRIMARY KEY,
+      `teacher_id` INT(11) NOT NULL,
+      `subject` VARCHAR(150) NOT NULL,
+      `section_id` INT(11) NOT NULL,
+      `school_year_id` INT(11) NOT NULL,
+      `status` VARCHAR(20) NOT NULL DEFAULT 'active',
+      `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY `unique_assignment` (`teacher_id`, `subject`, `section_id`, `school_year_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+");
+echo "  [=] Table teacher_subject_assignments verified\n";
+
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS `system_settings` (
+      `setting_key` VARCHAR(100) PRIMARY KEY,
+      `setting_value` TEXT DEFAULT NULL,
+      `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+");
+echo "  [=] Table system_settings verified\n";
+
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS `notifications` (
+      `id` INT(11) AUTO_INCREMENT PRIMARY KEY,
+      `user_id` INT(11) NOT NULL,
+      `type` VARCHAR(50) NOT NULL,
+      `message` TEXT NOT NULL,
+      `is_read` TINYINT(1) NOT NULL DEFAULT 0,
+      `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+");
+echo "  [=] Table notifications verified\n";
+
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS `audit_logs` (
+      `id` INT(11) AUTO_INCREMENT PRIMARY KEY,
+      `user_id` INT(11) DEFAULT NULL,
+      `action` VARCHAR(100) NOT NULL,
+      `details` TEXT DEFAULT NULL,
+      `ip_address` VARCHAR(45) DEFAULT NULL,
+      `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+");
+addColumn($pdo, 'audit_logs', 'user_id', "INT(11) DEFAULT NULL");
+addColumn($pdo, 'audit_logs', 'details', "TEXT DEFAULT NULL");
+addColumn($pdo, 'audit_logs', 'ip_address', "VARCHAR(45) DEFAULT NULL");
+echo "  [=] Table audit_logs verified\n";
+
 
 
 $defaultPassHash = password_hash('Password123!', PASSWORD_DEFAULT);
