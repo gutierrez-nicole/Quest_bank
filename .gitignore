@@ -4,8 +4,8 @@
 !.env.example
 
 # Dependency & Vendor directories
-node_modules/
 vendor/
+node_modules/
 
 # Test & trace artifacts
 playwright-report/
@@ -15,7 +15,7 @@ coverage/
 *.webm
 
 # Database backups (keep placeholders & protection)
-database/backups/*.sql
+database/backups/*
 !database/backups/.htaccess
 !database/backups/.gitkeep
 
@@ -35,7 +35,6 @@ uploads/*
 # System, IDE & Log files
 logs/
 *.log
-*.zip
 .DS_Store
 Thumbs.db
 .idea/

@@ -1,5 +1,5 @@
 -- QuestBank Database Dump & Backup
--- Generated: 2026-08-06 07:54:24
+-- Generated: 2026-08-06 08:09:02
 -- Database: bankquest_db
 -- Application Version: v2.2-RC1
 
@@ -37,31 +37,12 @@ CREATE TABLE `activity_logs` (
   PRIMARY KEY (`id`),
   KEY `idx_activity_user` (`user_id`),
   CONSTRAINT `fk_activity_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=1363 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- Dumping data for `activity_logs`
 
 INSERT INTO `activity_logs` (`id`, `user_id`, `action_description`, `created_at`) VALUES 
-('1343', '10', 'Workflow Transition: Submission #1298 moved from \'finalized\' to \'published\' by User #10 (teacher). Remarks: \'Single publication test\'', '2026-08-06 14:34:20'),
-('1344', '10', 'Workflow Transition: Submission #1299 moved from \'finalized\' to \'published\' by User #10 (teacher). Remarks: \'Bulk publication test\'', '2026-08-06 14:34:20'),
-('1345', '10', 'Workflow Transition: Submission #1302 moved from \'finalized\' to \'published\' by User #10 (teacher). Remarks: \'Exam wide publication test\'', '2026-08-06 14:34:20'),
-('1346', '10', 'Workflow Transition: Submission #1303 moved from \'finalized\' to \'published\' by User #10 (teacher). Remarks: \'Exam wide publication test\'', '2026-08-06 14:34:20'),
-('1347', '10', 'Scheduled Exam #1352 (\'Teacher Owned Exam 1\') for Section CE-P4-SEC-3BD1 on 2025-07-01 10:00:00-11:30:00; Exam Owner ID: 10', '2026-08-06 14:34:20'),
-('1348', '44', 'Scheduled Exam #1353 (\'Unowned Exam 2\') for Section CE-P4-SEC-3BD1 on 2025-07-01 14:45:00-16:00:00; Exam Owner ID: 12', '2026-08-06 14:34:20'),
-('1349', '10', 'Workflow Transition: Submission #1311 moved from \'reviewed\' to \'finalized\' by User #10 (teacher). Remarks: \'Finalization test\'', '2026-08-06 15:40:03'),
-('1350', '10', 'Workflow Transition: Submission #1311 moved from \'finalized\' to \'published\' by User #10 (teacher). Remarks: \'Single publication test\'', '2026-08-06 15:40:03'),
-('1351', '10', 'Workflow Transition: Submission #1312 moved from \'finalized\' to \'published\' by User #10 (teacher). Remarks: \'Bulk publication test\'', '2026-08-06 15:40:03'),
-('1352', '10', 'Workflow Transition: Submission #1315 moved from \'finalized\' to \'published\' by User #10 (teacher). Remarks: \'Exam wide publication test\'', '2026-08-06 15:40:03'),
-('1353', '10', 'Workflow Transition: Submission #1316 moved from \'finalized\' to \'published\' by User #10 (teacher). Remarks: \'Exam wide publication test\'', '2026-08-06 15:40:03'),
-('1354', '10', 'Scheduled Exam #1371 (\'Teacher Owned Exam 1\') for Section CE-P4-SEC-1F9A on 2025-07-01 10:00:00-11:30:00; Exam Owner ID: 10', '2026-08-06 15:40:03'),
-('1355', '44', 'Scheduled Exam #1372 (\'Unowned Exam 2\') for Section CE-P4-SEC-1F9A on 2025-07-01 14:45:00-16:00:00; Exam Owner ID: 12', '2026-08-06 15:40:03'),
-('1356', '10', 'Workflow Transition: Submission #1324 moved from \'reviewed\' to \'finalized\' by User #10 (teacher). Remarks: \'Finalization test\'', '2026-08-06 15:40:30'),
-('1357', '10', 'Workflow Transition: Submission #1324 moved from \'finalized\' to \'published\' by User #10 (teacher). Remarks: \'Single publication test\'', '2026-08-06 15:40:30'),
-('1358', '10', 'Workflow Transition: Submission #1325 moved from \'finalized\' to \'published\' by User #10 (teacher). Remarks: \'Bulk publication test\'', '2026-08-06 15:40:30'),
-('1359', '10', 'Workflow Transition: Submission #1328 moved from \'finalized\' to \'published\' by User #10 (teacher). Remarks: \'Exam wide publication test\'', '2026-08-06 15:40:30'),
-('1360', '10', 'Workflow Transition: Submission #1329 moved from \'finalized\' to \'published\' by User #10 (teacher). Remarks: \'Exam wide publication test\'', '2026-08-06 15:40:30'),
-('1361', '10', 'Scheduled Exam #1390 (\'Teacher Owned Exam 1\') for Section CE-P4-SEC-CF4A on 2025-07-01 10:00:00-11:30:00; Exam Owner ID: 10', '2026-08-06 15:40:30'),
-('1362', '44', 'Scheduled Exam #1391 (\'Unowned Exam 2\') for Section CE-P4-SEC-CF4A on 2025-07-01 14:45:00-16:00:00; Exam Owner ID: 12', '2026-08-06 15:40:30');
+('1', '10', 'Published exam #10 results for Structural Engineering', '2026-08-06 16:08:56');
 
 -- --------------------------------------------------------
 -- Table structure for `ai_generation_batches`
@@ -139,7 +120,7 @@ CREATE TABLE `ai_generation_batches` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_batch_id` (`generation_batch_id`),
   KEY `teacher_id` (`teacher_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=1456 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
 -- Table structure for `audit_logs`
@@ -163,31 +144,12 @@ CREATE TABLE `audit_logs` (
   KEY `idx_audit_actor` (`actor_id`),
   KEY `idx_audit_entity` (`entity_type`,`entity_id`),
   CONSTRAINT `fk_audit_actor` FOREIGN KEY (`actor_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=100 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- Dumping data for `audit_logs`
 
 INSERT INTO `audit_logs` (`id`, `actor_id`, `action`, `entity_type`, `entity_id`, `old_values`, `new_values`, `reason`, `created_at`, `user_id`, `details`, `ip_address`) VALUES 
-('80', '44', 'Deleted Database Backup', 'system', '0', NULL, NULL, NULL, '2026-08-06 14:34:21', '44', 'Deleted backup: qb_safety_backup_2026-08-06_063421_93e5fe.sql', '127.0.0.1'),
-('81', NULL, 'Created Database Backup', 'system', '0', NULL, NULL, NULL, '2026-08-06 15:39:08', NULL, 'File: qb_backup_2026-08-06_073908_d57169.sql, SHA-256: 1d9237723a7eac169d5795015f566530a014bf8f7f88837da59b35bcbe041783, Size: 181.89 KB', '127.0.0.1'),
-('82', NULL, 'Bulk Import Completed', 'system', '0', NULL, NULL, NULL, '2026-08-06 15:40:03', NULL, 'Type: subjects, Imported: 1 rows, Skipped Invalid: 1', '127.0.0.1'),
-('83', NULL, 'Bulk Import Completed', 'system', '0', NULL, NULL, NULL, '2026-08-06 15:40:03', NULL, 'Type: students, Imported: 1 rows, Skipped Invalid: 0', '127.0.0.1'),
-('84', '44', 'Terminated Active Session', 'system', '0', NULL, NULL, NULL, '2026-08-06 15:40:03', '44', 'Session ID/DB ID: test_sess_eeb8ca651274c648', '127.0.0.1'),
-('85', '44', 'Deleted Orphaned Files', 'system', '0', NULL, NULL, NULL, '2026-08-06 15:40:04', '44', 'Requested: 1, Deleted: 1, Rejected: 0, Freed: 15 B', '127.0.0.1'),
-('86', '44', 'Restored Database Backup', 'system', '0', NULL, NULL, NULL, '2026-08-06 15:40:04', '44', 'Source File: qb_backup_2026-08-06_074004_3d085f.sql, SHA-256: 0161f9f9d3adc710ab45fd912a397b2662b15cedf8c28186834f69ccbff9262b, Safety Backup: qb_safety_backup_2026-08-06_074004_fc4065.sql', '127.0.0.1'),
-('87', NULL, 'CLI Test Action Invalid Actor', 'system', '0', NULL, NULL, NULL, '2026-08-06 15:40:04', NULL, 'Details test', '127.0.0.1'),
-('88', NULL, 'System Automated Task', 'system', '0', NULL, NULL, NULL, '2026-08-06 15:40:04', NULL, 'No actor test', '127.0.0.1'),
-('89', '44', 'Deleted Database Backup', 'system', '0', NULL, NULL, NULL, '2026-08-06 15:40:04', '44', 'Deleted backup: qb_backup_2026-08-06_074004_3d085f.sql', '127.0.0.1'),
-('90', '44', 'Deleted Database Backup', 'system', '0', NULL, NULL, NULL, '2026-08-06 15:40:04', '44', 'Deleted backup: qb_safety_backup_2026-08-06_074004_fc4065.sql', '127.0.0.1'),
-('91', NULL, 'Bulk Import Completed', 'system', '0', NULL, NULL, NULL, '2026-08-06 15:40:30', NULL, 'Type: subjects, Imported: 1 rows, Skipped Invalid: 1', '127.0.0.1'),
-('92', NULL, 'Bulk Import Completed', 'system', '0', NULL, NULL, NULL, '2026-08-06 15:40:30', NULL, 'Type: students, Imported: 1 rows, Skipped Invalid: 0', '127.0.0.1'),
-('93', '44', 'Terminated Active Session', 'system', '0', NULL, NULL, NULL, '2026-08-06 15:40:30', '44', 'Session ID/DB ID: test_sess_3c14d68d5545f630', '127.0.0.1'),
-('94', '44', 'Deleted Orphaned Files', 'system', '0', NULL, NULL, NULL, '2026-08-06 15:40:31', '44', 'Requested: 1, Deleted: 1, Rejected: 0, Freed: 15 B', '127.0.0.1'),
-('95', '44', 'Restored Database Backup', 'system', '0', NULL, NULL, NULL, '2026-08-06 15:40:31', '44', 'Source File: qb_backup_2026-08-06_074031_67866d.sql, SHA-256: 992b5cc87dd3094ebe8973429f673a69771c6e94985fa37de83cce4665de019f, Safety Backup: qb_safety_backup_2026-08-06_074031_fe479f.sql', '127.0.0.1'),
-('96', NULL, 'CLI Test Action Invalid Actor', 'system', '0', NULL, NULL, NULL, '2026-08-06 15:40:31', NULL, 'Details test', '127.0.0.1'),
-('97', NULL, 'System Automated Task', 'system', '0', NULL, NULL, NULL, '2026-08-06 15:40:31', NULL, 'No actor test', '127.0.0.1'),
-('98', '44', 'Deleted Database Backup', 'system', '0', NULL, NULL, NULL, '2026-08-06 15:40:31', '44', 'Deleted backup: qb_backup_2026-08-06_074031_67866d.sql', '127.0.0.1'),
-('99', '44', 'Deleted Database Backup', 'system', '0', NULL, NULL, NULL, '2026-08-06 15:40:31', '44', 'Deleted backup: qb_safety_backup_2026-08-06_074031_fe479f.sql', '127.0.0.1');
+('1', '10', 'EXAM_PUBLISHED', 'exam', '10', NULL, NULL, NULL, '2026-08-06 16:08:56', '10', 'Published exam results for Ashley Nicole Gutierrez', NULL);
 
 -- --------------------------------------------------------
 -- Table structure for `department_objectives`
@@ -223,14 +185,12 @@ CREATE TABLE `departments` (
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `idx_dept_code` (`dept_code`)
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Dumping data for `departments`
 
 INSERT INTO `departments` (`id`, `dept_code`, `dept_name`, `programs`, `faculty_head`, `created_at`) VALUES 
-('1', 'DCE', 'Department of Civil Engineering', 'BSCE (Structural, Geotechnical, Water Res., Transportation, Construction)', 'Prof. Jolas Santos', '2026-07-29 13:51:07'),
-('2', 'DCS', 'Department of Computer Studies', 'BSCS, BSIT, BSIS', 'Engr. Nicole Gutierrez', '2026-07-29 13:51:07'),
-('3', 'DOE', 'Department of Education & Technical Training', 'BSEd Major in Technical Education', 'Dr. Kevin Dizon', '2026-07-29 13:51:07');
+('1', 'COE', 'College of Engineering', 'BSCE', 'Prof. Russel Gregorio', '2026-08-06 16:08:56');
 
 -- --------------------------------------------------------
 -- Table structure for `exam_assignments`
@@ -289,7 +249,7 @@ CREATE TABLE `exam_questions` (
   PRIMARY KEY (`id`),
   KEY `idx_questions_exam` (`exam_id`),
   CONSTRAINT `fk_questions_exam` FOREIGN KEY (`exam_id`) REFERENCES `exams` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=2019 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=120 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- Dumping data for `exam_questions`
 
@@ -318,7 +278,7 @@ CREATE TABLE `exam_schedules` (
   `status` varchar(20) NOT NULL DEFAULT 'scheduled',
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=39 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
 -- Table structure for `exam_submissions`
@@ -376,14 +336,14 @@ CREATE TABLE `exam_submissions` (
   CONSTRAINT `fk_submissions_exam` FOREIGN KEY (`exam_id`) REFERENCES `exams` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_submissions_student` FOREIGN KEY (`student_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
   CONSTRAINT `fk_submissions_teacher` FOREIGN KEY (`teacher_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=1335 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=600 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- Dumping data for `exam_submissions`
 
 INSERT INTO `exam_submissions` (`id`, `teacher_id`, `student_id`, `exam_id`, `student_name`, `exam_title`, `upload_type`, `correct_count`, `wrong_count`, `total_score`, `total_possible_score`, `total_items`, `percentage`, `status`, `raw_ocr_data`, `ocr_text`, `ocr_confidence`, `ocr_status`, `ocr_error`, `suggested_manual_review`, `page_count`, `evaluation_result`, `teacher_override_log`, `review_status`, `reviewed_by`, `teacher_remarks`, `reviewed_at`, `published_at`, `created_at`, `file_path`, `original_filename`, `uploaded_file_hash`, `original_ocr_text`, `corrected_ocr_text`, `processed_at`, `extraction_mode`, `per_page_ocr_metadata`, `processing_duration`, `is_demo`, `qualification_status`, `attempt_number`) VALUES 
-('500', '12', '11', '10', 'Ashley Nicole Gutierrez', 'Civil Engineering Board Exam Review - Structural Design & Construction', 'online', '3', '0', '3.00', '3.00', '3', '100.00', 'Pass', NULL, NULL, '0.00', 'completed', NULL, '0', '1', NULL, NULL, 'published', NULL, NULL, NULL, '2026-08-04 15:05:59', '2026-08-04 15:05:59', NULL, NULL, NULL, NULL, NULL, NULL, 'image_ocr', NULL, '0.00', '1', 'pending', '1'),
-('501', '12', '20', '10', 'John Mark Santos', 'Civil Engineering Board Exam Review - Structural Design & Construction', 'scanned', '2', '1', '2.00', '3.00', '3', '66.67', 'Fail', NULL, NULL, '0.00', 'completed', NULL, '0', '1', NULL, NULL, 'pending_review', NULL, NULL, NULL, NULL, '2026-08-04 15:05:59', NULL, NULL, NULL, NULL, NULL, NULL, 'image_ocr', NULL, '0.00', '1', 'pending', '1'),
-('502', '12', '26', '11', 'P4 Test Student', 'Civil Engineering Comprehensive Qualifying Exam', 'online', '3', '0', '3.00', '3.00', '3', '100.00', 'Pass', NULL, NULL, '0.00', 'completed', NULL, '0', '1', NULL, NULL, 'finalized', NULL, NULL, NULL, NULL, '2026-08-06 15:54:18', NULL, NULL, NULL, NULL, NULL, NULL, 'image_ocr', NULL, '0.00', '1', 'pending', '1');
+('500', '10', '11', '10', 'Ashley Nicole Gutierrez', 'Civil Engineering Board Exam Review - Structural Design & Construction', 'online', '3', '0', '3.00', '3.00', '3', '100.00', 'Pass', NULL, NULL, '0.00', 'completed', NULL, '0', '1', NULL, NULL, 'published', NULL, NULL, NULL, '2026-08-06 16:08:56', '2026-08-06 16:08:56', NULL, NULL, NULL, NULL, NULL, NULL, 'image_ocr', NULL, '0.00', '1', 'pending', '1'),
+('501', '10', '20', '10', 'John Mark Santos', 'Civil Engineering Board Exam Review - Structural Design & Construction', 'scanned', '2', '1', '2.00', '3.00', '3', '66.67', 'Fail', NULL, NULL, '0.00', 'completed', NULL, '0', '1', NULL, NULL, 'pending_review', NULL, NULL, NULL, NULL, '2026-08-06 16:08:56', NULL, NULL, NULL, NULL, NULL, NULL, 'image_ocr', NULL, '0.00', '1', 'pending', '1'),
+('502', '10', '21', '11', 'Maria Angelica Reyes', 'Civil Engineering Comprehensive Qualifying Exam', 'online', '3', '0', '3.00', '3.00', '3', '100.00', 'Pass', NULL, NULL, '0.00', 'completed', NULL, '0', '1', NULL, NULL, 'finalized', NULL, NULL, NULL, NULL, '2026-08-06 16:08:56', NULL, NULL, NULL, NULL, NULL, NULL, 'image_ocr', NULL, '0.00', '1', 'pending', '1');
 
 -- --------------------------------------------------------
 -- Table structure for `exams`
@@ -431,13 +391,13 @@ CREATE TABLE `exams` (
   KEY `idx_exams_teacher` (`teacher_id`),
   KEY `idx_exams_status` (`status`),
   CONSTRAINT `fk_exams_teacher` FOREIGN KEY (`teacher_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=1392 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=20 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- Dumping data for `exams`
 
 INSERT INTO `exams` (`id`, `teacher_id`, `title`, `subject`, `specialization`, `term`, `difficulty`, `time_limit`, `total_items`, `passing_percentage`, `status`, `available_from`, `available_until`, `max_attempts`, `created_at`, `updated_at`, `ai_metadata`, `lesson_ids`, `generation_status`, `generation_error`, `prompt_version`, `ai_model`, `created_by`, `is_demo`, `exam_category`, `qualifying_passing_percentage`, `qualifying_max_attempts`, `qualifying_year_level`, `qualifying_program`, `qualifying_is_required`, `qualifying_unlock_date`, `qualifying_deadline`, `covered_periods`, `source_lesson_count`, `generation_source_type`, `generation_batch_id`) VALUES 
-('10', '12', 'Civil Engineering Board Exam Review - Structural Design & Construction', 'Structural Engineering', 'Structural Engineering', 'Prelim', 'medium', '60', '3', '75.00', 'active', NULL, NULL, '1', '2026-08-04 15:05:59', NULL, NULL, NULL, 'completed', NULL, 'v1.0', NULL, '12', '1', 'regular', '75.00', '1', 'All Year Levels', 'All Programs', '1', NULL, NULL, NULL, '0', NULL, NULL),
-('11', '12', 'Civil Engineering Comprehensive Qualifying Exam', 'Structural Engineering', 'Structural Engineering', 'Prelim', 'hard', '120', '3', '75.00', 'active', NULL, NULL, '1', '2026-08-06 15:54:18', NULL, NULL, NULL, 'completed', NULL, 'v1.0', NULL, '12', '1', 'qualifying', '75.00', '1', 'All Year Levels', 'All Programs', '1', NULL, NULL, NULL, '0', NULL, NULL);
+('10', '10', 'Civil Engineering Board Exam Review - Structural Design & Construction', 'Structural Engineering', 'Structural Engineering', 'Prelim', 'medium', '60', '3', '75.00', 'active', NULL, NULL, '1', '2026-08-06 16:08:56', NULL, NULL, NULL, 'completed', NULL, 'v1.0', NULL, '10', '1', 'regular', '75.00', '1', 'All Year Levels', 'All Programs', '1', NULL, NULL, NULL, '0', NULL, NULL),
+('11', '10', 'Civil Engineering Comprehensive Qualifying Exam', 'Structural Engineering', 'Structural Engineering', 'Prelim', 'hard', '120', '3', '75.00', 'active', NULL, NULL, '1', '2026-08-06 16:08:56', NULL, NULL, NULL, 'completed', NULL, 'v1.0', NULL, '10', '1', 'qualifying', '75.00', '1', 'All Year Levels', 'All Programs', '1', NULL, NULL, NULL, '0', NULL, NULL);
 
 -- --------------------------------------------------------
 -- Table structure for `generated_question_sources`
@@ -460,7 +420,7 @@ CREATE TABLE `generated_question_sources` (
   UNIQUE KEY `uq_question_lesson` (`question_id`,`lesson_id`),
   KEY `question_id` (`question_id`),
   KEY `lesson_id` (`lesson_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=743 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
 -- Table structure for `iso_evaluations`
@@ -517,17 +477,12 @@ CREATE TABLE `lesson_materials` (
   PRIMARY KEY (`id`),
   KEY `idx_lessons_teacher` (`teacher_id`),
   CONSTRAINT `fk_lessons_teacher` FOREIGN KEY (`teacher_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=3877 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=20 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- Dumping data for `lesson_materials`
 
 INSERT INTO `lesson_materials` (`id`, `teacher_id`, `subject`, `title`, `file_name`, `file_path`, `file_type`, `file_size`, `lesson_text`, `processing_status`, `processing_error`, `word_count`, `page_count`, `extracted_at`, `created_at`, `mime_type`, `original_filename`, `stored_filename`, `is_demo`, `academic_period`, `semester`, `school_year`, `year_level`, `program`) VALUES 
-('10', '12', 'Structural Engineering', 'Structural Steel & Reinforced Concrete Design Fundamentals', 'demo_structural_steel.txt', 'teacher/uploads/demo_structural_steel.txt', 'txt', '1024', 'Reinforced concrete flexural design relies on ultimate limit state analysis and steel tensile reinforcement capacity.', 'completed', NULL, '150', '1', NULL, '2026-08-04 15:05:59', NULL, 'demo_structural_steel.txt', 'demo_structural_steel.txt', '1', 'general', NULL, NULL, NULL, NULL),
-('1319', '12', 'Soil Mechanics', 'Security Test Lesson A', 'sec_a.pdf', 'uploads/sec_a.pdf', 'pdf', '2048', 'Lecture content A', 'completed', NULL, '0', '1', NULL, '2026-08-04 21:56:33', NULL, NULL, NULL, '0', 'prelim', '1st Semester', '2025-2026', '4th Year', 'BSCE'),
-('1543', '10', 'Soil Mechanics', 'E2E General Soil Mechanics Chapter', 'e2e_general.pdf', 'uploads/e2e_general.pdf', 'pdf', '2048', 'Comprehensive lecture content covering soil mechanics, effective stress, shear strength, and foundation design for General exam preparation.', 'completed', NULL, '0', '1', NULL, '2026-08-05 00:10:56', NULL, NULL, NULL, '0', 'general', '1st Semester', '2025-2026', '4th Year', 'BSCE'),
-('1544', '10', 'Soil Mechanics', 'E2E Prelim Soil Mechanics Chapter', 'e2e_prelim.pdf', 'uploads/e2e_prelim.pdf', 'pdf', '2048', 'Comprehensive lecture content covering soil mechanics, effective stress, shear strength, and foundation design for Prelim exam preparation.', 'completed', NULL, '0', '1', NULL, '2026-08-05 00:10:56', NULL, NULL, NULL, '0', 'prelim', '1st Semester', '2025-2026', '4th Year', 'BSCE'),
-('1545', '10', 'Soil Mechanics', 'E2E Midterm Soil Mechanics Chapter', 'e2e_midterm.pdf', 'uploads/e2e_midterm.pdf', 'pdf', '2048', 'Comprehensive lecture content covering soil mechanics, effective stress, shear strength, and foundation design for Midterm exam preparation.', 'completed', NULL, '0', '1', NULL, '2026-08-05 00:10:56', NULL, NULL, NULL, '0', 'midterm', '1st Semester', '2025-2026', '4th Year', 'BSCE'),
-('1546', '10', 'Soil Mechanics', 'E2E Finals Soil Mechanics Chapter', 'e2e_finals.pdf', 'uploads/e2e_finals.pdf', 'pdf', '2048', 'Comprehensive lecture content covering soil mechanics, effective stress, shear strength, and foundation design for Finals exam preparation.', 'completed', NULL, '0', '1', NULL, '2026-08-05 00:10:56', NULL, NULL, NULL, '0', 'finals', '1st Semester', '2025-2026', '4th Year', 'BSCE');
+('10', '10', 'Structural Engineering', 'Structural Steel & Reinforced Concrete Design Fundamentals', 'demo_structural_steel.txt', 'teacher/uploads/demo_structural_steel.txt', 'txt', '1024', 'Reinforced concrete flexural design relies on ultimate limit state analysis and steel tensile reinforcement capacity.', 'completed', NULL, '150', '1', NULL, '2026-08-06 16:08:56', NULL, 'demo_structural_steel.txt', 'demo_structural_steel.txt', '1', 'general', NULL, NULL, NULL, NULL);
 
 -- --------------------------------------------------------
 -- Table structure for `notifications`
@@ -542,7 +497,7 @@ CREATE TABLE `notifications` (
   `is_read` tinyint(1) NOT NULL DEFAULT '0',
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=17 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
 -- Table structure for `school_years`
@@ -558,12 +513,12 @@ CREATE TABLE `school_years` (
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `school_year` (`school_year`)
-) ENGINE=InnoDB AUTO_INCREMENT=68 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Dumping data for `school_years`
 
 INSERT INTO `school_years` (`id`, `school_year`, `start_date`, `end_date`, `status`, `created_at`) VALUES 
-('59', '2025-2026', '2025-06-01', '2026-05-31', 'active', '2026-08-06 14:26:02');
+('1', '2025-2026', '2025-06-01', '2026-05-31', 'active', '2026-08-06 16:08:56');
 
 -- --------------------------------------------------------
 -- Table structure for `sections`
@@ -587,12 +542,12 @@ CREATE TABLE `sections` (
   PRIMARY KEY (`id`),
   KEY `idx_sections_teacher` (`teacher_id`),
   CONSTRAINT `fk_sections_teacher` FOREIGN KEY (`teacher_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=22 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- Dumping data for `sections`
 
 INSERT INTO `sections` (`id`, `teacher_id`, `section_name`, `course_name`, `academic_year`, `created_at`, `updated_at`, `section_code`, `adviser_id`, `capacity`, `status`, `course`, `school_year_id`) VALUES 
-('3', '10', 'CE-TEST-SEC', 'BSCE', '2025-2026', '2026-08-06 13:43:18', NULL, 'CE-TEST-SEC', '10', '35', 'active', NULL, NULL);
+('1', NULL, 'Section 4A', 'BSCE', '2025-2026', '2026-08-06 16:08:56', NULL, 'BSCE-4A', NULL, '40', 'active', 'BSCE', '1');
 
 -- --------------------------------------------------------
 -- Table structure for `semesters`
@@ -607,12 +562,12 @@ CREATE TABLE `semesters` (
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_sy_semester` (`school_year_id`,`semester_name`)
-) ENGINE=InnoDB AUTO_INCREMENT=53 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Dumping data for `semesters`
 
 INSERT INTO `semesters` (`id`, `school_year_id`, `semester_name`, `status`, `created_at`) VALUES 
-('44', '59', 'First Semester', 'active', '2026-08-06 14:26:02');
+('1', '1', 'First Semester', 'active', '2026-08-06 16:08:56');
 
 -- --------------------------------------------------------
 -- Table structure for `student_details`
@@ -630,17 +585,14 @@ CREATE TABLE `student_details` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `idx_student_details_user` (`user_id`),
   CONSTRAINT `fk_student_details_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=288 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=30 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- Dumping data for `student_details`
 
 INSERT INTO `student_details` (`id`, `user_id`, `student_number`, `course`, `section`, `created_at`, `year_level`) VALUES 
-('3', '11', '23-2149184', 'BSCE', 'A', '2026-08-02 18:29:22', '4'),
-('188', '20', '23-2149800', 'BSCE', 'Section A', '2026-08-04 15:05:59', '4th Year'),
-('263', '26', '23-1785995039280', 'BSCE', 'CE-4A', '2026-08-06 13:44:00', '3rd Year'),
-('264', '27', '23-1785995045844', 'BSCE', 'CE-4A', '2026-08-06 13:44:05', '3rd Year'),
-('265', '28', '23-1785995051489', 'BSCE', 'CE-4A', '2026-08-06 13:44:11', '3rd Year'),
-('266', '29', '23-1785995067660', 'BSCE', 'CE-4A', '2026-08-06 13:44:28', '3rd Year');
+('1', '11', '23-2149184', 'BSCE', 'Section A', '2026-08-06 16:08:56', '4'),
+('2', '20', '23-2149800', 'BSCE', 'Section A', '2026-08-06 16:08:56', '4'),
+('3', '21', '23-2149805', 'BSCE', 'Section B', '2026-08-06 16:08:56', '4');
 
 -- --------------------------------------------------------
 -- Table structure for `student_requests`
@@ -695,13 +647,13 @@ CREATE TABLE `subjects` (
   `title` varchar(255) NOT NULL,
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=17 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Dumping data for `subjects`
 
 INSERT INTO `subjects` (`id`, `code`, `title`, `created_at`) VALUES 
-('1', 'CE-401', 'Structural Engineering', '2026-08-04 11:31:11'),
-('2', 'CE-402', 'Geotechnical Engineering & Foundation Design', '2026-08-04 15:05:59');
+('1', 'CE-401', 'Structural Engineering', '2026-08-06 16:08:56'),
+('2', 'CE-402', 'Geotechnical Engineering & Foundation Design', '2026-08-06 16:08:56');
 
 -- --------------------------------------------------------
 -- Table structure for `submission_answers`
@@ -732,17 +684,17 @@ CREATE TABLE `submission_answers` (
   KEY `fk_sub_answers_question` (`question_id`),
   CONSTRAINT `fk_sub_answers_question` FOREIGN KEY (`question_id`) REFERENCES `exam_questions` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_sub_answers_submission` FOREIGN KEY (`submission_id`) REFERENCES `exam_submissions` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=3875 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=1000 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- Dumping data for `submission_answers`
 
 INSERT INTO `submission_answers` (`id`, `submission_id`, `question_id`, `student_answer`, `is_correct`, `points_awarded`, `points_possible`, `feedback`, `created_at`, `exam_id`, `student_id`, `correct_answer`, `awarded_points`, `max_points`, `evaluation_status`, `evaluation_reason`, `confidence`, `requires_review`) VALUES 
-('3375', '500', '101', '75 mm', '0', '0.00', '1.00', NULL, '2026-08-04 15:05:59', '10', '11', '75 mm', '1.00', '1.00', 'correct', NULL, '100.00', '0'),
-('3376', '500', '102', 'true', '0', '0.00', '1.00', NULL, '2026-08-04 15:05:59', '10', '11', 'true', '1.00', '1.00', 'correct', NULL, '100.00', '0'),
-('3377', '500', '103', '88.36 kN', '0', '0.00', '1.00', NULL, '2026-08-04 15:05:59', '10', '11', '88.36 kN', '1.00', '1.00', 'correct', NULL, '100.00', '0'),
-('3378', '501', '101', '75 mm', '0', '0.00', '1.00', NULL, '2026-08-04 15:05:59', '10', '20', '75 mm', '1.00', '1.00', 'correct', NULL, '100.00', '0'),
-('3379', '501', '102', 'true', '0', '0.00', '1.00', NULL, '2026-08-04 15:05:59', '10', '20', 'true', '1.00', '1.00', 'correct', NULL, '100.00', '0'),
-('3380', '501', '103', '95.20 kN', '0', '0.00', '1.00', NULL, '2026-08-04 15:05:59', '10', '20', '88.36 kN', '0.00', '1.00', 'incorrect', NULL, '100.00', '0');
+('1', '500', '101', '75 mm', '0', '0.00', '1.00', NULL, '2026-08-06 16:08:56', '10', '11', '75 mm', '1.00', '1.00', 'correct', NULL, '100.00', '0'),
+('2', '500', '102', 'true', '0', '0.00', '1.00', NULL, '2026-08-06 16:08:56', '10', '11', 'true', '1.00', '1.00', 'correct', NULL, '100.00', '0'),
+('3', '500', '103', '88.36 kN', '0', '0.00', '1.00', NULL, '2026-08-06 16:08:56', '10', '11', '88.36 kN', '1.00', '1.00', 'correct', NULL, '100.00', '0'),
+('4', '501', '101', '75 mm', '0', '0.00', '1.00', NULL, '2026-08-06 16:08:56', '10', '20', '75 mm', '1.00', '1.00', 'correct', NULL, '100.00', '0'),
+('5', '501', '102', 'true', '0', '0.00', '1.00', NULL, '2026-08-06 16:08:56', '10', '20', 'true', '1.00', '1.00', 'correct', NULL, '100.00', '0'),
+('6', '501', '103', '95.20 kN', '0', '0.00', '1.00', NULL, '2026-08-06 16:08:56', '10', '20', '88.36 kN', '0.00', '1.00', 'incorrect', NULL, '100.00', '0');
 
 -- --------------------------------------------------------
 -- Table structure for `submission_reprocessing_history`
@@ -763,7 +715,7 @@ CREATE TABLE `submission_reprocessing_history` (
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `submission_id` (`submission_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=29 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
 -- Table structure for `submission_score_overrides`
@@ -790,7 +742,7 @@ CREATE TABLE `submission_score_overrides` (
   KEY `idx_overrides_reviewer` (`reviewer_id`),
   CONSTRAINT `fk_overrides_reviewer` FOREIGN KEY (`reviewer_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_overrides_submission` FOREIGN KEY (`submission_id`) REFERENCES `exam_submissions` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=78 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
 -- Table structure for `submission_snapshots`
@@ -817,7 +769,7 @@ CREATE TABLE `submission_snapshots` (
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `submission_id` (`submission_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=28 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
 -- Table structure for `submission_status_history`
@@ -834,7 +786,7 @@ CREATE TABLE `submission_status_history` (
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `submission_id` (`submission_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=124 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
 -- Table structure for `system_settings`
@@ -851,7 +803,7 @@ CREATE TABLE `system_settings` (
 -- Dumping data for `system_settings`
 
 INSERT INTO `system_settings` (`setting_key`, `setting_value`, `updated_at`) VALUES 
-('maintenance_mode', 'off', '2026-08-06 15:40:31'),
+('maintenance_mode', 'off', '2026-08-06 15:55:03'),
 ('passing_percentage', '82.50', '2026-08-06 13:43:31');
 
 -- --------------------------------------------------------
@@ -869,19 +821,13 @@ CREATE TABLE `teacher_subject_assignments` (
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_assignment` (`teacher_id`,`subject`,`section_id`,`school_year_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=27 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Dumping data for `teacher_subject_assignments`
 
 INSERT INTO `teacher_subject_assignments` (`id`, `teacher_id`, `subject`, `section_id`, `school_year_id`, `status`, `created_at`) VALUES 
-('1', '10', 'Geotechnical Engineering', '3', '10', 'active', '2026-08-06 13:43:18'),
-('2', '10', 'Geotechnical Engineering', '3', '12', 'active', '2026-08-06 13:43:31'),
-('3', '10', 'Geotechnical Engineering', '3', '14', 'active', '2026-08-06 13:43:40'),
-('4', '10', 'Geotechnical Engineering', '3', '16', 'active', '2026-08-06 13:43:53'),
-('5', '10', 'Geotechnical Engineering', '3', '18', 'active', '2026-08-06 13:43:59'),
-('6', '10', 'Geotechnical Engineering', '3', '20', 'active', '2026-08-06 13:44:05'),
-('7', '10', 'Geotechnical Engineering', '3', '22', 'active', '2026-08-06 13:44:11'),
-('8', '10', 'Geotechnical Engineering', '3', '24', 'active', '2026-08-06 13:44:27');
+('1', '10', 'Structural Engineering', '1', '1', 'active', '2026-08-06 16:08:56'),
+('2', '12', 'Geotechnical Engineering & Foundation Design', '1', '1', 'active', '2026-08-06 16:08:56');
 
 -- --------------------------------------------------------
 -- Table structure for `used_confirmation_tokens`
@@ -915,13 +861,7 @@ CREATE TABLE `user_sessions` (
   UNIQUE KEY `idx_session_id` (`session_id`),
   KEY `idx_user_id` (`user_id`),
   CONSTRAINT `fk_user_sessions_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
--- Dumping data for `user_sessions`
-
-INSERT INTO `user_sessions` (`id`, `session_id`, `user_id`, `ip_address`, `user_agent`, `login_time`, `last_activity`, `status`) VALUES 
-('1', '0283b001dc7c336958a98d8e53f5cdec', '44', '127.0.0.1', 'Unknown Browser', '2026-08-06 14:19:12', '2026-08-06 14:19:12', 'terminated'),
-('2', '989de34236785d2198c54fa02ae2591f', '44', '127.0.0.1', 'Unknown Browser', '2026-08-06 14:19:31', '2026-08-06 14:19:31', 'terminated');
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------
 -- Table structure for `users`
@@ -945,22 +885,17 @@ CREATE TABLE `users` (
   UNIQUE KEY `idx_users_username` (`username`),
   UNIQUE KEY `idx_users_email` (`email`),
   KEY `idx_users_role` (`role`)
-) ENGINE=InnoDB AUTO_INCREMENT=58 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=30 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- Dumping data for `users`
 
 INSERT INTO `users` (`id`, `fullname`, `username`, `email`, `password`, `role`, `created_at`, `updated_at`, `status`, `is_demo`, `force_password_reset`, `password_changed_at`) VALUES 
-('10', 'Russel Gregorio', 'Russel', 'russel@questbank.edu.ph', '$2y$12$/wyD1Ne51GtCanrHcZ11VOvcGSRlJPuKHgF.iOpcNZGaxNEdgzls2', 'teacher', '2026-08-02 18:29:22', '2026-08-06 15:40:29', 'active', '0', '0', NULL),
-('11', 'Ashley Nicole Gutierrez', 'Nicole', 'nikol@gmail.com', '$2y$12$qVaiAVnL1VhLMwqatj2RGeactFx50OOPDnwM/I3/geryZ/.A9SNI6', 'student', '2026-08-02 18:29:22', '2026-08-06 15:52:45', 'active', '0', '0', NULL),
-('12', 'jolas', 'lasjo', 'lasjo@gmail.com', '$2y$12$eDOE.fWOX4l1oWFQK0dY9eXx1xbLpEbXn.6hfgMyBBNGv12h7WZ6y', 'teacher', '2026-08-02 18:34:53', '2026-08-06 14:23:58', 'active', '0', '0', NULL),
-('20', 'John Mark Santos', 'jmsantos', 'jmsantos@holycross.edu.ph', '$2y$12$kNiudTZvtElbLktwIASCv.cODiZK3fuxIGLNwwMP6ERrf5bmYA/6S', 'student', '2026-08-04 15:05:59', NULL, 'active', '1', '0', NULL),
-('21', 'Other Teacher', 'otherteacher', 'otherteacher@test.com', 'hash', 'teacher', '2026-08-04 20:47:48', NULL, 'active', '0', '0', NULL),
-('22', 'Professor Smith', 'prof_smith', 'smith@questbank.edu.ph', '$2y$12$/wyD1Ne51GtCanrHcZ11VOvcGSRlJPuKHgF.iOpcNZGaxNEdgzls2', 'teacher', '2026-08-05 00:11:02', '2026-08-06 15:40:29', 'active', '0', '0', NULL),
-('26', 'P4 Test Student', 'p4student_1785995039280_939', 'p4student_1785995039280@questbank.edu.ph', '$2y$12$AJZ4I.VN8Tj.PTZnUrbP1.7b6MMtjvd2W5VJ5Lp2J/DTiOmLHNIDm', 'student', '2026-08-06 13:44:00', NULL, 'active', '0', '0', NULL),
-('27', 'P4 Test Student', 'p4student_1785995045844_646', 'p4student_1785995045844@questbank.edu.ph', '$2y$12$xhICBW8hwtUACLhKllH0hupWx32h0uPf.ZudaynX6GU0SKTcIbEMO', 'student', '2026-08-06 13:44:05', NULL, 'active', '0', '0', NULL),
-('28', 'P4 Test Student', 'p4student_1785995051489_176', 'p4student_1785995051489@questbank.edu.ph', '$2y$12$uCgVYzyKpNqZku3cXE5ReemlH1jjw339tG4R2vWXKxvspo/ex2CNa', 'student', '2026-08-06 13:44:11', NULL, 'active', '0', '0', NULL),
-('29', 'P4 Test Student', 'p4student_1785995067660_972', 'p4student_1785995067660@questbank.edu.ph', '$2y$12$i4BoKvn72NLdvPtt2Yg7hOEk8JONtO9/ZBuGdQ3P6Gsfjk7Ndlj/e', 'student', '2026-08-06 13:44:28', NULL, 'active', '0', '0', NULL),
-('44', 'P5 Admin', 'temp_p5_admin', 'temp_p5_admin@questbank.edu.ph', 'pass', 'admin', '2026-08-06 14:19:05', '2026-08-06 14:19:31', 'active', '0', '0', NULL);
+('1', 'System Administrator', 'admin', 'admin@questbank.edu.ph', '$2y$12$fCOAdboym4u4zEuZtweRFOO1.cYe8HSh.WniuHMeq9ekiTO.gnLUG', 'admin', '2026-08-06 16:08:56', NULL, 'active', '1', '1', NULL),
+('10', 'Russel Gregorio', 'Russel', 'russel@questbank.edu.ph', '$2y$12$fCOAdboym4u4zEuZtweRFOO1.cYe8HSh.WniuHMeq9ekiTO.gnLUG', 'teacher', '2026-08-06 16:08:56', NULL, 'active', '1', '1', NULL),
+('11', 'Ashley Nicole Gutierrez', 'Nicole', 'nikol@gmail.com', '$2y$12$fCOAdboym4u4zEuZtweRFOO1.cYe8HSh.WniuHMeq9ekiTO.gnLUG', 'student', '2026-08-06 16:08:56', NULL, 'active', '1', '1', NULL),
+('12', 'Professor Smith', 'prof_smith', 'smith@questbank.edu.ph', '$2y$12$fCOAdboym4u4zEuZtweRFOO1.cYe8HSh.WniuHMeq9ekiTO.gnLUG', 'teacher', '2026-08-06 16:08:56', NULL, 'active', '1', '1', NULL),
+('20', 'John Mark Santos', 'jmsantos', 'jmsantos@holycross.edu.ph', '$2y$12$fCOAdboym4u4zEuZtweRFOO1.cYe8HSh.WniuHMeq9ekiTO.gnLUG', 'student', '2026-08-06 16:08:56', NULL, 'active', '1', '1', NULL),
+('21', 'Maria Angelica Reyes', 'm_reyes', 'mreyes@holycross.edu.ph', '$2y$12$fCOAdboym4u4zEuZtweRFOO1.cYe8HSh.WniuHMeq9ekiTO.gnLUG', 'student', '2026-08-06 16:08:56', NULL, 'active', '1', '1', NULL);
 
 SET FOREIGN_KEY_CHECKS=1;
 COMMIT;

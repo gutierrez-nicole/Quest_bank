@@ -4,7 +4,9 @@ require_once __DIR__ . '/../app/bootstrap.php';
 AuthService::enforceRole('admin');
 $pdo = getDBConnection();
 
-try {
+    $verInfo = @include __DIR__ . '/../app/config/version.php';
+    $displayVer = is_array($verInfo) ? ($verInfo['display_version'] ?? 'v2.2-RC1') : 'v2.2-RC1';
+
     require_once __DIR__ . '/../app/services/AcademicStructureService.php';
     require_once __DIR__ . '/../app/services/AuditLogService.php';
 
@@ -347,7 +349,7 @@ try {
                         <h4 class="text-xs font-black uppercase text-stone-800 dark:text-stone-100 flex items-center gap-2">
                             <i class="fa-solid fa-screwdriver-wrench text-orange-500"></i> Operational Readiness & System Governance Console
                         </h4>
-                        <span class="text-[10px] bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 font-extrabold px-2.5 py-0.5 rounded-full">v2.2-PROD Ready</span>
+                        <span class="text-[10px] bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 font-extrabold px-2.5 py-0.5 rounded-full"><?= htmlspecialchars($displayVer) ?> Ready</span>
                     </div>
                     <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 text-center text-xs">
                         <a href="backup.php" class="p-3 bg-stone-50 dark:bg-stone-800/50 hover:bg-orange-50 dark:hover:bg-orange-950/40 rounded-xl border border-stone-200 dark:border-stone-700 transition-all block">
