@@ -336,6 +336,10 @@ class GroqService {
     }
 
     public static function validateAndCalculatePeriodWeights(string $mode, array $weights, array $selectedPeriods, int $totalQuestions): array {
+        if ($totalQuestions <= 0) {
+            throw new InvalidArgumentException("Total questions must be a positive integer.");
+        }
+
         $selectedPeriods = array_values(array_unique(array_map(function($p) { return strtolower(trim($p)); }, $selectedPeriods)));
         if (empty($selectedPeriods)) {
             $selectedPeriods = ['general'];
@@ -344,8 +348,15 @@ class GroqService {
         $cleanWeights = [];
         foreach ($weights as $p => $w) {
             $pClean = strtolower(trim($p));
-            if (is_numeric($w)) {
-                $cleanWeights[$pClean] = floatval($w);
+            if ($w !== null && $w !== '') {
+                if (!is_numeric($w)) {
+                    throw new InvalidArgumentException("Period weight for '{$p}' must be a valid non-negative number.");
+                }
+                $val = floatval($w);
+                if ($val < 0) {
+                    throw new InvalidArgumentException("Period weight for '{$p}' cannot be negative.");
+                }
+                $cleanWeights[$pClean] = $val;
             }
         }
 
@@ -353,30 +364,34 @@ class GroqService {
             if ($w > 0 && !in_array($p, $selectedPeriods, true)) {
                 throw new InvalidArgumentException("Period '{$p}' has no selected lessons in the material pool and cannot receive a question allocation.");
             }
-            if ($w < 0) {
-                throw new InvalidArgumentException("Period weight for '{$p}' cannot be negative.");
-            }
         }
 
         $requestedDistribution = [];
         $targetCounts = [];
 
         if ($mode === 'percentage') {
-            $totalPct = array_sum($cleanWeights);
-            if (abs($totalPct - 100.0) > 0.5 || $totalPct <= 0) {
+            $totalPct = 0.0;
+            foreach ($selectedPeriods as $p) {
+                $pct = isset($cleanWeights[$p]) ? round($cleanWeights[$p], 2) : 0.0;
+                $requestedDistribution[$p] = $pct;
+                $totalPct += $pct;
+            }
+
+            if ($totalPct <= 0 || abs($totalPct - 100.0) > 0.5) {
                 throw new InvalidArgumentException("Period percentage distribution must total exactly 100% (got {$totalPct}%).");
             }
+
             $remainderList = [];
             $allocatedSum = 0;
             foreach ($selectedPeriods as $p) {
-                $pct = $cleanWeights[$p] ?? (100.0 / count($selectedPeriods));
-                $requestedDistribution[$p] = round($pct, 2);
+                $pct = $requestedDistribution[$p];
                 $raw = ($pct / 100.0) * $totalQuestions;
                 $cnt = (int)floor($raw);
                 $targetCounts[$p] = $cnt;
                 $allocatedSum += $cnt;
                 $remainderList[$p] = $raw - $cnt;
             }
+
             $rem = $totalQuestions - $allocatedSum;
             arsort($remainderList);
             foreach ($remainderList as $p => $diff) {
@@ -385,14 +400,15 @@ class GroqService {
                 $rem--;
             }
         } elseif ($mode === 'fixed') {
-            $totalFixed = (int)array_sum($cleanWeights);
-            if ($totalFixed !== $totalQuestions) {
-                throw new InvalidArgumentException("Fixed period question counts must sum to the requested total questions ({$totalQuestions}, got {$totalFixed}).");
-            }
+            $totalFixed = 0;
             foreach ($selectedPeriods as $p) {
-                $cnt = (int)($cleanWeights[$p] ?? 0);
+                $cnt = isset($cleanWeights[$p]) ? (int)$cleanWeights[$p] : 0;
                 $requestedDistribution[$p] = $cnt;
                 $targetCounts[$p] = $cnt;
+                $totalFixed += $cnt;
+            }
+            if ($totalFixed !== $totalQuestions) {
+                throw new InvalidArgumentException("Fixed period question counts must sum to the requested total questions ({$totalQuestions}, got {$totalFixed}).");
             }
         } else {
             $mode = 'equal';
@@ -403,6 +419,12 @@ class GroqService {
                 $requestedDistribution[$p] = round(100.0 / count($selectedPeriods), 2);
                 $targetCounts[$p] = $cnt;
             }
+        }
+
+        // Invariant check: sum(target_counts) == total_questions
+        $sumTarget = array_sum($targetCounts);
+        if ($sumTarget !== $totalQuestions) {
+            throw new InvalidArgumentException("Calculated period target counts sum ({$sumTarget}) does not equal requested total questions ({$totalQuestions}).");
         }
 
         return [
@@ -444,6 +466,11 @@ class GroqService {
 
         if ($totalCount !== $totalQuestions) {
             throw new InvalidArgumentException("Question blueprint totals must equal total requested questions ({$totalQuestions}, got {$totalCount}).");
+        }
+
+        $sumTarget = array_sum($cleanBlueprint);
+        if ($sumTarget !== $totalQuestions) {
+            throw new InvalidArgumentException("Calculated blueprint target counts sum ({$sumTarget}) does not equal requested total questions ({$totalQuestions}).");
         }
 
         return [
@@ -550,6 +577,10 @@ class GroqService {
                 if ($rem <= 0) break;
                 $targetCounts[$d]++;
                 $rem--;
+            }
+            $sumTarget = array_sum($targetCounts);
+            if ($sumTarget !== $totalQuestions) {
+                throw new InvalidArgumentException("Calculated difficulty target counts sum ({$sumTarget}) does not equal requested total questions ({$totalQuestions}).");
             }
             return [
                 'mode' => 'percentage',
@@ -1263,8 +1294,40 @@ class GroqService {
 
             $isCustomBlueprint = !empty($questionBlueprint) && array_sum(array_map('intval', (array)$questionBlueprint)) > 0;
             $isCustomPeriodWeighting = ($periodWeightingMode === 'percentage' || $periodWeightingMode === 'fixed');
+            $isCustomDifficulty = ($difficultyMode === 'percentage' || $difficultyMode === 'fixed');
 
-            $batchStatus = ($shortfallCount > 0 || !empty($uncoveredLessonIds) || !empty($uncoveredPeriods) || ($isCustomPeriodWeighting && $periodMismatch) || ($isCustomBlueprint && $blueprintMismatch)) ? 'incomplete' : 'completed';
+            $batchStatus = ($shortfallCount > 0 || !empty($uncoveredLessonIds) || !empty($uncoveredPeriods) || ($isCustomPeriodWeighting && $periodMismatch) || ($isCustomBlueprint && $blueprintMismatch) || ($isCustomDifficulty && $difficultyMismatch)) ? 'incomplete' : 'completed';
+
+            $unresolvedDifferences = [
+                'period' => [],
+                'blueprint' => [],
+                'difficulty' => []
+            ];
+
+            if ($periodMismatch) {
+                foreach ($periodWeightInfo['target_counts'] as $per => $targetCnt) {
+                    $act = $questionsPerPeriod[$per] ?? 0;
+                    if ($act !== $targetCnt) {
+                        $unresolvedDifferences['period'][$per] = ['requested' => $targetCnt, 'actual' => $act, 'diff' => $targetCnt - $act];
+                    }
+                }
+            }
+            if ($blueprintMismatch) {
+                foreach ($blueprintInfo['target_counts'] as $type => $targetCnt) {
+                    $act = $actualQuestionDistribution[$type] ?? 0;
+                    if ($act !== $targetCnt) {
+                        $unresolvedDifferences['blueprint'][$type] = ['requested' => $targetCnt, 'actual' => $act, 'diff' => $targetCnt - $act];
+                    }
+                }
+            }
+            if ($difficultyMismatch) {
+                foreach ($difficultyInfo['target_counts'] as $diff => $targetCnt) {
+                    $act = $actualDifficultyDistribution[$diff] ?? 0;
+                    if ($act !== $targetCnt) {
+                        $unresolvedDifferences['difficulty'][$diff] = ['requested' => $targetCnt, 'actual' => $act, 'diff' => $targetCnt - $act];
+                    }
+                }
+            }
 
             if (!empty($uncoveredLessonIds)) {
                 $generationWarnings[] = "Selected lesson(s) with zero question coverage: " . implode(', ', $uncoveredLessonIds);
@@ -1341,10 +1404,17 @@ class GroqService {
                     'period_weighting_mode' => $periodWeightInfo['mode'],
                     'requested_period_distribution' => $periodWeightInfo['requested_distribution'],
                     'actual_period_distribution' => $questionsPerPeriod,
+                    'period_target_counts' => $periodWeightInfo['target_counts'],
                     'requested_question_blueprint' => $blueprintInfo['requested_blueprint'],
                     'actual_question_distribution' => $actualQuestionDistribution,
+                    'blueprint_target_counts' => $blueprintInfo['target_counts'],
                     'requested_difficulty_distribution' => $difficultyInfo['requested_distribution'],
                     'actual_difficulty_distribution' => $actualDifficultyDistribution,
+                    'difficulty_target_counts' => $difficultyInfo['target_counts'],
+                    'period_distribution_mismatch' => $periodMismatch,
+                    'question_blueprint_mismatch' => $blueprintMismatch,
+                    'difficulty_distribution_mismatch' => $difficultyMismatch,
+                    'unresolved_differences' => $unresolvedDifferences,
                     'duplicate_count' => $duplicateCount,
                     'replacement_attempt_count' => $replacementAttemptCount,
                     'replacement_success_count' => $replacementSuccessCount,
@@ -1523,7 +1593,66 @@ class GroqService {
             if ($cnt === 0) $uncoveredPeriods[] = $per;
         }
 
-        $batchStatus = ($shortfallCount > 0 || !empty($uncoveredLessonIds) || !empty($uncoveredPeriods)) ? 'incomplete' : 'completed';
+        $periodMismatch = false;
+        foreach ($periodWeightInfo['target_counts'] as $per => $targetCnt) {
+            if (($questionsPerPeriod[$per] ?? 0) !== $targetCnt) {
+                $periodMismatch = true;
+                break;
+            }
+        }
+
+        $blueprintMismatch = false;
+        foreach ($blueprintInfo['target_counts'] as $type => $targetCnt) {
+            if (($actualQuestionDistribution[$type] ?? 0) !== $targetCnt) {
+                $blueprintMismatch = true;
+                break;
+            }
+        }
+
+        $difficultyMismatch = false;
+        foreach ($difficultyInfo['target_counts'] as $diff => $targetCnt) {
+            if (($actualDifficultyDistribution[$diff] ?? 0) !== $targetCnt) {
+                $difficultyMismatch = true;
+                break;
+            }
+        }
+
+        $isCustomBlueprint = !empty($questionBlueprint) && array_sum(array_map('intval', (array)$questionBlueprint)) > 0;
+        $isCustomPeriodWeighting = ($periodWeightingMode === 'percentage' || $periodWeightingMode === 'fixed');
+        $isCustomDifficulty = ($difficultyMode === 'percentage' || $difficultyMode === 'fixed');
+
+        $batchStatus = ($shortfallCount > 0 || !empty($uncoveredLessonIds) || !empty($uncoveredPeriods) || ($isCustomPeriodWeighting && $periodMismatch) || ($isCustomBlueprint && $blueprintMismatch) || ($isCustomDifficulty && $difficultyMismatch)) ? 'incomplete' : 'completed';
+
+        $unresolvedDifferences = [
+            'period' => [],
+            'blueprint' => [],
+            'difficulty' => []
+        ];
+
+        if ($periodMismatch) {
+            foreach ($periodWeightInfo['target_counts'] as $per => $targetCnt) {
+                $act = $questionsPerPeriod[$per] ?? 0;
+                if ($act !== $targetCnt) {
+                    $unresolvedDifferences['period'][$per] = ['requested' => $targetCnt, 'actual' => $act, 'diff' => $targetCnt - $act];
+                }
+            }
+        }
+        if ($blueprintMismatch) {
+            foreach ($blueprintInfo['target_counts'] as $type => $targetCnt) {
+                $act = $actualQuestionDistribution[$type] ?? 0;
+                if ($act !== $targetCnt) {
+                    $unresolvedDifferences['blueprint'][$type] = ['requested' => $targetCnt, 'actual' => $act, 'diff' => $targetCnt - $act];
+                }
+            }
+        }
+        if ($difficultyMismatch) {
+            foreach ($difficultyInfo['target_counts'] as $diff => $targetCnt) {
+                $act = $actualDifficultyDistribution[$diff] ?? 0;
+                if ($act !== $targetCnt) {
+                    $unresolvedDifferences['difficulty'][$diff] = ['requested' => $targetCnt, 'actual' => $act, 'diff' => $targetCnt - $act];
+                }
+            }
+        }
 
         $singleChunkResult = [
             'chunk_id' => 0,
@@ -1581,10 +1710,17 @@ class GroqService {
                 'period_weighting_mode' => $periodWeightInfo['mode'],
                 'requested_period_distribution' => $periodWeightInfo['requested_distribution'],
                 'actual_period_distribution' => $questionsPerPeriod,
+                'period_target_counts' => $periodWeightInfo['target_counts'],
                 'requested_question_blueprint' => $blueprintInfo['requested_blueprint'],
                 'actual_question_distribution' => $actualQuestionDistribution,
+                'blueprint_target_counts' => $blueprintInfo['target_counts'],
                 'requested_difficulty_distribution' => $difficultyInfo['requested_distribution'],
                 'actual_difficulty_distribution' => $actualDifficultyDistribution,
+                'difficulty_target_counts' => $difficultyInfo['target_counts'],
+                'period_distribution_mismatch' => $periodMismatch,
+                'question_blueprint_mismatch' => $blueprintMismatch,
+                'difficulty_distribution_mismatch' => $difficultyMismatch,
+                'unresolved_differences' => $unresolvedDifferences,
                 'duplicate_count' => $duplicateCount,
                 'replacement_attempt_count' => $replacementAttemptCount,
                 'duplicate_warnings' => $duplicateWarnings

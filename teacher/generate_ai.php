@@ -309,8 +309,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
             try {
                 $stmtBatch = $pdo->prepare("
                     INSERT INTO ai_generation_batches 
-                    (generation_batch_id, teacher_id, selected_lesson_ids, selected_lesson_titles, selected_periods, selected_subject, semester, school_year, year_level, program, total_selected_words, estimated_tokens, ai_model, generation_duration, requested_question_count, generated_question_count, failed_question_count, warnings, batch_status, failed_chunk_count, affected_lesson_ids, failure_messages, chunk_generation_results, questions_per_lesson, questions_per_period, uncovered_lesson_ids, uncovered_periods, refill_attempt_count, refill_warnings, simulated_scenario, failed_chunk_index, refill_target_chunk_index, refill_target_lesson_ids, refill_target_periods, refill_generated_count, initial_questions_per_lesson, initial_questions_per_period, initial_uncovered_lesson_ids, initial_uncovered_periods, affected_periods, failed_chunk_indexes, failed_chunks, period_weighting_mode, requested_period_distribution, actual_period_distribution, requested_question_blueprint, actual_question_distribution, requested_difficulty_distribution, actual_difficulty_distribution, duplicate_count, replacement_attempt_count, replacement_success_count, unresolved_duplicate_count, duplicate_warnings)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (generation_batch_id, teacher_id, selected_lesson_ids, selected_lesson_titles, selected_periods, selected_subject, semester, school_year, year_level, program, total_selected_words, estimated_tokens, ai_model, generation_duration, requested_question_count, generated_question_count, failed_question_count, warnings, batch_status, failed_chunk_count, affected_lesson_ids, failure_messages, chunk_generation_results, questions_per_lesson, questions_per_period, uncovered_lesson_ids, uncovered_periods, refill_attempt_count, refill_warnings, simulated_scenario, failed_chunk_index, refill_target_chunk_index, refill_target_lesson_ids, refill_target_periods, refill_generated_count, initial_questions_per_lesson, initial_questions_per_period, initial_uncovered_lesson_ids, initial_uncovered_periods, affected_periods, failed_chunk_indexes, failed_chunks, period_weighting_mode, requested_period_distribution, actual_period_distribution, requested_question_blueprint, actual_question_distribution, requested_difficulty_distribution, actual_difficulty_distribution, duplicate_count, replacement_attempt_count, replacement_success_count, unresolved_duplicate_count, duplicate_warnings, period_distribution_mismatch, question_blueprint_mismatch, difficulty_distribution_mismatch, unresolved_differences)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
                 $batchInsertedSuccess = $stmtBatch->execute([
                     $generation_batch_id,
@@ -366,7 +366,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
                     intval($result['metadata']['replacement_attempt_count'] ?? 0),
                     intval($result['metadata']['replacement_success_count'] ?? 0),
                     intval($result['metadata']['unresolved_duplicate_count'] ?? 0),
-                    json_encode($result['metadata']['duplicate_warnings'] ?? [])
+                    json_encode($result['metadata']['duplicate_warnings'] ?? []),
+                    !empty($result['metadata']['period_distribution_mismatch']) ? 1 : 0,
+                    !empty($result['metadata']['question_blueprint_mismatch']) ? 1 : 0,
+                    !empty($result['metadata']['difficulty_distribution_mismatch']) ? 1 : 0,
+                    json_encode($result['metadata']['unresolved_differences'] ?? (object)[])
                 ]);
             } catch (Throwable $e) {
                 $batchInsertedSuccess = false;
@@ -1459,6 +1463,84 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                     <span class="font-extrabold text-rose-300" data-testid="audit-dedup">
                                         <?php echo intval($ai_meta_output['duplicate_count'] ?? 0); ?> Rejected / <?php echo intval($ai_meta_output['replacement_attempt_count'] ?? 0); ?> Attempts / <?php echo intval($ai_meta_output['replacement_success_count'] ?? 0); ?> Replaced / <?php echo intval($ai_meta_output['unresolved_duplicate_count'] ?? 0); ?> Unresolved
                                     </span>
+                                </div>
+                            </div>
+
+                            <!-- Requested vs Actual Breakdown Section -->
+                            <div class="space-y-2 pt-2 border-t border-stone-800">
+                                <span class="text-[10px] font-bold text-stone-400 block uppercase tracking-wider">Distribution Summary (Requested vs Actual)</span>
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px]">
+                                    <!-- Period Breakdown -->
+                                    <div class="bg-stone-800/80 p-2.5 rounded-xl border border-stone-700/60 space-y-1">
+                                        <div class="flex justify-between items-center text-[10px] font-bold text-sky-400">
+                                            <span>PERIOD</span>
+                                            <span>REQ | ACT</span>
+                                        </div>
+                                        <div class="space-y-1 font-mono text-[10px]">
+                                            <?php 
+                                            $reqP = $ai_meta_output['requested_period_distribution'] ?? [];
+                                            $actP = $ai_meta_output['actual_period_distribution'] ?? [];
+                                            $tgtP = $ai_meta_output['period_target_counts'] ?? [];
+                                            foreach ($reqP as $p => $reqVal): 
+                                                $actVal = $actP[$p] ?? 0;
+                                                $tgtVal = $tgtP[$p] ?? $reqVal;
+                                                $isMismatch = ($actVal !== (int)$tgtVal);
+                                            ?>
+                                                <div class="flex justify-between items-center p-1 rounded <?php echo $isMismatch ? 'bg-amber-950/80 text-amber-300 border border-amber-800/80' : 'bg-stone-900/60 text-stone-300'; ?>">
+                                                    <span class="font-bold"><?php echo ucfirst($p); ?>:</span>
+                                                    <span>Req <strong><?php echo $tgtVal; ?></strong> | Act <strong class="<?php echo $isMismatch ? 'text-amber-400 font-black' : 'text-emerald-400'; ?>"><?php echo $actVal; ?></strong></span>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    </div>
+
+                                    <!-- Question Blueprint Breakdown -->
+                                    <div class="bg-stone-800/80 p-2.5 rounded-xl border border-stone-700/60 space-y-1">
+                                        <div class="flex justify-between items-center text-[10px] font-bold text-indigo-300">
+                                            <span>QUESTION TYPE</span>
+                                            <span>REQ | ACT</span>
+                                        </div>
+                                        <div class="space-y-1 font-mono text-[10px]">
+                                            <?php 
+                                            $reqT = $ai_meta_output['requested_question_blueprint'] ?? [];
+                                            $actT = $ai_meta_output['actual_question_distribution'] ?? [];
+                                            $tgtT = $ai_meta_output['blueprint_target_counts'] ?? [];
+                                            foreach ($reqT as $t => $reqVal): 
+                                                $actVal = $actT[$t] ?? 0;
+                                                $tgtVal = $tgtT[$t] ?? $reqVal;
+                                                $isMismatch = ($actVal !== (int)$tgtVal);
+                                            ?>
+                                                <div class="flex justify-between items-center p-1 rounded <?php echo $isMismatch ? 'bg-amber-950/80 text-amber-300 border border-amber-800/80' : 'bg-stone-900/60 text-stone-300'; ?>">
+                                                    <span class="font-bold"><?php echo str_replace('_', ' ', ucfirst($t)); ?>:</span>
+                                                    <span>Req <strong><?php echo $tgtVal; ?></strong> | Act <strong class="<?php echo $isMismatch ? 'text-amber-400 font-black' : 'text-emerald-400'; ?>"><?php echo $actVal; ?></strong></span>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    </div>
+
+                                    <!-- Difficulty Breakdown -->
+                                    <div class="bg-stone-800/80 p-2.5 rounded-xl border border-stone-700/60 space-y-1">
+                                        <div class="flex justify-between items-center text-[10px] font-bold text-amber-300">
+                                            <span>DIFFICULTY</span>
+                                            <span>REQ | ACT</span>
+                                        </div>
+                                        <div class="space-y-1 font-mono text-[10px]">
+                                            <?php 
+                                            $reqD = $ai_meta_output['requested_difficulty_distribution'] ?? [];
+                                            $actD = $ai_meta_output['actual_difficulty_distribution'] ?? [];
+                                            $tgtD = $ai_meta_output['difficulty_target_counts'] ?? [];
+                                            foreach ($reqD as $d => $reqVal): 
+                                                $actVal = $actD[$d] ?? 0;
+                                                $tgtVal = $tgtD[$d] ?? $reqVal;
+                                                $isMismatch = ($actVal !== (int)$tgtVal);
+                                            ?>
+                                                <div class="flex justify-between items-center p-1 rounded <?php echo $isMismatch ? 'bg-amber-950/80 text-amber-300 border border-amber-800/80' : 'bg-stone-900/60 text-stone-300'; ?>">
+                                                    <span class="font-bold"><?php echo ucfirst($d); ?>:</span>
+                                                    <span>Req <strong><?php echo $tgtVal; ?></strong> | Act <strong class="<?php echo $isMismatch ? 'text-amber-400 font-black' : 'text-emerald-400'; ?>"><?php echo $actVal; ?></strong></span>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 

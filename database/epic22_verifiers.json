@@ -165,6 +165,15 @@
       "reason": "Validates full compatibility, student rendering, submission, auto-scoring, and review state across all 7 canonical question types.",
       "replacement": null
     },
+    {
+      "filename": "verify_epic22_p2_distribution.php",
+      "label": "Priority 2 Final Distribution Validation",
+      "classification": "authoritative",
+      "dependency_tier": "full",
+      "timeout": 120,
+      "reason": "Validates period percentage normalization, zero defaulting for omitted periods, invariant sum checks, difficulty mismatch flagging, and compact distribution summaries.",
+      "replacement": null
+    },
 
     {
       "filename": "verification_archive/verify_epic22_preflight_consolidation.php",

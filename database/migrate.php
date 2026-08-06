@@ -458,6 +458,10 @@ addColumn($pdo, 'ai_generation_batches', 'replacement_attempt_count', "INT(11) D
 addColumn($pdo, 'ai_generation_batches', 'replacement_success_count', "INT(11) DEFAULT 0");
 addColumn($pdo, 'ai_generation_batches', 'unresolved_duplicate_count', "INT(11) DEFAULT 0");
 addColumn($pdo, 'ai_generation_batches', 'duplicate_warnings', "LONGTEXT DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'period_distribution_mismatch', "TINYINT(1) DEFAULT 0");
+addColumn($pdo, 'ai_generation_batches', 'question_blueprint_mismatch', "TINYINT(1) DEFAULT 0");
+addColumn($pdo, 'ai_generation_batches', 'difficulty_distribution_mismatch', "TINYINT(1) DEFAULT 0");
+addColumn($pdo, 'ai_generation_batches', 'unresolved_differences', "LONGTEXT DEFAULT NULL");
 
 
 
