@@ -27,14 +27,18 @@ function verifySessionAndPolicy() {
     $userId = $_SESSION['user_id'];
 
     // 1. Session Status Enforcement
+    $scriptPath = $_SERVER['PHP_SELF'] ?? $_SERVER['SCRIPT_NAME'] ?? '';
+    $rel = preg_match('#/(admin|teacher|student|api|tests)/#', $scriptPath) ? '../' : '';
+
+    // 1. Session Status Enforcement
     if (!SessionManagementService::validateCurrentSession($userId)) {
         SessionManagementService::destroyCurrentSession('terminated');
-        header("Location: /index.php?msg=session_ended");
+        header("Location: " . $rel . "index.php?msg=session_ended");
         exit();
     }
 
     // 2. Mandatory Password Reset Policy Enforcement
-    $script = basename($_SERVER['PHP_SELF'] ?? $_SERVER['SCRIPT_NAME'] ?? '');
+    $script = basename($scriptPath);
     $isLogout = isset($_GET['action']) && $_GET['action'] === 'logout';
     if ($script !== 'force_password_reset.php' && !$isLogout && $script !== 'index.php') {
         try {
@@ -44,7 +48,7 @@ function verifySessionAndPolicy() {
             $isForceReset = intval($stmt->fetchColumn());
 
             if ($isForceReset === 1) {
-                header("Location: /force_password_reset.php");
+                header("Location: " . $rel . "force_password_reset.php");
                 exit();
             }
         } catch (Exception $e) {}
@@ -52,8 +56,10 @@ function verifySessionAndPolicy() {
 }
 
 function requireLogin() {
+    $scriptPath = $_SERVER['PHP_SELF'] ?? $_SERVER['SCRIPT_NAME'] ?? '';
+    $rel = preg_match('#/(admin|teacher|student|api|tests)/#', $scriptPath) ? '../' : '';
     if (!isset($_SESSION['user_id'])) {
-        header("Location: /index.php");
+        header("Location: " . $rel . "index.php");
         exit();
     }
     verifySessionAndPolicy();
@@ -61,15 +67,17 @@ function requireLogin() {
 
 function requireRole($allowedRole) {
     requireLogin();
+    $scriptPath = $_SERVER['PHP_SELF'] ?? $_SERVER['SCRIPT_NAME'] ?? '';
+    $rel = preg_match('#/(admin|teacher|student|api|tests)/#', $scriptPath) ? '../' : '';
     if (($_SESSION['role'] ?? '') !== $allowedRole) {
         if ($_SESSION['role'] === 'student') {
-            header("Location: /student/dashboard.php");
+            header("Location: " . $rel . "student/dashboard.php");
         } elseif ($_SESSION['role'] === 'teacher') {
-            header("Location: /teacher/dashboard.php");
+            header("Location: " . $rel . "teacher/dashboard.php");
         } elseif ($_SESSION['role'] === 'admin') {
-            header("Location: /admin/dashboard.php");
+            header("Location: " . $rel . "admin/dashboard.php");
         } else {
-            header("Location: /index.php");
+            header("Location: " . $rel . "index.php");
         }
         exit();
     }

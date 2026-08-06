@@ -6,7 +6,7 @@ require_once __DIR__ . '/app/services/SessionManagementService.php';
 require_once __DIR__ . '/app/services/AuditLogService.php';
 
 if (!isset($_SESSION['user_id'])) {
-    header("Location: /index.php");
+    header("Location: index.php");
     exit();
 }
 
@@ -20,15 +20,15 @@ $user = $stmtUser->fetch(PDO::FETCH_ASSOC);
 if (!$user) {
     session_unset();
     session_destroy();
-    header("Location: /index.php");
+    header("Location: index.php");
     exit();
 }
 
 // If password reset is not required, redirect to role dashboard
 if (intval($user['force_password_reset']) !== 1) {
-    if ($user['role'] === 'student') header("Location: /student/dashboard.php");
-    elseif ($user['role'] === 'teacher') header("Location: /teacher/dashboard.php");
-    elseif ($user['role'] === 'admin') header("Location: /admin/dashboard.php");
+    if ($user['role'] === 'student') header("Location: student/dashboard.php");
+    elseif ($user['role'] === 'teacher') header("Location: teacher/dashboard.php");
+    elseif ($user['role'] === 'admin') header("Location: admin/dashboard.php");
     exit();
 }
 
@@ -63,9 +63,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         SessionManagementService::trackSession($userId);
         AuditLogService::logAction($userId, "Completed Mandatory Password Reset", "Password reset successfully completed.");
 
-        if ($user['role'] === 'student') header("Location: /student/dashboard.php");
-        elseif ($user['role'] === 'teacher') header("Location: /teacher/dashboard.php");
-        elseif ($user['role'] === 'admin') header("Location: /admin/dashboard.php");
+        if ($user['role'] === 'student') header("Location: student/dashboard.php");
+        elseif ($user['role'] === 'teacher') header("Location: teacher/dashboard.php");
+        elseif ($user['role'] === 'admin') header("Location: admin/dashboard.php");
         exit();
     } catch (Exception $e) {
         $msg = $e->getMessage();

@@ -99,6 +99,7 @@ try {
         [10, 'Russel', 'Russel Gregorio', 'russel@questbank.edu.ph', $passHash, 'teacher', 1, 1],
         [11, 'Nicole', 'Ashley Nicole Gutierrez', 'nikol@gmail.com', $passHash, 'student', 1, 1],
         [12, 'prof_smith', 'Professor Smith', 'smith@questbank.edu.ph', $passHash, 'teacher', 1, 1],
+        [13, 'lasjo', 'Jolas Lasjo', 'lasjo@gmail.com', $passHash, 'teacher', 1, 1],
         [20, 'jmsantos', 'John Mark Santos', 'jmsantos@holycross.edu.ph', $passHash, 'student', 1, 1],
         [21, 'm_reyes', 'Maria Angelica Reyes', 'mreyes@holycross.edu.ph', $passHash, 'student', 1, 1],
     ];

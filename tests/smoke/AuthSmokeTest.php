@@ -11,6 +11,7 @@ function test_auth_smoke($pdo) {
         'admin@questbank.edu.ph' => 'admin',
         'russel@questbank.edu.ph' => 'teacher',
         'smith@questbank.edu.ph' => 'teacher',
+        'lasjo@gmail.com' => 'teacher',
         'nikol@gmail.com' => 'student',
         'jmsantos@holycross.edu.ph' => 'student',
         'mreyes@holycross.edu.ph' => 'student'
@@ -35,6 +36,6 @@ function test_auth_smoke($pdo) {
         }
     }
 
-    echo "    [✓] All 6 demo accounts verified (Role + Password Hash + Reset Flag)\n";
+    echo "    [✓] All 7 demo accounts verified (Role + Password Hash + Reset Flag)\n";
     return true;
 }
