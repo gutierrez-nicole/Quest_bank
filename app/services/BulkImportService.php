@@ -205,7 +205,7 @@ class BulkImportService {
                         foreach ($words as $w) {
                             if (!empty($w)) $initials .= strtoupper($w[0]);
                         }
-                        $code = 'SUBJ-' . (substr($initials, 0, 4) ?: 'GEN') . '-' . rand(100, 999);
+                        $code = self::generateUniqueSubjectCode($pdo, $initials, $seenSubjectCodes);
                     }
 
                     if (empty($title)) {
@@ -331,5 +331,22 @@ class BulkImportService {
 
     private static function generateTempPassword() {
         return substr(bin2hex(random_bytes(6)), 0, 10);
+    }
+
+    private static function generateUniqueSubjectCode($pdo, $initials, &$seenSubjectCodes) {
+        $base = 'SUBJ-' . (substr($initials, 0, 4) ?: 'GEN');
+        $counter = 1;
+        while (true) {
+            $candidate = $base . '-' . sprintf('%03d', $counter);
+            if (!in_array(strtolower($candidate), $seenSubjectCodes, true)) {
+                $stmt = $pdo->prepare("SELECT id FROM subjects WHERE LOWER(code) = ?");
+                $stmt->execute([strtolower($candidate)]);
+                if (!$stmt->fetchColumn()) {
+                    $seenSubjectCodes[] = strtolower($candidate);
+                    return $candidate;
+                }
+            }
+            $counter++;
+        }
     }
 }

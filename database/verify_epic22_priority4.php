@@ -83,7 +83,7 @@ try {
     AcademicStructureService::activateSemester($stdSemId);
 
     // ── TEST 3: Section Creation without Hardcoding ──
-    $secCode = 'CE-P4-SEC-' . rand(100, 999);
+    $secCode = 'CE-P4-SEC-' . bin2hex(random_bytes(2));
     $createdSectionCodes[] = $secCode;
     $secId = AcademicStructureService::createSection($secCode, 'BSCE-TRANSPORT', null, 35, $stdSyId);
     $runner->assertTrue("TEST 3a: Section created with dynamic parameters", $secId > 0, "Section ID: {$secId}");
@@ -152,7 +152,7 @@ try {
     $runner->assertTrue("TEST 4c: Teacher scheduling unassigned section rejected", $unassignedBlocked, "Unassigned section scheduling blocked cleanly");
 
     // ── TEST 5: Real Subject CSV Import & DB Insertion ──
-    $subjUniq = rand(1000, 9999);
+    $subjUniq = bin2hex(random_bytes(3));
     $subjCode = "CE-SUBJ-{$subjUniq}";
     $subjTitle = "Advanced Bridge Design {$subjUniq}";
     $createdSubjectCodes[] = $subjCode;
@@ -176,7 +176,7 @@ try {
     @unlink($tmpSubjCsv);
 
     // ── TEST 6: Hardened Student CSV Import & Unique Credentials ──
-    $studUniq = time() . rand(10, 99);
+    $studUniq = time() . bin2hex(random_bytes(2));
     $tmpStudCsv = sys_get_temp_dir() . "/test_stud_{$studUniq}.csv";
     $csvData = "student_number,fullname,email,course,section\n";
     $csvData .= "23-{$studUniq},P4 Credentials Student,p4credentials_{$studUniq}@questbank.edu.ph,BSCE,{$secCode}\n";

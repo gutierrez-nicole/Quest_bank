@@ -268,13 +268,16 @@ class AcademicStructureService {
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public static function createSection($sectionCode, $course = 'BSCE', $adviserId = null, $capacity = 40, $schoolYearId = null) {
+    public static function createSection($sectionCode, $course, $adviserId = null, $capacity = 40, $schoolYearId = null) {
         $sectionCode = strtoupper(trim($sectionCode));
-        $course = trim($course) ?: 'BSCE';
+        $course = trim($course);
         $capacity = intval($capacity);
 
         if (empty($sectionCode)) {
             throw new InvalidArgumentException("Section code is required.");
+        }
+        if (empty($course)) {
+            throw new InvalidArgumentException("Program/Course is required.");
         }
         if ($capacity <= 0) {
             throw new InvalidArgumentException("Section capacity must be greater than 0.");
