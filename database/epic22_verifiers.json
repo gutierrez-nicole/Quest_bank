@@ -148,6 +148,16 @@
       "replacement": null
     },
     {
+      "filename": "verify_epic22_priority2.php",
+      "label": "Priority 2 Practical Features",
+      "classification": "authoritative",
+      "dependency_tier": "full",
+      "timeout": 120,
+      "reason": "Validates Period Weighting, Question Blueprint, Difficulty Distribution, Practical Deduplication & Replacement, and Summary Metadata.",
+      "replacement": null
+    },
+
+    {
       "filename": "verification_archive/verify_epic22_preflight_consolidation.php",
       "label": "Preflight Consolidation Meta-Verifier",
       "classification": "deprecated",

@@ -56,6 +56,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
     $question_type = trim($_POST['question_type'] ?? 'multiple_choice');
     $difficulty = trim($_POST['difficulty'] ?? 'medium');
 
+    // Priority 2 Options
+    $period_weighting_mode = $_POST['period_weighting_mode'] ?? 'equal';
+    $period_weights = $_POST['period_weights'] ?? [];
+    $blueprint_input = $_POST['blueprint'] ?? [];
+    $difficulty_mode = $_POST['difficulty_mode'] ?? 'single';
+    $difficulty_dist_input = $_POST['difficulty_distribution'] ?? [];
+
+    $generation_options = [
+        'period_weighting_mode' => $period_weighting_mode,
+        'period_weights' => $period_weights,
+        'question_blueprint' => $blueprint_input,
+        'difficulty_mode' => $difficulty_mode,
+        'difficulty_distribution' => $difficulty_dist_input
+    ];
+
     $final_lesson_content = "";
     $associated_lesson_ids = [];
     $associated_lesson_titles = [];
@@ -241,7 +256,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
     }
 
     if (!empty(trim($final_lesson_content)) && $num_questions > 0 && empty($error_msg)) {
-        $result = GroqService::generateQuestions($final_lesson_content, $num_questions, $subject, $exam_title, $specialization, $question_type, $difficulty);
+        $result = GroqService::generateQuestions($final_lesson_content, $num_questions, $subject, $exam_title, $specialization, $question_type, $difficulty, null, $generation_options);
         if (!empty($result['success']) && isset($result['questions']) && is_array($result['questions'])) {
             $generated_questions = $result['questions'];
             $estimatedTokens = (int)ceil(strlen($final_lesson_content) / 4);
@@ -294,8 +309,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
             try {
                 $stmtBatch = $pdo->prepare("
                     INSERT INTO ai_generation_batches 
-                    (generation_batch_id, teacher_id, selected_lesson_ids, selected_lesson_titles, selected_periods, selected_subject, semester, school_year, year_level, program, total_selected_words, estimated_tokens, ai_model, generation_duration, requested_question_count, generated_question_count, failed_question_count, warnings, batch_status, failed_chunk_count, affected_lesson_ids, failure_messages, chunk_generation_results, questions_per_lesson, questions_per_period, uncovered_lesson_ids, uncovered_periods, refill_attempt_count, refill_warnings, simulated_scenario, failed_chunk_index, refill_target_chunk_index, refill_target_lesson_ids, refill_target_periods, refill_generated_count, initial_questions_per_lesson, initial_questions_per_period, initial_uncovered_lesson_ids, initial_uncovered_periods, affected_periods, failed_chunk_indexes, failed_chunks)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (generation_batch_id, teacher_id, selected_lesson_ids, selected_lesson_titles, selected_periods, selected_subject, semester, school_year, year_level, program, total_selected_words, estimated_tokens, ai_model, generation_duration, requested_question_count, generated_question_count, failed_question_count, warnings, batch_status, failed_chunk_count, affected_lesson_ids, failure_messages, chunk_generation_results, questions_per_lesson, questions_per_period, uncovered_lesson_ids, uncovered_periods, refill_attempt_count, refill_warnings, simulated_scenario, failed_chunk_index, refill_target_chunk_index, refill_target_lesson_ids, refill_target_periods, refill_generated_count, initial_questions_per_lesson, initial_questions_per_period, initial_uncovered_lesson_ids, initial_uncovered_periods, affected_periods, failed_chunk_indexes, failed_chunks, period_weighting_mode, requested_period_distribution, actual_period_distribution, requested_question_blueprint, actual_question_distribution, requested_difficulty_distribution, actual_difficulty_distribution, duplicate_count, replacement_attempt_count, duplicate_warnings)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
                 $batchInsertedSuccess = $stmtBatch->execute([
                     $generation_batch_id,
@@ -339,11 +354,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
                     json_encode($result['metadata']['initial_uncovered_periods'] ?? []),
                     json_encode($result['metadata']['affected_periods'] ?? []),
                     json_encode($result['metadata']['failed_chunk_indexes'] ?? []),
-                    json_encode($result['metadata']['failed_chunks'] ?? [])
+                    json_encode($result['metadata']['failed_chunks'] ?? []),
+                    $result['metadata']['period_weighting_mode'] ?? 'equal',
+                    json_encode($result['metadata']['requested_period_distribution'] ?? []),
+                    json_encode($result['metadata']['actual_period_distribution'] ?? []),
+                    json_encode($result['metadata']['requested_question_blueprint'] ?? []),
+                    json_encode($result['metadata']['actual_question_distribution'] ?? []),
+                    json_encode($result['metadata']['requested_difficulty_distribution'] ?? []),
+                    json_encode($result['metadata']['actual_difficulty_distribution'] ?? []),
+                    intval($result['metadata']['duplicate_count'] ?? 0),
+                    intval($result['metadata']['replacement_attempt_count'] ?? 0),
+                    json_encode($result['metadata']['duplicate_warnings'] ?? [])
                 ]);
             } catch (Throwable $e) {
                 $batchInsertedSuccess = false;
             }
+
 
             if (!$batchInsertedSuccess) {
                 $generated_questions = null;
@@ -1097,22 +1123,92 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
 
                         <div class="grid grid-cols-2 gap-3">
                             <div class="space-y-1">
-                                <label class="text-xs font-bold text-stone-700">Difficulty Level</label>
-                                <select name="difficulty" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500">
-                                    <option value="easy" <?php echo (($_POST['difficulty'] ?? '') === 'easy') ? 'selected' : ''; ?>>Easy</option>
-                                    <option value="medium" <?php echo (($_POST['difficulty'] ?? 'medium') === 'medium') ? 'selected' : ''; ?>>Medium</option>
-                                    <option value="hard" <?php echo (($_POST['difficulty'] ?? '') === 'hard') ? 'selected' : ''; ?>>Hard / Advanced</option>
-                                    <option value="mixed" <?php echo (($_POST['difficulty'] ?? '') === 'mixed') ? 'selected' : ''; ?>>Mixed Difficulty</option>
+                                <label class="text-xs font-bold text-stone-700">Difficulty Distribution Mode</label>
+                                <select name="difficulty_mode" id="difficulty_mode" onchange="toggleDifficultyControls()" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500">
+                                    <option value="single" <?php echo (($_POST['difficulty_mode'] ?? 'single') === 'single') ? 'selected' : ''; ?>>Single Uniform Difficulty</option>
+                                    <option value="fixed" <?php echo (($_POST['difficulty_mode'] ?? '') === 'fixed') ? 'selected' : ''; ?>>Custom Difficulty Distribution</option>
                                 </select>
                             </div>
 
                             <div class="space-y-1">
-                                <label class="text-xs font-bold text-stone-700">Number of Items</label>
+                                <label class="text-xs font-bold text-stone-700">Total Number of Items</label>
                                 <select name="num_questions" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500">
                                     <?php foreach ([5, 10, 15, 20, 25, 30, 50] as $n): ?>
                                         <option value="<?php echo $n; ?>" <?php echo (intval($_POST['num_questions'] ?? 5) === $n) ? 'selected' : ''; ?>><?php echo $n; ?> Questions</option>
                                     <?php endforeach; ?>
                                 </select>
+                            </div>
+                        </div>
+
+                        <div class="space-y-1">
+                            <label class="text-xs font-bold text-stone-700">Default Single Difficulty (if single mode)</label>
+                            <select name="difficulty" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500">
+                                <option value="easy" <?php echo (($_POST['difficulty'] ?? '') === 'easy') ? 'selected' : ''; ?>>Easy</option>
+                                <option value="medium" <?php echo (($_POST['difficulty'] ?? 'medium') === 'medium') ? 'selected' : ''; ?>>Medium</option>
+                                <option value="hard" <?php echo (($_POST['difficulty'] ?? '') === 'hard') ? 'selected' : ''; ?>>Hard / Advanced</option>
+                            </select>
+                        </div>
+
+                        <!-- Priority 2: Custom Difficulty Distribution -->
+                        <div id="custom_difficulty_block" class="space-y-2 bg-stone-50 border border-stone-200 p-3 rounded-xl p2-diff-block">
+                            <label class="text-[11px] font-extrabold text-stone-800 block">Difficulty Count Allocation</label>
+                            <div class="grid grid-cols-3 gap-2">
+                                <div>
+                                    <label class="text-[10px] font-bold text-stone-500">Easy Count</label>
+                                    <input type="number" name="difficulty_distribution[easy]" value="<?php echo htmlspecialchars($_POST['difficulty_distribution']['easy'] ?? '0'); ?>" min="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-bold text-stone-500">Medium Count</label>
+                                    <input type="number" name="difficulty_distribution[medium]" value="<?php echo htmlspecialchars($_POST['difficulty_distribution']['medium'] ?? '0'); ?>" min="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-bold text-stone-500">Hard Count</label>
+                                    <input type="number" name="difficulty_distribution[hard]" value="<?php echo htmlspecialchars($_POST['difficulty_distribution']['hard'] ?? '0'); ?>" min="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Priority 2: Period Weighting Mode -->
+                        <div class="space-y-2 bg-stone-50 border border-stone-200 p-3 rounded-xl">
+                            <label class="text-xs font-bold text-stone-700 block">Period Weighting Mode</label>
+                            <select name="period_weighting_mode" id="period_weighting_mode" onchange="togglePeriodWeightControls()" class="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500">
+                                <option value="equal" <?php echo (($_POST['period_weighting_mode'] ?? 'equal') === 'equal') ? 'selected' : ''; ?>>Equal Distribution</option>
+                                <option value="percentage" <?php echo (($_POST['period_weighting_mode'] ?? '') === 'percentage') ? 'selected' : ''; ?>>Percentage Distribution (%)</option>
+                                <option value="fixed" <?php echo (($_POST['period_weighting_mode'] ?? '') === 'fixed') ? 'selected' : ''; ?>>Fixed Question Count</option>
+                            </select>
+
+                            <div id="period_weights_inputs" class="grid grid-cols-3 gap-2 pt-2">
+                                <div>
+                                    <label class="text-[10px] font-bold text-stone-500">Prelim</label>
+                                    <input type="number" name="period_weights[prelim]" value="<?php echo htmlspecialchars($_POST['period_weights']['prelim'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-bold text-stone-500">Midterm</label>
+                                    <input type="number" name="period_weights[midterm]" value="<?php echo htmlspecialchars($_POST['period_weights']['midterm'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-bold text-stone-500">Finals</label>
+                                    <input type="number" name="period_weights[finals]" value="<?php echo htmlspecialchars($_POST['period_weights']['finals'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Priority 2: Multi-Type Exam Blueprint -->
+                        <div class="space-y-2 bg-stone-50 border border-stone-200 p-3 rounded-xl">
+                            <label class="text-xs font-bold text-stone-700 block">Multi-Type Question Blueprint (Count Allocation)</label>
+                            <div class="grid grid-cols-3 gap-2">
+                                <div>
+                                    <label class="text-[10px] font-bold text-stone-500">Multiple Choice</label>
+                                    <input type="number" name="blueprint[multiple_choice]" value="<?php echo htmlspecialchars($_POST['blueprint']['multiple_choice'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-bold text-stone-500">True or False</label>
+                                    <input type="number" name="blueprint[true_false]" value="<?php echo htmlspecialchars($_POST['blueprint']['true_false'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-bold text-stone-500">Identification</label>
+                                    <input type="number" name="blueprint[identification]" value="<?php echo htmlspecialchars($_POST['blueprint']['identification'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
+                                </div>
                             </div>
                         </div>
 
@@ -1128,15 +1224,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                         </div>
 
                         <div class="space-y-1">
-                            <label class="text-xs font-bold text-stone-700">Question Format / Type</label>
+                            <label class="text-xs font-bold text-stone-700">Default Fallback Question Format</label>
                             <select name="question_type" required class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500">
                                 <option value="multiple_choice" <?php echo (($_POST['question_type'] ?? '') === 'multiple_choice') ? 'selected' : ''; ?>>Multiple Choice (Options A-D)</option>
                                 <option value="true_false" <?php echo (($_POST['question_type'] ?? '') === 'true_false') ? 'selected' : ''; ?>>True or False</option>
                                 <option value="identification" <?php echo (($_POST['question_type'] ?? '') === 'identification') ? 'selected' : ''; ?>>Identification</option>
-                                <option value="fill_in_the_blank" <?php echo (($_POST['question_type'] ?? '') === 'fill_in_the_blank') ? 'selected' : ''; ?>>Fill-in-the-Blank</option>
-                                <option value="matching_type" <?php echo (($_POST['question_type'] ?? '') === 'matching_type') ? 'selected' : ''; ?>>Matching Type</option>
-                                <option value="problem_solving" <?php echo (($_POST['question_type'] ?? '') === 'problem_solving') ? 'selected' : ''; ?>>Problem Solving</option>
-                                <option value="math_formula" <?php echo (($_POST['question_type'] ?? '') === 'math_formula') ? 'selected' : ''; ?>>Math Formula (LaTeX)</option>
                             </select>
                         </div>
 
@@ -1144,6 +1236,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                             <i class="fa-solid fa-robot"></i> Generate AI Test Items
                         </button>
                     </form>
+
 
                     <script>
                         function toggleInputSource(type) {
@@ -1297,6 +1390,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                     <span class="font-extrabold text-stone-200" data-testid="audit-time"><?php echo number_format(($ai_meta_output['generation_time_ms'] ?? 0) / 1000, 2); ?>s</span>
                                 </div>
                             </div>
+
+                            <!-- Priority 2 Detailed Audit Metrics -->
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] pt-1">
+                                <div class="bg-stone-800/60 p-2 rounded-xl border border-stone-700/50">
+                                    <span class="text-[9px] font-bold text-stone-400 block uppercase">Period Weighting</span>
+                                    <span class="font-extrabold text-sky-400" data-testid="audit-period-mode"><?php echo ucfirst($ai_meta_output['period_weighting_mode'] ?? 'equal'); ?> Mode</span>
+                                </div>
+                                <div class="bg-stone-800/60 p-2 rounded-xl border border-stone-700/50">
+                                    <span class="text-[9px] font-bold text-stone-400 block uppercase">Blueprint Breakdown</span>
+                                    <span class="font-extrabold text-indigo-300" data-testid="audit-blueprint">
+                                        <?php 
+                                        $blueStr = [];
+                                        foreach ($ai_meta_output['actual_question_distribution'] ?? [] as $t => $cnt) {
+                                            $blueStr[] = str_replace('_', ' ', $t) . ": " . $cnt;
+                                        }
+                                        echo htmlspecialchars(implode(', ', $blueStr) ?: 'N/A');
+                                        ?>
+                                    </span>
+                                </div>
+                                <div class="bg-stone-800/60 p-2 rounded-xl border border-stone-700/50">
+                                    <span class="text-[9px] font-bold text-stone-400 block uppercase">Difficulty Breakdown</span>
+                                    <span class="font-extrabold text-amber-300" data-testid="audit-difficulty">
+                                        <?php
+                                        $diffStr = [];
+                                        foreach ($ai_meta_output['actual_difficulty_distribution'] ?? [] as $d => $cnt) {
+                                            if ($cnt > 0) $diffStr[] = ucfirst($d) . ": " . $cnt;
+                                        }
+                                        echo htmlspecialchars(implode(', ', $diffStr) ?: 'Single');
+                                        ?>
+                                    </span>
+                                </div>
+                                <div class="bg-stone-800/60 p-2 rounded-xl border border-stone-700/50">
+                                    <span class="text-[9px] font-bold text-stone-400 block uppercase">Deduplication</span>
+                                    <span class="font-extrabold text-rose-300" data-testid="audit-dedup">
+                                        <?php echo intval($ai_meta_output['duplicate_count'] ?? 0); ?> Rejected / <?php echo intval($ai_meta_output['replacement_attempt_count'] ?? 0); ?> Replaced
+                                    </span>
+                                </div>
+                            </div>
+
+                            <?php if (!empty($ai_meta_output['duplicate_warnings'])): ?>
+                                <div class="p-2 bg-purple-950/60 border border-purple-800/60 rounded-xl text-purple-300 text-[10px] space-y-0.5">
+                                    <span class="font-bold flex items-center gap-1"><i class="fa-solid fa-copy"></i> Duplicates Filtered & Replaced:</span>
+                                    <ul class="list-disc pl-4 space-y-0.5">
+                                        <?php foreach ($ai_meta_output['duplicate_warnings'] as $dw): ?>
+                                            <li><?php echo htmlspecialchars($dw); ?></li>
+                                        <?php endforeach; ?>
+                                    </ul>
+                                </div>
+                            <?php endif; ?>
+
                             <?php if (!empty($ai_meta_output['generation_warnings'])): ?>
                                 <div class="p-2 bg-amber-950/60 border border-amber-800/60 rounded-xl text-amber-300 text-[10px] space-y-0.5">
                                     <span class="font-bold flex items-center gap-1"><i class="fa-solid fa-triangle-exclamation"></i> Batch Warnings:</span>
@@ -1308,6 +1451,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                 </div>
                             <?php endif; ?>
                         </div>
+
 
                         <form action="generate_ai.php" method="POST" class="bg-white border border-stone-200 rounded-2xl p-6 shadow-sm space-y-6 animate-fadeIn">
                             <?php echo csrfInputField(); ?>

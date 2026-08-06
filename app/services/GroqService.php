@@ -49,8 +49,19 @@ class GroqService {
                 ['question' => 'Flexible pavement design uses CBR structural number for traffic load calculation.', 'type' => 'true_false', 'opt_a' => 'True', 'opt_b' => 'False', 'opt_c' => null, 'opt_d' => null, 'correct_answer' => 'True', 'explanation' => 'CBR determines subgrade strength.', 'points' => 1, 'source_topic' => 'Pavement Design', 'source_academic_period' => 'midterm', 'source_confidence' => 'high'],
                 ['question' => 'What structural component resists bending moments in reinforced concrete?', 'type' => 'multiple_choice', 'opt_a' => 'Steel rebar', 'opt_b' => 'Aggregates', 'opt_c' => 'Water', 'opt_d' => 'Sand', 'correct_answer' => 'A', 'explanation' => 'Steel rebar provides tensile capacity.', 'points' => 1, 'source_topic' => 'Structural Concrete', 'source_academic_period' => 'finals', 'source_confidence' => 'high'],
                 ['question' => 'Pavement markings guide traffic flow and lane discipline.', 'type' => 'true_false', 'opt_a' => 'True', 'opt_b' => 'False', 'opt_c' => null, 'opt_d' => null, 'correct_answer' => 'True', 'explanation' => 'Visual guidance for drivers.', 'points' => 1, 'source_topic' => 'Traffic Engineering', 'source_academic_period' => 'general', 'source_confidence' => 'high'],
-                ['question' => 'Which coefficient represents pavement friction in SSD calculation?', 'type' => 'multiple_choice', 'opt_a' => 'f (coefficient of longitudinal friction)', 'opt_b' => 'CBR', 'opt_c' => 'V (velocity)', 'opt_d' => 't (time)', 'correct_answer' => 'A', 'explanation' => 'Friction coefficient f.', 'points' => 1, 'source_topic' => 'Highway Engineering', 'source_academic_period' => 'prelim', 'source_confidence' => 'high']
+                ['question' => 'Which coefficient represents pavement friction in SSD calculation?', 'type' => 'multiple_choice', 'opt_a' => 'f (coefficient of longitudinal friction)', 'opt_b' => 'CBR', 'opt_c' => 'V (velocity)', 'opt_d' => 't (time)', 'correct_answer' => 'A', 'explanation' => 'Friction coefficient f.', 'points' => 1, 'source_topic' => 'Highway Engineering', 'source_academic_period' => 'prelim', 'source_confidence' => 'high'],
+                ['question' => 'What is the primary stress carrying mechanism in web elements of steel beams?', 'type' => 'multiple_choice', 'opt_a' => 'Shear stress', 'opt_b' => 'Flexural tension', 'opt_c' => 'Torsion', 'opt_d' => 'Bearing pressure', 'correct_answer' => 'A', 'explanation' => 'Beam webs carry shear stress.', 'points' => 1, 'source_topic' => 'Structural Steel', 'source_academic_period' => 'prelim', 'source_confidence' => 'high'],
+                ['question' => 'The Modified Proctor compaction test determines maximum dry density.', 'type' => 'true_false', 'opt_a' => 'True', 'opt_b' => 'False', 'opt_c' => null, 'opt_d' => null, 'correct_answer' => 'True', 'explanation' => 'Proctor test yields optimum moisture content and max dry density.', 'points' => 1, 'source_topic' => 'Geotechnical Engineering', 'source_academic_period' => 'midterm', 'source_confidence' => 'high'],
+                ['question' => 'Which method computes peak storm discharge in urban drainage design?', 'type' => 'multiple_choice', 'opt_a' => 'Rational Method Q=CIA', 'opt_b' => 'Manning Equation', 'opt_c' => 'Hazens formula', 'opt_d' => 'Darcy law', 'correct_answer' => 'A', 'explanation' => 'Rational method calculates peak discharge.', 'points' => 1, 'source_topic' => 'Hydrology', 'source_academic_period' => 'finals', 'source_confidence' => 'high'],
+                ['question' => 'In differential leveling, back sight is taken on a point of known elevation.', 'type' => 'true_false', 'opt_a' => 'True', 'opt_b' => 'False', 'opt_c' => null, 'opt_d' => null, 'correct_answer' => 'True', 'explanation' => 'Back sight is measured on a benchmark or turning point.', 'points' => 1, 'source_topic' => 'Surveying', 'source_academic_period' => 'prelim', 'source_confidence' => 'high'],
+                ['question' => 'Bernoulli equation expresses conservation of energy in fluid motion.', 'type' => 'true_false', 'opt_a' => 'True', 'opt_b' => 'False', 'opt_c' => null, 'opt_d' => null, 'correct_answer' => 'True', 'explanation' => 'Total energy head remains constant along a streamline.', 'points' => 1, 'source_topic' => 'Fluid Mechanics', 'source_academic_period' => 'midterm', 'source_confidence' => 'high'],
+                ['question' => 'What type of active earth pressure theory assumes triangular stress distribution?', 'type' => 'multiple_choice', 'opt_a' => 'Rankine Theory', 'opt_b' => 'Coulomb Theory', 'opt_c' => 'Terzaghi Theory', 'opt_d' => 'Boussinesq Theory', 'correct_answer' => 'A', 'explanation' => 'Rankine assumes smooth vertical wall with triangular distribution.', 'points' => 1, 'source_topic' => 'Foundation Engineering', 'source_academic_period' => 'finals', 'source_confidence' => 'high'],
+                ['question' => 'Zero force members in a truss carry load during wind loading.', 'type' => 'true_false', 'opt_a' => 'True', 'opt_b' => 'False', 'opt_c' => null, 'opt_d' => null, 'correct_answer' => 'False', 'explanation' => 'Zero force members carry zero axial force under current joint loads.', 'points' => 1, 'source_topic' => 'Structural Analysis', 'source_academic_period' => 'prelim', 'source_confidence' => 'high'],
+                ['question' => 'Liquid limit and plastic limit define soil consistency boundaries.', 'type' => 'true_false', 'opt_a' => 'True', 'opt_b' => 'False', 'opt_c' => null, 'opt_d' => null, 'correct_answer' => 'True', 'explanation' => 'Atterberg limits mark moisture transitions.', 'points' => 1, 'source_topic' => 'Soil Mechanics', 'source_academic_period' => 'midterm', 'source_confidence' => 'high'],
+                ['question' => 'Sedimentation tanks remove suspended solids by gravity settling.', 'type' => 'true_false', 'opt_a' => 'True', 'opt_b' => 'False', 'opt_c' => null, 'opt_d' => null, 'correct_answer' => 'True', 'explanation' => 'Gravitational settling clarifies water.', 'points' => 1, 'source_topic' => 'Environmental Engineering', 'source_academic_period' => 'finals', 'source_confidence' => 'high'],
+                ['question' => 'What is Terzaghi ultimate bearing capacity equation for strip footing?', 'type' => 'multiple_choice', 'opt_a' => 'qu = c*Nc + q*Nq + 0.5*gamma*B*Ngamma', 'opt_b' => 'qu = c*Nc', 'opt_c' => 'qu = 1.3*c*Nc', 'opt_d' => 'None', 'correct_answer' => 'A', 'explanation' => 'General Terzaghi strip footing bearing capacity formula.', 'points' => 1, 'source_topic' => 'Foundation Engineering', 'source_academic_period' => 'finals', 'source_confidence' => 'high']
             ];
+
 
             preg_match_all('/Lesson ID:\s*(\d+)/i', $userPrompt, $lMatch);
             $promptLids = !empty($lMatch[1]) ? array_values(array_unique(array_map('intval', $lMatch[1]))) : [];
@@ -145,8 +156,9 @@ class GroqService {
             }
 
             $mockQuestions = [];
+            $baseOffset = ($currentChunkNum !== null) ? ($currentChunkNum * 5) : 0;
             for ($i = 0; $i < $targetCount; $i++) {
-                $item = $basePool[$i % count($basePool)];
+                $item = $basePool[($i + $baseOffset) % count($basePool)];
                 if (!empty($promptLids)) {
                     $item['source_lesson_ids'] = $promptLids;
                 } else {
@@ -164,9 +176,9 @@ class GroqService {
                 }
 
                 if (preg_match('/ADDITIONAL/i', $userPrompt)) {
-                    $item['question'] .= " [Refill-Item #" . ($i + 1) . "-" . substr(md5($userPrompt . $i), 0, 6) . "]";
+                    $item['question'] = "Unique Refill Test Question #" . ($i + 1) . " on " . $item['source_topic'] . " " . substr(md5($userPrompt . $i), 0, 8);
                 } elseif (preg_match('/lesson chunk \((\d+) of (\d+)\)/i', $userPrompt, $cm)) {
-                    $item['question'] .= " [Chunk {$cm[1]}-Item #" . ($i + 1) . "]";
+                    $item['question'] .= " (Chunk " . ($cm[1] ?? '1') . " Item " . ($i + 1) . " Key: " . sha1($userPrompt . $i . ($cm[1] ?? '1')) . ")";
                 } else {
                     $item['question'] .= " (Item #" . ($i + 1) . ")";
                 }
@@ -316,7 +328,203 @@ class GroqService {
         return ['success' => true, 'data' => $decoded];
     }
 
-    public static function generateQuestions($lessonText, $numQuestions, $subject, $examTitle, $specialization = 'Structural Engineering', $questionType = 'multiple_choice', $difficulty = 'medium', $apiKey = null) {
+    public static function normalizeQuestionText(string $text): string {
+        $text = mb_strtolower($text, 'UTF-8');
+        $text = preg_replace('/[^\w\s]/u', '', $text);
+        $text = preg_replace('/\s+/', ' ', $text);
+        return trim($text);
+    }
+
+    public static function validateAndCalculatePeriodWeights(string $mode, array $weights, array $selectedPeriods, int $totalQuestions): array {
+        $selectedPeriods = array_values(array_unique(array_map(function($p) { return strtolower(trim($p)); }, $selectedPeriods)));
+        if (empty($selectedPeriods)) {
+            $selectedPeriods = ['general'];
+        }
+
+        $cleanWeights = [];
+        foreach ($weights as $p => $w) {
+            $pClean = strtolower(trim($p));
+            if (is_numeric($w)) {
+                $cleanWeights[$pClean] = floatval($w);
+            }
+        }
+
+        foreach ($cleanWeights as $p => $w) {
+            if ($w > 0 && !in_array($p, $selectedPeriods, true)) {
+                throw new InvalidArgumentException("Period '{$p}' has no selected lessons in the material pool and cannot receive a question allocation.");
+            }
+            if ($w < 0) {
+                throw new InvalidArgumentException("Period weight for '{$p}' cannot be negative.");
+            }
+        }
+
+        $requestedDistribution = [];
+        $targetCounts = [];
+
+        if ($mode === 'percentage') {
+            $totalPct = array_sum($cleanWeights);
+            if (abs($totalPct - 100.0) > 0.5 && $totalPct > 0) {
+                throw new InvalidArgumentException("Period percentage distribution must total exactly 100% (got {$totalPct}%).");
+            }
+            $remainderList = [];
+            $allocatedSum = 0;
+            foreach ($selectedPeriods as $p) {
+                $pct = $cleanWeights[$p] ?? (100.0 / count($selectedPeriods));
+                $requestedDistribution[$p] = round($pct, 2);
+                $raw = ($pct / 100.0) * $totalQuestions;
+                $cnt = (int)floor($raw);
+                $targetCounts[$p] = $cnt;
+                $allocatedSum += $cnt;
+                $remainderList[$p] = $raw - $cnt;
+            }
+            $rem = $totalQuestions - $allocatedSum;
+            arsort($remainderList);
+            foreach ($remainderList as $p => $diff) {
+                if ($rem <= 0) break;
+                $targetCounts[$p]++;
+                $rem--;
+            }
+        } elseif ($mode === 'fixed') {
+            $totalFixed = (int)array_sum($cleanWeights);
+            if ($totalFixed !== $totalQuestions) {
+                throw new InvalidArgumentException("Fixed period question counts must sum to the requested total questions ({$totalQuestions}, got {$totalFixed}).");
+            }
+            foreach ($selectedPeriods as $p) {
+                $cnt = (int)($cleanWeights[$p] ?? 0);
+                $requestedDistribution[$p] = $cnt;
+                $targetCounts[$p] = $cnt;
+            }
+        } else {
+            $mode = 'equal';
+            $base = (int)floor($totalQuestions / count($selectedPeriods));
+            $rem = $totalQuestions % count($selectedPeriods);
+            foreach ($selectedPeriods as $idx => $p) {
+                $cnt = $base + ($idx < $rem ? 1 : 0);
+                $requestedDistribution[$p] = round(100.0 / count($selectedPeriods), 2);
+                $targetCounts[$p] = $cnt;
+            }
+        }
+
+        return [
+            'mode' => $mode,
+            'requested_distribution' => $requestedDistribution,
+            'target_counts' => $targetCounts
+        ];
+    }
+
+    public static function validateAndCalculateBlueprint(array $blueprint, int $totalQuestions, string $fallbackType = 'multiple_choice'): array {
+        $supportedTypes = ['multiple_choice', 'true_false', 'identification', 'fill_blank', 'matching', 'problem_solving', 'math_formula'];
+        
+        if (empty($blueprint) || array_sum(array_map('intval', $blueprint)) === 0) {
+            if (!in_array($fallbackType, $supportedTypes, true)) {
+                $fallbackType = 'multiple_choice';
+            }
+            return [
+                'requested_blueprint' => [$fallbackType => $totalQuestions],
+                'target_counts' => [$fallbackType => $totalQuestions]
+            ];
+        }
+
+        $cleanBlueprint = [];
+        $totalCount = 0;
+        foreach ($blueprint as $type => $count) {
+            $typeClean = strtolower(trim($type));
+            if (!in_array($typeClean, $supportedTypes, true)) {
+                throw new InvalidArgumentException("Unsupported question type '{$type}' in blueprint.");
+            }
+            $cnt = (int)$count;
+            if ($cnt < 0) {
+                throw new InvalidArgumentException("Question count for type '{$type}' cannot be negative.");
+            }
+            if ($cnt > 0) {
+                $cleanBlueprint[$typeClean] = $cnt;
+                $totalCount += $cnt;
+            }
+        }
+
+        if ($totalCount !== $totalQuestions) {
+            throw new InvalidArgumentException("Question blueprint totals must equal total requested questions ({$totalQuestions}, got {$totalCount}).");
+        }
+
+        return [
+            'requested_blueprint' => $cleanBlueprint,
+            'target_counts' => $cleanBlueprint
+        ];
+    }
+
+    public static function validateAndCalculateDifficulty(string $mode, array $distribution, int $totalQuestions, string $fallbackDifficulty = 'medium'): array {
+        $supportedDiffs = ['easy', 'medium', 'hard'];
+        if (!in_array($fallbackDifficulty, $supportedDiffs, true)) {
+            $fallbackDifficulty = 'medium';
+        }
+
+        if ($mode === 'percentage' && !empty($distribution)) {
+            $clean = [];
+            $sumPct = 0;
+            foreach ($distribution as $d => $val) {
+                $dClean = strtolower(trim($d));
+                if (in_array($dClean, $supportedDiffs, true) && is_numeric($val) && $val >= 0) {
+                    $clean[$dClean] = floatval($val);
+                    $sumPct += floatval($val);
+                }
+            }
+            if (abs($sumPct - 100.0) > 0.5 && $sumPct > 0) {
+                throw new InvalidArgumentException("Difficulty percentage distribution must total exactly 100% (got {$sumPct}%).");
+            }
+            $targetCounts = [];
+            $allocatedSum = 0;
+            $remList = [];
+            foreach ($supportedDiffs as $d) {
+                $pct = $clean[$d] ?? 0;
+                $raw = ($pct / 100.0) * $totalQuestions;
+                $cnt = (int)floor($raw);
+                $targetCounts[$d] = $cnt;
+                $allocatedSum += $cnt;
+                $remList[$d] = $raw - $cnt;
+            }
+            $rem = $totalQuestions - $allocatedSum;
+            arsort($remList);
+            foreach ($remList as $d => $diff) {
+                if ($rem <= 0) break;
+                $targetCounts[$d]++;
+                $rem--;
+            }
+            return [
+                'mode' => 'percentage',
+                'requested_distribution' => $clean,
+                'target_counts' => $targetCounts
+            ];
+        } elseif ($mode === 'fixed' && !empty($distribution)) {
+            $clean = [];
+            $sum = 0;
+            foreach ($distribution as $d => $val) {
+                $dClean = strtolower(trim($d));
+                if (in_array($dClean, $supportedDiffs, true)) {
+                    $cnt = (int)$val;
+                    if ($cnt < 0) throw new InvalidArgumentException("Difficulty count for '{$d}' cannot be negative.");
+                    $clean[$dClean] = $cnt;
+                    $sum += $cnt;
+                }
+            }
+            if ($sum !== $totalQuestions) {
+                throw new InvalidArgumentException("Fixed difficulty counts must sum to requested total questions ({$totalQuestions}, got {$sum}).");
+            }
+            return [
+                'mode' => 'fixed',
+                'requested_distribution' => $clean,
+                'target_counts' => $clean
+            ];
+        } else {
+            return [
+                'mode' => 'single',
+                'requested_distribution' => [$fallbackDifficulty => $totalQuestions],
+                'target_counts' => [$fallbackDifficulty => $totalQuestions]
+            ];
+        }
+    }
+
+    public static function generateQuestions($lessonText, $numQuestions, $subject, $examTitle, $specialization = 'Structural Engineering', $questionType = 'multiple_choice', $difficulty = 'medium', $apiKey = null, $options = []) {
+
         $startTime = microtime(true);
 
         if (empty(trim($lessonText)) || strlen(trim($lessonText)) < 20) {
@@ -327,28 +535,70 @@ class GroqService {
             return ['error' => 'Question count must be at least 1.'];
         }
 
+        // 1. Period Weighting Validation
+        preg_match_all('/Period:\s*([^\r\n]+)/i', $lessonText, $allPMatches);
+        $allSelectedPeriods = [];
+        if (!empty($allPMatches[1])) {
+            foreach ($allPMatches[1] as $pm) {
+                $pm = strtolower(trim($pm));
+                if (!empty($pm) && !in_array($pm, $allSelectedPeriods, true)) {
+                    $allSelectedPeriods[] = $pm;
+                }
+            }
+        }
+        if (empty($allSelectedPeriods)) {
+            $allSelectedPeriods = ['general'];
+        }
+
+        $periodMode = $options['period_weighting_mode'] ?? 'equal';
+        $periodWeights = $options['period_weights'] ?? [];
+        try {
+            $periodWeightInfo = self::validateAndCalculatePeriodWeights($periodMode, $periodWeights, $allSelectedPeriods, $numQuestions);
+        } catch (InvalidArgumentException $e) {
+            return ['error' => $e->getMessage()];
+        }
+
+        // 2. Blueprint Validation
+        $blueprintInput = $options['question_blueprint'] ?? [];
+        if (empty($blueprintInput) && is_string($questionType) && !empty($questionType)) {
+            $blueprintInput = [$questionType => $numQuestions];
+        }
+        try {
+            $blueprintInfo = self::validateAndCalculateBlueprint($blueprintInput, $numQuestions, is_string($questionType) ? $questionType : 'multiple_choice');
+        } catch (InvalidArgumentException $e) {
+            return ['error' => $e->getMessage()];
+        }
+
+        // 3. Difficulty Distribution Validation
+        $diffMode = $options['difficulty_mode'] ?? 'single';
+        $diffDistInput = $options['difficulty_distribution'] ?? [];
+        try {
+            $difficultyInfo = self::validateAndCalculateDifficulty($diffMode, $diffDistInput, $numQuestions, is_string($difficulty) ? $difficulty : 'medium');
+        } catch (InvalidArgumentException $e) {
+            return ['error' => $e->getMessage()];
+        }
+
         $charLength = strlen($lessonText);
         $wordCount = str_word_count($lessonText);
         $estimatedTokens = (int)ceil($charLength / 4);
 
         $chunkLimit = (defined('TEST_CHUNK_LIMIT') && TEST_CHUNK_LIMIT > 0) ? TEST_CHUNK_LIMIT : (self::isTestModeActive() ? 200 : (defined('AI_SAFE_INPUT_TOKENS') ? (AI_SAFE_INPUT_TOKENS * 4) : 96000));
         $generationWarnings = [];
+        $duplicateWarnings = [];
+        $duplicateCount = 0;
+        $replacementAttemptCount = 0;
         $rawChunkResponses = [];
 
         if ($charLength > $chunkLimit || self::isTestModeActive()) {
-            // Final Repair 5: Second-level hierarchical splitting for single oversized lessons
-            // Preferred boundaries: 1. Source lesson boundaries 2. Headings 3. Paragraphs 4. Sentences
             preg_match_all('/(SOURCE LESSON \d+[\s\S]*?)(?=(?:SOURCE LESSON \d+|\z))/i', $lessonText, $matches);
             $initialBlocks = !empty($matches[1]) ? $matches[1] : preg_split('/\n{2,}/', $lessonText);
 
             $lessonBlocks = [];
             foreach ($initialBlocks as $blk) {
                 if (strlen($blk) > $chunkLimit) {
-                    // Subsplit oversized block by headings/sections or paragraphs
                     $subBlocks = preg_split('/(?:\n(?=#+|\=+\s|-{3,}))|(?:\n{2,})/', $blk);
                     foreach ($subBlocks as $sblk) {
                         if (strlen($sblk) > $chunkLimit) {
-                            // Subsplit by sentences if paragraph is still oversized
                             $sentences = preg_split('/(?<=[.!?])\s+/', $sblk);
                             $tempSub = "";
                             foreach ($sentences as $st) {
@@ -388,7 +638,9 @@ class GroqService {
             }
 
             $validQuestions = [];
-            $seen = [];
+            $seenHashes = [];
+            $seenAnswers = [];
+            $seenQuestions = [];
             $totalChunks = count($chunks);
             $failedChunkCount = 0;
             $failedChunkIndexes = [];
@@ -398,22 +650,54 @@ class GroqService {
             $chunkGenerationResults = [];
             $executedSimulatedScenario = null;
 
-            // Calculate exact integer question allocation per chunk
-            $baseAlloc = (int)floor($numQuestions / $totalChunks);
-            $remainder = $numQuestions % $totalChunks;
+            // Calculate chunk allocations respecting period targets
             $chunkAllocations = [];
+            $periodChunks = [];
+            $activeLessonId = null;
+            $activePeriod = 'general';
+
+            foreach ($chunks as $cIdx => &$cContent) {
+                preg_match('/Lesson ID:\s*(\d+)/i', $cContent, $cLMatch);
+                if (!empty($cLMatch[1])) {
+                    $activeLessonId = intval($cLMatch[1]);
+                } elseif ($activeLessonId !== null) {
+                    $cContent = "Lesson ID: {$activeLessonId}\n" . $cContent;
+                }
+
+                preg_match('/Period:\s*([^\r\n]+)/i', $cContent, $cPMatch);
+                if (!empty($cPMatch[1])) {
+                    $activePeriod = strtolower(trim($cPMatch[1]));
+                } elseif ($activePeriod !== 'general') {
+                    $cContent = "Period: {$activePeriod}\n" . $cContent;
+                }
+
+                $periodChunks[$activePeriod][] = $cIdx;
+            }
+            unset($cContent);
+
+
+            foreach ($periodWeightInfo['target_counts'] as $p => $pTarget) {
+                $cList = $periodChunks[$p] ?? [];
+                if (!empty($cList)) {
+                    $baseAlloc = (int)floor($pTarget / count($cList));
+                    $remAlloc = $pTarget % count($cList);
+                    foreach ($cList as $idxInList => $cIdx) {
+                        $chunkAllocations[$cIdx] = $baseAlloc + ($idxInList < $remAlloc ? 1 : 0);
+                    }
+                }
+            }
             for ($c = 0; $c < $totalChunks; $c++) {
-                $chunkAllocations[$c] = $baseAlloc + ($c < $remainder ? 1 : 0);
+                if (!isset($chunkAllocations[$c])) {
+                    $chunkAllocations[$c] = max(1, (int)floor($numQuestions / $totalChunks));
+                }
             }
 
             foreach ($chunks as $chunkIdx => $chunkContent) {
                 $chunkShare = $chunkAllocations[$chunkIdx] ?? max(1, (int)round($numQuestions / $totalChunks));
                 
-                // Extract lesson IDs in current chunk for failure and coverage tracking
                 preg_match_all('/Lesson ID:\s*(\d+)/i', $chunkContent, $lIdMatches);
                 $chunkLessonIds = !empty($lIdMatches[1]) ? array_values(array_unique(array_map('intval', $lIdMatches[1]))) : [];
 
-                // Extract academic periods in current chunk
                 preg_match_all('/Period:\s*([^\r\n]+)/i', $chunkContent, $pMatches);
                 $chunkPeriods = [];
                 if (!empty($pMatches[1])) {
@@ -425,15 +709,18 @@ class GroqService {
                     }
                 }
 
+                $blueprintStr = json_encode($blueprintInfo['target_counts']);
+                $difficultyStr = json_encode($difficultyInfo['target_counts']);
+
                 $chunkPrompt = "You are an expert Civil Engineering professor specializing in {$specialization} and academic assessment creation. "
                              . "Generate exactly {$chunkShare} high-quality Civil Engineering examination questions for the subject '{$subject}' (Specialization: {$specialization}) titled '{$examTitle}'. "
-                             . "Target Difficulty Level: '{$difficulty}'. "
-                             . "Target Question Type Format: '{$questionType}'. "
+                             . "Target Difficulty Distribution: '{$difficultyStr}'. "
+                             . "Target Question Type Blueprint: '{$blueprintStr}'. "
                              . "based strictly on the following lesson chunk (" . ($chunkIdx + 1) . " of {$totalChunks}): \"{$chunkContent}\". "
                              . "Do NOT invent facts outside the lesson content. "
                              . "Format response strictly as a JSON array of objects without markdown code blocks. "
                              . "Each object MUST have: \"question\" (string), \"type\" (string), \"opt_a\" (string or null), \"opt_b\" (string or null), \"opt_c\" (string or null), \"opt_d\" (string or null), "
-                             . "\"correct_answer\" (string), \"formula_latex\" (string or null), \"matching_pairs\" (object or null), \"explanation\" (string), \"points\" (int), "
+                             . "\"correct_answer\" (string), \"difficulty\" (string: 'easy', 'medium', or 'hard'), \"formula_latex\" (string or null), \"matching_pairs\" (object or null), \"explanation\" (string), \"points\" (int), "
                              . "\"source_lesson_ids\" (array of integers, e.g. [" . implode(',', $chunkLessonIds) . "]), \"source_topic\" (string), \"source_academic_period\" (string), \"source_confidence\" (string: 'high', 'medium', or 'review_required').";
 
                 $payload = [
@@ -444,7 +731,7 @@ class GroqService {
 
                 $chunkCallFailed = false;
                 $invalidQuestionCount = 0;
-                $duplicateCount = 0;
+                $chunkDuplicateCount = 0;
                 $acceptedFromChunk = 0;
                 $rawGeneratedCount = 0;
 
@@ -490,12 +777,41 @@ class GroqService {
                                 continue;
                             }
 
-                            $dedupKey = mb_strtolower(preg_replace('/\s+/', ' ', $qText));
-                            if (isset($seen[$dedupKey])) {
+                            // Practical Deduplication Check
+                            $normText = self::normalizeQuestionText($qText);
+                            $qKey = $normText . '|' . self::normalizeQuestionText($qCorrect);
+
+                            $isDup = false;
+                            $dupReason = '';
+                            if (isset($seenHashes[$normText])) {
+                                $isDup = true;
+                                $dupReason = "Exact duplicate question text: \"{$qText}\"";
+                            } elseif (isset($seenAnswers[$qKey])) {
+                                $isDup = true;
+                                $dupReason = "Duplicate question and answer key combination: \"{$qText}\"";
+                            } else {
+                                foreach ($seenQuestions as $sq) {
+                                    $sqNorm = self::normalizeQuestionText($sq['question']);
+                                    similar_text($normText, $sqNorm, $pct);
+                                    if ($pct >= 85.0) {
+                                        $isDup = true;
+                                        $dupReason = "High text similarity (" . round($pct, 1) . "%) with: \"{$sq['question']}\"";
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if ($isDup) {
+                                $chunkDuplicateCount++;
                                 $duplicateCount++;
+                                $duplicateWarnings[] = $dupReason;
+                                $replacementAttemptCount++;
                                 continue;
                             }
-                            $seen[$dedupKey] = true;
+
+                            $seenHashes[$normText] = true;
+                            $seenAnswers[$qKey] = true;
+                            $seenQuestions[] = $q;
 
                             $srcLessonIds = is_array($q['source_lesson_ids'] ?? null) ? array_map('intval', $q['source_lesson_ids']) : [];
                             $srcConfidence = $q['source_confidence'] ?? 'high';
@@ -531,9 +847,14 @@ class GroqService {
                                 $srcPeriod = !empty($chunkPeriods) ? $chunkPeriods[0] : 'general';
                             }
 
+                            $retDiff = strtolower(trim($q['difficulty'] ?? ''));
+                            if (!in_array($retDiff, ['easy', 'medium', 'hard'], true)) {
+                                $retDiff = 'unclassified';
+                            }
+
                             $validQuestions[] = [
                                 'question' => $qText,
-                                'type' => trim($q['type'] ?? $questionType),
+                                'type' => trim($q['type'] ?? (is_string($questionType) ? $questionType : 'multiple_choice')),
                                 'opt_a' => $q['opt_a'] ?? null,
                                 'opt_b' => $q['opt_b'] ?? null,
                                 'opt_c' => $q['opt_c'] ?? null,
@@ -543,7 +864,7 @@ class GroqService {
                                 'matching_pairs' => $q['matching_pairs'] ?? null,
                                 'explanation' => $q['explanation'] ?? '',
                                 'points' => intval($q['points'] ?? 1),
-                                'difficulty' => $difficulty,
+                                'difficulty' => $retDiff,
                                 'topic' => $q['source_topic'] ?? $subject,
                                 'source_lesson_ids' => $srcLessonIds,
                                 'source_topic' => $q['source_topic'] ?? $subject,
@@ -569,13 +890,13 @@ class GroqService {
                     'requested_question_allocation' => $chunkShare,
                     'successfully_generated_count' => $rawGeneratedCount,
                     'invalid_question_count' => $invalidQuestionCount,
-                    'duplicate_count' => $duplicateCount,
+                    'duplicate_count' => $chunkDuplicateCount,
                     'failed_count' => $failedCount,
                     'final_accepted_count' => $acceptedFromChunk
                 ];
             }
 
-            // --- COVERAGE-AWARE SHORTFALL REFILL ---
+            // Shortfall Refill Pass
             $refillAttemptCount = 0;
             $refillWarnings = [];
             $shortfall = $numQuestions - count($validQuestions);
@@ -595,12 +916,6 @@ class GroqService {
                     }
                 }
 
-                // Determine refill queue based on priority order:
-                // 1. Failed chunks
-                // 2. Chunks below allocated question count
-                // 3. Selected lessons with zero coverage
-                // 4. Academic periods with zero coverage
-                // 5. Other underrepresented source content
                 $p1_failed = [];
                 $p2_underfilled = [];
                 $p3_uncovered_lessons = [];
@@ -687,12 +1002,12 @@ class GroqService {
 
                     $refillPrompt = "You are an expert Civil Engineering professor specializing in {$specialization}. "
                                   . "Generate exactly {$neededRefill} ADDITIONAL non-duplicate examination questions for the subject '{$subject}' (Specialization: {$specialization}) titled '{$examTitle}'. "
-                                  . "Target Difficulty Level: '{$difficulty}'. Target Question Type: '{$questionType}'. "
+                                  . "Target Difficulty Level: '{$difficulty}'. Target Question Type: '" . (is_string($questionType) ? $questionType : 'multiple_choice') . "'. "
                                   . "based strictly on the following lesson content chunk (" . ($targetChunkIdx + 1) . " of {$totalChunks}): \"{$targetChunkContent}\". "
                                   . "Do NOT invent facts outside the lesson content. "
                                   . "Format response strictly as a JSON array of objects without markdown code blocks. "
                                   . "Each object MUST have: \"question\" (string), \"type\" (string), \"opt_a\" (string or null), \"opt_b\" (string or null), \"opt_c\" (string or null), \"opt_d\" (string or null), "
-                                  . "\"correct_answer\" (string), \"formula_latex\" (string or null), \"matching_pairs\" (object or null), \"explanation\" (string), \"points\" (int), "
+                                  . "\"correct_answer\" (string), \"difficulty\" (string), \"formula_latex\" (string or null), \"matching_pairs\" (object or null), \"explanation\" (string), \"points\" (int), "
                                   . "\"source_lesson_ids\" (array of integers, e.g. [" . implode(',', $targetChunkLessonIds) . "]), \"source_topic\" (string), \"source_academic_period\" (string), \"source_confidence\" (string: 'high', 'medium', or 'review_required').";
 
                     $refillPayload = [
@@ -716,9 +1031,26 @@ class GroqService {
                                 $rqCorrect = trim($rq['correct_answer'] ?? '');
                                 if (empty($rqText) || empty($rqCorrect)) continue;
 
-                                $dedupKey = mb_strtolower(preg_replace('/\s+/', ' ', $rqText));
-                                if (isset($seen[$dedupKey])) continue;
-                                $seen[$dedupKey] = true;
+                                $normText = self::normalizeQuestionText($rqText);
+                                $qKey = $normText . '|' . self::normalizeQuestionText($rqCorrect);
+                                $isDup = false;
+                                if (isset($seenHashes[$normText]) || isset($seenAnswers[$qKey])) {
+                                    $isDup = true;
+                                } else {
+                                    foreach ($seenQuestions as $sq) {
+                                        $sqNorm = self::normalizeQuestionText($sq['question']);
+                                        similar_text($normText, $sqNorm, $pct);
+                                        if ($pct >= 85.0) { $isDup = true; break; }
+                                    }
+                                }
+                                if ($isDup) {
+                                    $duplicateCount++;
+                                    $replacementAttemptCount++;
+                                    continue;
+                                }
+                                $seenHashes[$normText] = true;
+                                $seenAnswers[$qKey] = true;
+                                $seenQuestions[] = $rq;
 
                                 $srcLessonIds = is_array($rq['source_lesson_ids'] ?? null) ? array_map('intval', $rq['source_lesson_ids']) : [];
                                 $srcConfidence = $rq['source_confidence'] ?? 'high';
@@ -731,9 +1063,6 @@ class GroqService {
                                 if ($srcConfidence === 'review_required') {
                                     $srcLessonIds = [];
                                     $sourceVerificationNote = 'Refill question source ambiguous within multi-lesson chunk';
-                                    if (self::isTestModeActive() && preg_match('/MOCK_MISSING_SOURCE/i', $examTitle)) {
-                                        $executedSimulatedScenario = 'missing_source';
-                                    }
                                 } elseif (empty($srcLessonIds)) {
                                     if (count($targetChunkLessonIds) === 1) {
                                         $srcLessonIds = $targetChunkLessonIds;
@@ -743,9 +1072,6 @@ class GroqService {
                                         $srcLessonIds = [];
                                         $srcConfidence = 'review_required';
                                         $sourceVerificationNote = 'Refill question source ambiguous within multi-lesson chunk';
-                                        if (self::isTestModeActive() && preg_match('/MOCK_MISSING_SOURCE/i', $examTitle)) {
-                                            $executedSimulatedScenario = 'missing_source';
-                                        }
                                     }
                                 }
 
@@ -754,9 +1080,14 @@ class GroqService {
                                     $srcPeriod = !empty($targetChunkPeriods) ? $targetChunkPeriods[0] : 'general';
                                 }
 
+                                $retDiff = strtolower(trim($rq['difficulty'] ?? ''));
+                                if (!in_array($retDiff, ['easy', 'medium', 'hard'], true)) {
+                                    $retDiff = 'unclassified';
+                                }
+
                                 $validQuestions[] = [
                                     'question' => $rqText,
-                                    'type' => trim($rq['type'] ?? $questionType),
+                                    'type' => trim($rq['type'] ?? (is_string($questionType) ? $questionType : 'multiple_choice')),
                                     'opt_a' => $rq['opt_a'] ?? null,
                                     'opt_b' => $rq['opt_b'] ?? null,
                                     'opt_c' => $rq['opt_c'] ?? null,
@@ -766,7 +1097,7 @@ class GroqService {
                                     'matching_pairs' => $rq['matching_pairs'] ?? null,
                                     'explanation' => $rq['explanation'] ?? '',
                                     'points' => intval($rq['points'] ?? 1),
-                                    'difficulty' => $difficulty,
+                                    'difficulty' => $retDiff,
                                     'topic' => $rq['source_topic'] ?? $subject,
                                     'source_lesson_ids' => $srcLessonIds,
                                     'source_topic' => $rq['source_topic'] ?? $subject,
@@ -793,28 +1124,17 @@ class GroqService {
                 return ['error' => 'Chunked AI generation produced no valid questions. Warnings: ' . implode('; ', $generationWarnings)];
             }
 
-            // Enforce exact question count ceiling (never return more than requested)
             $validQuestions = array_slice($validQuestions, 0, $numQuestions);
             $finalGeneratedCount = count($validQuestions);
             $shortfallCount = max(0, $numQuestions - $finalGeneratedCount);
 
-            // Compute post-generation coverage metrics per lesson & period
             preg_match_all('/Lesson ID:\s*(\d+)/i', $lessonText, $allLMatches);
             $allSelectedLessonIds = !empty($allLMatches[1]) ? array_values(array_unique(array_map('intval', $allLMatches[1]))) : [];
 
-            preg_match_all('/Period:\s*([^\r\n]+)/i', $lessonText, $allPMatches);
-            $allSelectedPeriods = [];
-            if (!empty($allPMatches[1])) {
-                foreach ($allPMatches[1] as $pm) {
-                    $pm = strtolower(trim($pm));
-                    if (!empty($pm) && !in_array($pm, $allSelectedPeriods, true)) {
-                        $allSelectedPeriods[] = $pm;
-                    }
-                }
-            }
-
             $questionsPerLesson = array_fill_keys($allSelectedLessonIds, 0);
             $questionsPerPeriod = array_fill_keys($allSelectedPeriods, 0);
+            $actualQuestionDistribution = [];
+            $actualDifficultyDistribution = ['easy' => 0, 'medium' => 0, 'hard' => 0, 'unclassified' => 0];
 
             foreach ($validQuestions as $vq) {
                 foreach ($vq['source_lesson_ids'] as $lId) {
@@ -822,24 +1142,35 @@ class GroqService {
                         $questionsPerLesson[(int)$lId]++;
                     }
                 }
-                $p = strtolower($vq['source_academic_period'] ?? '');
+                $p = strtolower($vq['source_academic_period'] ?? 'general');
                 if (isset($questionsPerPeriod[$p])) {
                     $questionsPerPeriod[$p]++;
+                } else {
+                    $questionsPerPeriod[$p] = 1;
+                }
+
+                $t = strtolower($vq['type'] ?? 'multiple_choice');
+                if (!isset($actualQuestionDistribution[$t])) {
+                    $actualQuestionDistribution[$t] = 0;
+                }
+                $actualQuestionDistribution[$t]++;
+
+                $d = strtolower($vq['difficulty'] ?? 'unclassified');
+                if (isset($actualDifficultyDistribution[$d])) {
+                    $actualDifficultyDistribution[$d]++;
+                } else {
+                    $actualDifficultyDistribution[$d] = 1;
                 }
             }
 
             $uncoveredLessonIds = [];
             foreach ($questionsPerLesson as $lId => $cnt) {
-                if ($cnt === 0) {
-                    $uncoveredLessonIds[] = (int)$lId;
-                }
+                if ($cnt === 0) $uncoveredLessonIds[] = (int)$lId;
             }
 
             $uncoveredPeriods = [];
             foreach ($questionsPerPeriod as $per => $cnt) {
-                if ($cnt === 0) {
-                    $uncoveredPeriods[] = $per;
-                }
+                if ($cnt === 0) $uncoveredPeriods[] = $per;
             }
 
             $batchStatus = ($shortfallCount > 0 || !empty($uncoveredLessonIds) || !empty($uncoveredPeriods)) ? 'incomplete' : 'completed';
@@ -855,19 +1186,9 @@ class GroqService {
             }
 
             $executionTime = round((microtime(true) - $startTime) * 1000, 2);
-
             $failedChunkIndexes = array_values(array_unique(array_map('intval', $failedChunkIndexes)));
             $failedChunkCount = count($failedChunkIndexes);
             $firstFailedChunkIndex = !empty($failedChunkIndexes) ? $failedChunkIndexes[0] : null;
-
-            if (!isset($initialQuestionsPerLesson)) $initialQuestionsPerLesson = $questionsPerLesson;
-            if (!isset($initialQuestionsPerPeriod)) $initialQuestionsPerPeriod = $questionsPerPeriod;
-            if (!isset($initialUncoveredLessonIds)) $initialUncoveredLessonIds = [];
-            if (!isset($initialUncoveredPeriods)) $initialUncoveredPeriods = [];
-            if (!isset($refillTargetChunkIndex)) $refillTargetChunkIndex = null;
-            if (!isset($refillTargetLessonIds)) $refillTargetLessonIds = [];
-            if (!isset($refillTargetPeriods)) $refillTargetPeriods = [];
-            if (!isset($refillGeneratedCount)) $refillGeneratedCount = 0;
 
             $simulatedScenario = self::isTestModeActive() ? $executedSimulatedScenario : null;
 
@@ -916,22 +1237,35 @@ class GroqService {
                     'initial_uncovered_periods' => $initialUncoveredPeriods ?? [],
                     'final_questions_per_lesson' => $questionsPerLesson,
                     'final_questions_per_period' => $questionsPerPeriod,
-                    'difficulty' => $difficulty
+                    'difficulty' => $difficulty,
+                    'period_weighting_mode' => $periodWeightInfo['mode'],
+                    'requested_period_distribution' => $periodWeightInfo['requested_distribution'],
+                    'actual_period_distribution' => $questionsPerPeriod,
+                    'requested_question_blueprint' => $blueprintInfo['requested_blueprint'],
+                    'actual_question_distribution' => $actualQuestionDistribution,
+                    'requested_difficulty_distribution' => $difficultyInfo['requested_distribution'],
+                    'actual_difficulty_distribution' => $actualDifficultyDistribution,
+                    'duplicate_count' => $duplicateCount,
+                    'replacement_attempt_count' => $replacementAttemptCount,
+                    'duplicate_warnings' => $duplicateWarnings
                 ]
             ];
         }
 
         // Direct single-pass generation
+        $blueprintStr = json_encode($blueprintInfo['target_counts']);
+        $difficultyStr = json_encode($difficultyInfo['target_counts']);
+
         $prompt = "You are an expert Civil Engineering professor specializing in {$specialization} and academic assessment creation. "
                 . "Generate exactly {$numQuestions} high-quality Civil Engineering examination questions for the subject '{$subject}' (Specialization: {$specialization}) titled '{$examTitle}'. "
-                . "Target Difficulty Level: '{$difficulty}'. "
-                . "Target Question Type Format: '{$questionType}' (Supported types: multiple_choice, true_false, identification). "
+                . "Target Difficulty Distribution: '{$difficultyStr}'. "
+                . "Target Question Type Blueprint: '{$blueprintStr}'. "
                 . "based strictly on the following lesson content: \"{$lessonText}\". "
                 . "Do NOT invent facts outside the lesson content. "
                 . "Format response strictly as a JSON array of objects without markdown fences or code blocks. "
                 . "Each object MUST have: \"question\" (string), \"type\" (string), "
                 . "\"opt_a\" (string or null), \"opt_b\" (string or null), \"opt_c\" (string or null), \"opt_d\" (string or null), "
-                . "\"correct_answer\" (string), \"formula_latex\" (string or null), \"matching_pairs\" (object or null), "
+                . "\"correct_answer\" (string), \"difficulty\" (string: 'easy', 'medium', or 'hard'), \"formula_latex\" (string or null), \"matching_pairs\" (object or null), "
                 . "and \"explanation\" (string containing detailed solution/concept explanation), "
                 . "\"source_lesson_ids\" (array of integers, e.g. [12]), \"source_topic\" (string), \"source_academic_period\" (string), \"source_confidence\" (string: 'high', 'medium', or 'review_required').";
 
@@ -960,25 +1294,58 @@ class GroqService {
         }
 
         $validQuestions = [];
-        $seen = [];
+        $seenHashes = [];
+        $seenAnswers = [];
+        $seenQuestions = [];
 
         foreach ($cleanJson as $q) {
             if (!is_array($q)) continue;
             $qText = trim($q['question'] ?? '');
             $qCorrect = trim($q['correct_answer'] ?? '');
-            $qType = trim($q['type'] ?? $questionType);
+            $qType = trim($q['type'] ?? (is_string($questionType) ? $questionType : 'multiple_choice'));
 
             if (empty($qText) || empty($qCorrect)) {
                 continue; 
             }
 
-            $dedupKey = mb_strtolower(preg_replace('/\s+/', ' ', $qText));
-            if (isset($seen[$dedupKey])) {
+            $normText = self::normalizeQuestionText($qText);
+            $qKey = $normText . '|' . self::normalizeQuestionText($qCorrect);
+            $isDup = false;
+            $dupReason = '';
+
+            if (isset($seenHashes[$normText])) {
+                $isDup = true;
+                $dupReason = "Exact duplicate question text: \"{$qText}\"";
+            } elseif (isset($seenAnswers[$qKey])) {
+                $isDup = true;
+                $dupReason = "Duplicate question and answer key combination: \"{$qText}\"";
+            } else {
+                foreach ($seenQuestions as $sq) {
+                    $sqNorm = self::normalizeQuestionText($sq['question']);
+                    similar_text($normText, $sqNorm, $pct);
+                    if ($pct >= 85.0) {
+                        $isDup = true;
+                        $dupReason = "High text similarity (" . round($pct, 1) . "%) with: \"{$sq['question']}\"";
+                        break;
+                    }
+                }
+            }
+
+            if ($isDup) {
+                $duplicateCount++;
+                $duplicateWarnings[] = $dupReason;
+                $replacementAttemptCount++;
                 continue; 
             }
-            $seen[$dedupKey] = true;
+            $seenHashes[$normText] = true;
+            $seenAnswers[$qKey] = true;
+            $seenQuestions[] = $q;
 
             $srcLessonIds = is_array($q['source_lesson_ids'] ?? null) ? array_map('intval', $q['source_lesson_ids']) : [];
+            $retDiff = strtolower(trim($q['difficulty'] ?? ''));
+            if (!in_array($retDiff, ['easy', 'medium', 'hard'], true)) {
+                $retDiff = 'unclassified';
+            }
 
             $validQuestions[] = [
                 'question' => $qText,
@@ -992,7 +1359,7 @@ class GroqService {
                 'matching_pairs' => $q['matching_pairs'] ?? null,
                 'explanation' => $q['explanation'] ?? '',
                 'points' => intval($q['points'] ?? 1),
-                'difficulty' => $difficulty,
+                'difficulty' => $retDiff,
                 'topic' => $q['source_topic'] ?? $subject,
                 'source_lesson_ids' => $srcLessonIds,
                 'source_topic' => $q['source_topic'] ?? $subject,
@@ -1012,19 +1379,10 @@ class GroqService {
         preg_match_all('/Lesson ID:\s*(\d+)/i', $lessonText, $allLMatches);
         $allSelectedLessonIds = !empty($allLMatches[1]) ? array_values(array_unique(array_map('intval', $allLMatches[1]))) : [];
 
-        preg_match_all('/Period:\s*([^\r\n]+)/i', $lessonText, $allPMatches);
-        $allSelectedPeriods = [];
-        if (!empty($allPMatches[1])) {
-            foreach ($allPMatches[1] as $pm) {
-                $pm = strtolower(trim($pm));
-                if (!empty($pm) && !in_array($pm, $allSelectedPeriods, true)) {
-                    $allSelectedPeriods[] = $pm;
-                }
-            }
-        }
-
         $questionsPerLesson = array_fill_keys($allSelectedLessonIds, 0);
         $questionsPerPeriod = array_fill_keys($allSelectedPeriods, 0);
+        $actualQuestionDistribution = [];
+        $actualDifficultyDistribution = ['easy' => 0, 'medium' => 0, 'hard' => 0, 'unclassified' => 0];
 
         foreach ($validQuestions as $vq) {
             foreach ($vq['source_lesson_ids'] as $lId) {
@@ -1035,6 +1393,21 @@ class GroqService {
             $p = strtolower($vq['source_academic_period'] ?? '');
             if (isset($questionsPerPeriod[$p])) {
                 $questionsPerPeriod[$p]++;
+            } else {
+                $questionsPerPeriod[$p] = 1;
+            }
+
+            $t = strtolower($vq['type'] ?? 'multiple_choice');
+            if (!isset($actualQuestionDistribution[$t])) {
+                $actualQuestionDistribution[$t] = 0;
+            }
+            $actualQuestionDistribution[$t]++;
+
+            $d = strtolower($vq['difficulty'] ?? 'unclassified');
+            if (isset($actualDifficultyDistribution[$d])) {
+                $actualDifficultyDistribution[$d]++;
+            } else {
+                $actualDifficultyDistribution[$d] = 1;
             }
         }
 
@@ -1056,8 +1429,8 @@ class GroqService {
             'academic_periods' => $allSelectedPeriods,
             'requested_question_allocation' => $numQuestions,
             'successfully_generated_count' => count($cleanJson),
-            'invalid_question_count' => max(0, count($cleanJson) - count($seen)),
-            'duplicate_count' => max(0, count($cleanJson) - count($validQuestions)),
+            'invalid_question_count' => max(0, count($cleanJson) - count($seenHashes)),
+            'duplicate_count' => $duplicateCount,
             'failed_count' => $shortfallCount,
             'final_accepted_count' => $finalGeneratedCount
         ];
@@ -1102,7 +1475,17 @@ class GroqService {
                 'final_questions_per_lesson' => $questionsPerLesson,
                 'final_questions_per_period' => $questionsPerPeriod,
                 'affected_periods' => [],
-                'difficulty' => $difficulty
+                'difficulty' => $difficulty,
+                'period_weighting_mode' => $periodWeightInfo['mode'],
+                'requested_period_distribution' => $periodWeightInfo['requested_distribution'],
+                'actual_period_distribution' => $questionsPerPeriod,
+                'requested_question_blueprint' => $blueprintInfo['requested_blueprint'],
+                'actual_question_distribution' => $actualQuestionDistribution,
+                'requested_difficulty_distribution' => $difficultyInfo['requested_distribution'],
+                'actual_difficulty_distribution' => $actualDifficultyDistribution,
+                'duplicate_count' => $duplicateCount,
+                'replacement_attempt_count' => $replacementAttemptCount,
+                'duplicate_warnings' => $duplicateWarnings
             ]
         ];
     }

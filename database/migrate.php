@@ -438,6 +438,17 @@ addColumn($pdo, 'ai_generation_batches', 'initial_uncovered_periods', "LONGTEXT 
 addColumn($pdo, 'ai_generation_batches', 'affected_periods', "LONGTEXT DEFAULT NULL");
 addColumn($pdo, 'ai_generation_batches', 'failed_chunk_indexes', "LONGTEXT DEFAULT NULL");
 addColumn($pdo, 'ai_generation_batches', 'failed_chunks', "LONGTEXT DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'period_weighting_mode', "VARCHAR(50) DEFAULT 'equal'");
+addColumn($pdo, 'ai_generation_batches', 'requested_period_distribution', "LONGTEXT DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'actual_period_distribution', "LONGTEXT DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'requested_question_blueprint', "LONGTEXT DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'actual_question_distribution', "LONGTEXT DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'requested_difficulty_distribution', "LONGTEXT DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'actual_difficulty_distribution', "LONGTEXT DEFAULT NULL");
+addColumn($pdo, 'ai_generation_batches', 'duplicate_count', "INT(11) DEFAULT 0");
+addColumn($pdo, 'ai_generation_batches', 'replacement_attempt_count', "INT(11) DEFAULT 0");
+addColumn($pdo, 'ai_generation_batches', 'duplicate_warnings', "LONGTEXT DEFAULT NULL");
+
 
 $defaultPassHash = password_hash('Password123!', PASSWORD_DEFAULT);
 

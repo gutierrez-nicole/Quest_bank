@@ -1,4 +1,7 @@
 <?php
+define('TEST_CHUNK_LIMIT', 6000);
+
+
 /**
  * Service-Level Verification Runner for QuestBank Epic 2.2 Deterministic Mock Scenarios
  */
@@ -13,9 +16,6 @@ $_SERVER['APP_ENV'] = 'testing';
 $_SERVER['TEST_BOOTSTRAP_ACTIVE'] = '1';
 
 require_once __DIR__ . '/../app/testing_bootstrap.php';
-if (!defined('TEST_CHUNK_LIMIT')) {
-    define('TEST_CHUNK_LIMIT', 6000);
-}
 
 require_once __DIR__ . '/../app/bootstrap.php';
 require_once __DIR__ . '/../app/services/GroqService.php';
@@ -35,9 +35,10 @@ try {
     $runner->setSetupCompleted($pdo !== null, "Database connection established");
 
     // Prepare 2 lesson materials: Lesson 101 (Prelim) and Lesson 102 (Midterm)
-    $prelimText = "Lesson ID: 101\nPeriod: prelim\nTitle: Structural Analysis Prelim Basics\n" . str_repeat("Structural engineering deals with analysis of beams and columns under load. ", 100);
-    $midtermText = "Lesson ID: 102\nPeriod: midterm\nTitle: Reinforced Concrete Midterm Design\n" . str_repeat("Reinforced concrete requires flexural steel design and shear reinforcement. ", 100);
+    $prelimText = "Lesson ID: 101\nPeriod: prelim\nTitle: Structural Analysis Prelim Basics\n" . str_repeat("Structural engineering deals with analysis of beams and columns under load. ", 40);
+    $midtermText = "Lesson ID: 102\nPeriod: midterm\nTitle: Reinforced Concrete Midterm Design\n" . str_repeat("Reinforced concrete requires flexural steel design and shear reinforcement. ", 40);
     $combinedText = $prelimText . "\n\n" . $midtermText;
+
 
     // -------------------------------------------------------------------------
     // TEST 1: Scenario 1 — Missing Source (MOCK_MISSING_SOURCE)
