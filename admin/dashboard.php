@@ -4,6 +4,7 @@ require_once __DIR__ . '/../app/bootstrap.php';
 AuthService::enforceRole('admin');
 $pdo = getDBConnection();
 
+try {
     $verInfo = @include __DIR__ . '/../app/config/version.php';
     $displayVer = is_array($verInfo) ? ($verInfo['display_version'] ?? 'v2.2-RC1') : 'v2.2-RC1';
 
