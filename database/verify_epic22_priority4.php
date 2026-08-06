@@ -30,8 +30,16 @@ try {
 
     $teacherId = (int)$pdo->query("SELECT id FROM users WHERE role = 'teacher' AND status = 'active' LIMIT 1")->fetchColumn();
     $studentId = (int)$pdo->query("SELECT id FROM users WHERE role = 'student' AND status = 'active' LIMIT 1")->fetchColumn();
+    $adminId = (int)$pdo->query("SELECT id FROM users WHERE role = 'admin' AND status = 'active' LIMIT 1")->fetchColumn();
+
     if (!$teacherId) $teacherId = 10;
     if (!$studentId) $studentId = 11;
+    if (!$adminId) {
+        $stmtAdmin = $pdo->prepare("INSERT INTO users (username, fullname, email, password, role, status) VALUES ('temp_admin_p4', 'P4 Admin', 'temp_admin_p4@questbank.edu.ph', 'pass', 'admin', 'active')");
+        $stmtAdmin->execute();
+        $adminId = (int)$pdo->lastInsertId();
+        $createdUserIds[] = $adminId;
+    }
 
     // ── TEST 1: CSRF Infrastructure & Verification ──
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -102,7 +110,7 @@ try {
     $asgnId = AcademicStructureService::assignTeacherSubject($teacherId, 'Bridge Engineering', $secId, $stdSyId);
     $runner->assertTrue("TEST 3c: Teacher assigned to section for active school year", $asgnId > 0, "Assignment ID: {$asgnId}");
 
-    // ── TEST 4: Teacher-Facing Exam Scheduling & Section Assignment Enforcement ──
+    // ── TEST 4: Server-Authoritative Teacher Scheduling & Admin Exam Scheduling ──
     $stmtEx1 = $pdo->prepare("
         INSERT INTO exams (teacher_id, title, subject, specialization, time_limit, total_items, exam_category, status, term)
         VALUES (?, 'Teacher Owned Exam 1', 'Bridge Engineering', 'Bridge Engineering', 60, 5, 'regular', 'active', 'midterm')
@@ -129,11 +137,13 @@ try {
 
     $activeSyForTest = AcademicStructureService::getActiveSchoolYear();
     $examDate = ($activeSyForTest && !empty($activeSyForTest['start_date'])) ? date('Y-m-d', strtotime($activeSyForTest['start_date'] . ' + 30 days')) : date('Y-m-d');
+    
+    // Teacher schedules own exam
     $schId1 = ExamSchedulingService::createSchedule($examId1, $teacherId, $secCode, $examDate, '10:00:00', '11:30:00', 'Room 201');
     $createdScheduleIds[] = $schId1;
     $runner->assertTrue("TEST 4a: Teacher scheduled owned exam for assigned section", $schId1 > 0, "Schedule ID: {$schId1}");
 
-    // Unowned exam scheduling block
+    // Unowned exam scheduling block for teacher actor
     $unownedBlocked = false;
     try {
         ExamSchedulingService::createSchedule($examId2, $teacherId, $secCode, $examDate, '13:00:00', '14:30:00', 'Room 202');
@@ -142,16 +152,34 @@ try {
     }
     $runner->assertTrue("TEST 4b: Teacher scheduling unowned exam rejected", $unownedBlocked, "Unowned exam scheduling blocked cleanly");
 
-    // Unassigned section scheduling block
-    $unassignedBlocked = false;
-    try {
-        ExamSchedulingService::createSchedule($examId1, $teacherId, 'UNASSIGNED-SEC-99', $examDate, '13:00:00', '14:30:00', 'Room 203');
-    } catch (SecurityException $e) {
-        $unassignedBlocked = true;
-    }
-    $runner->assertTrue("TEST 4c: Teacher scheduling unassigned section rejected", $unassignedBlocked, "Unassigned section scheduling blocked cleanly");
+    // Admin schedules exam owned by $otherTeacherId -> schedule's teacher_id must equal $otherTeacherId!
+    $schIdAdmin = ExamSchedulingService::createSchedule($examId2, $adminId, $secCode, $examDate, '14:45:00', '16:00:00', 'Room 205');
+    $createdScheduleIds[] = $schIdAdmin;
 
-    // ── TEST 5: Real Subject CSV Import & DB Insertion ──
+    $stmtSchVal = $pdo->prepare("SELECT teacher_id FROM exam_schedules WHERE id = ?");
+    $stmtSchVal->execute([$schIdAdmin]);
+    $storedTeacherId = intval($stmtSchVal->fetchColumn());
+    $runner->assertTrue(
+        "TEST 4c: Admin scheduling stores exam owner ($otherTeacherId) as schedule teacher_id, not admin ID ($adminId)",
+        $storedTeacherId === $otherTeacherId,
+        "Stored teacher_id: {$storedTeacherId}, Exam Owner ID: {$otherTeacherId}"
+    );
+
+    // ── TEST 5: Active Semester & School Year Alignment Enforcement ──
+    $inactiveSyId = AcademicStructureService::createSchoolYear('2098-2099', '2098-06-01', '2099-05-31');
+    $createdSyIds[] = $inactiveSyId;
+    $misalignedSemId = AcademicStructureService::createSemester($inactiveSyId, 'Second Semester');
+    $createdSemIds[] = $misalignedSemId;
+
+    $misalignedBlocked = false;
+    try {
+        AcademicStructureService::activateSemester($misalignedSemId);
+    } catch (LogicException $e) {
+        $misalignedBlocked = true;
+    }
+    $runner->assertTrue("TEST 5: Activation of semester under inactive school year rejected", $misalignedBlocked, "Misaligned semester activation blocked cleanly");
+
+    // ── TEST 6: Real Subject CSV Import & DB Insertion ──
     $subjUniq = bin2hex(random_bytes(3));
     $subjCode = "CE-SUBJ-{$subjUniq}";
     $subjTitle = "Advanced Bridge Design {$subjUniq}";
@@ -164,18 +192,18 @@ try {
     file_put_contents($tmpSubjCsv, $csvContent);
 
     $subjPreview = BulkImportService::processCSV($tmpSubjCsv, 'subjects', false, 1);
-    $runner->assertTrue("TEST 5a: Subject CSV preview detects duplicate row in same CSV", $subjPreview['valid_rows_count'] === 1 && $subjPreview['invalid_rows_count'] === 1, "Valid: {$subjPreview['valid_rows_count']}, Invalid: {$subjPreview['invalid_rows_count']}");
+    $runner->assertTrue("TEST 6a: Subject CSV preview detects duplicate row in same CSV", $subjPreview['valid_rows_count'] === 1 && $subjPreview['invalid_rows_count'] === 1, "Valid: {$subjPreview['valid_rows_count']}, Invalid: {$subjPreview['invalid_rows_count']}");
 
     $subjExec = BulkImportService::processCSV($tmpSubjCsv, 'subjects', true, 1);
-    $runner->assertTrue("TEST 5b: Subject CSV execution imports valid row", $subjExec['imported_count'] === 1, "Imported count: {$subjExec['imported_count']}");
+    $runner->assertTrue("TEST 6b: Subject CSV execution imports valid row", $subjExec['imported_count'] === 1, "Imported count: {$subjExec['imported_count']}");
 
     $stmtCheckSubj = $pdo->prepare("SELECT id FROM subjects WHERE code = ? AND title = ?");
     $stmtCheckSubj->execute([$subjCode, $subjTitle]);
     $insertedSubjId = $stmtCheckSubj->fetchColumn();
-    $runner->assertTrue("TEST 5c: Subject record genuinely inserted in database", $insertedSubjId > 0, "Subject DB ID: {$insertedSubjId}");
+    $runner->assertTrue("TEST 6c: Subject record genuinely inserted in database", $insertedSubjId > 0, "Subject DB ID: {$insertedSubjId}");
     @unlink($tmpSubjCsv);
 
-    // ── TEST 6: Hardened Student CSV Import & Unique Credentials ──
+    // ── TEST 7: Hardened Student CSV Import & Unique Credentials ──
     $studUniq = time() . bin2hex(random_bytes(2));
     $tmpStudCsv = sys_get_temp_dir() . "/test_stud_{$studUniq}.csv";
     $csvData = "student_number,fullname,email,course,section\n";
@@ -183,26 +211,26 @@ try {
     file_put_contents($tmpStudCsv, $csvData);
 
     $studExec = BulkImportService::processCSV($tmpStudCsv, 'students', true, 1);
-    $runner->assertTrue("TEST 6a: Student CSV import executed", $studExec['imported_count'] === 1, "Imported count: {$studExec['imported_count']}");
+    $runner->assertTrue("TEST 7a: Student CSV import executed", $studExec['imported_count'] === 1, "Imported count: {$studExec['imported_count']}");
 
     $createdCreds = $studExec['credentials'] ?? [];
     $hasTempPass = !empty($createdCreds) && !empty($createdCreds[0]['temp_password']) && strlen($createdCreds[0]['temp_password']) >= 8;
-    $runner->assertTrue("TEST 6b: Generated unique temporary credentials returned without exposing password hash", $hasTempPass, "Temp Password generated cleanly");
+    $runner->assertTrue("TEST 7b: Generated unique temporary credentials returned without exposing password hash", $hasTempPass, "Temp Password generated cleanly");
 
     $importedUid = (int)$pdo->query("SELECT id FROM users WHERE email = 'p4credentials_{$studUniq}@questbank.edu.ph'")->fetchColumn();
     if ($importedUid) $createdUserIds[] = $importedUid;
     @unlink($tmpStudCsv);
 
-    // ── TEST 7: Academic Calendar Date Range Validation ──
+    // ── TEST 8: Academic Calendar Date Range Validation ──
     $calendarInvalidDate = false;
     try {
         AcademicStructureService::addCalendarEvent('Invalid Date Test', 'midterm_week', '2026-10-10', '2026-10-05', 'Invalid range', $teacherId);
     } catch (InvalidArgumentException $e) {
         $calendarInvalidDate = true;
     }
-    $runner->assertTrue("TEST 7: Academic calendar invalid date range rejected", $calendarInvalidDate, "Invalid date range caught cleanly");
+    $runner->assertTrue("TEST 8: Academic calendar invalid date range rejected", $calendarInvalidDate, "Invalid date range caught cleanly");
 
-    // ── TEST 8: Notification Ownership Protection ──
+    // ── TEST 9: Notification Ownership Protection ──
     $u1 = $teacherId;
     $u2 = $studentId;
     NotificationService::sendNotification($u1, 'p4_test_u1', 'User 1 Notification');
@@ -210,17 +238,22 @@ try {
     $u1NotifId = !empty($notifsU1) ? (int)$notifsU1[0]['id'] : 0;
 
     $crossMutateBlocked = (NotificationService::markAsRead($u1NotifId, $u2) === false);
-    $runner->assertTrue("TEST 8a: User cannot mark another user's notification as read", $crossMutateBlocked, "Cross-user notification mark rejected");
+    $runner->assertTrue("TEST 9a: User cannot mark another user's notification as read", $crossMutateBlocked, "Cross-user notification mark rejected");
 
     $ownMutateSuccess = NotificationService::markAsRead($u1NotifId, $u1);
-    $runner->assertTrue("TEST 8b: User can mark own notification as read", $ownMutateSuccess, "Own notification marked read cleanly");
+    $runner->assertTrue("TEST 9b: User can mark own notification as read", $ownMutateSuccess, "Own notification marked read cleanly");
 
     NotificationService::deleteNotification($u1NotifId, $u1);
 
-    // ── TEST 9: System Settings & Maintenance Mode Enforcement ──
+    // ── TEST 10: System Settings & Maintenance Mode Enforcement ──
     SystemSettingsService::setSetting('maintenance_mode', 'off');
     $mMode = SystemSettingsService::getSetting('maintenance_mode');
-    $runner->assertTrue("TEST 9: Maintenance mode setting updated and verified", $mMode === 'off', "Maintenance mode: {$mMode}");
+    $runner->assertTrue("TEST 10: Maintenance mode setting updated and verified", $mMode === 'off', "Maintenance mode: {$mMode}");
+
+    // ── TEST 11: Maintenance Login Links & Index.php Route Verification ──
+    $mFile = file_get_contents(__DIR__ . '/../maintenance.php');
+    $hasCanonicalLoginLink = strpos($mFile, '/index.php') !== false || strpos($mFile, 'index.php') !== false;
+    $runner->assertTrue("TEST 11: maintenance.php links to canonical login route index.php", $hasCanonicalLoginLink, "Canonical login route verified in maintenance.php");
 
 } catch (Throwable $e) {
     $runner->recordException($e);

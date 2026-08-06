@@ -18,7 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($action === 'create_schedule') {
             ExamSchedulingService::createSchedule(
                 $_POST['exam_id'],
-                $_POST['teacher_id'],
+                $adminId,
                 $_POST['section'],
                 $_POST['exam_date'],
                 $_POST['start_time'],
@@ -93,7 +93,6 @@ $teachers = $pdo->query("SELECT id, fullname FROM users WHERE role = 'teacher' A
                                 <?php endforeach; ?>
                             </select>
                         </div>
-                        <input type="hidden" name="teacher_id" id="teacher_id">
                         <div class="mb-3">
                             <label class="form-label">Section</label>
                             <select name="section" class="form-select" required>

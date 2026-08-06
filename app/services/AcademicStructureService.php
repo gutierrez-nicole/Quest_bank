@@ -155,6 +155,12 @@ class AcademicStructureService {
             throw new LogicException("Cannot activate a closed or archived semester.");
         }
 
+        $activeSy = self::getActiveSchoolYear();
+        if (!$activeSy || intval($sem['school_year_id']) !== intval($activeSy['id'])) {
+            $activeSyName = $activeSy ? $activeSy['school_year'] : 'None';
+            throw new LogicException("Cannot activate Semester #{$id}: It belongs to school year ID #{$sem['school_year_id']}, but current active school year is '{$activeSyName}'. Activate the corresponding school year first.");
+        }
+
         $pdo->beginTransaction();
         try {
             $pdo->exec("UPDATE semesters SET status = 'inactive' WHERE status = 'active'");

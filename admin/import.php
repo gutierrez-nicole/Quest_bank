@@ -10,16 +10,71 @@ $msg = '';
 $msgType = 'info';
 $activePreviewBatch = null;
 
+// Clean up expired preview batch if older than 30 minutes (1800s)
+if (isset($_SESSION['bulk_import_batch'])) {
+    $existingBatch = $_SESSION['bulk_import_batch'];
+    $createdAt = $existingBatch['created_at'] ?? 0;
+    if (time() - $createdAt > 1800) {
+        if (!empty($existingBatch['file_path']) && file_exists($existingBatch['file_path'])) {
+            @unlink($existingBatch['file_path']);
+        }
+        unset($_SESSION['bulk_import_batch']);
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     validateCSRFToken();
     $action = $_POST['action'] ?? 'preview';
 
     if ($action === 'preview') {
+        // Clean up previous preview file if present
+        if (isset($_SESSION['bulk_import_batch'])) {
+            $prevFile = $_SESSION['bulk_import_batch']['file_path'] ?? '';
+            if (!empty($prevFile) && file_exists($prevFile)) {
+                @unlink($prevFile);
+            }
+            unset($_SESSION['bulk_import_batch']);
+        }
+
         $importType = $_POST['import_type'] ?? 'students';
-        if (isset($_FILES['csv_file']) && $_FILES['csv_file']['error'] === UPLOAD_ERR_OK) {
+        
+        if (!isset($_FILES['csv_file']) || $_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
+            $msg = "Upload error or missing file. Please select a valid CSV file.";
+            $msgType = 'danger';
+        } else {
             try {
-                $tmpPath = $_FILES['csv_file']['tmp_name'];
-                
+                $file = $_FILES['csv_file'];
+                $tmpPath = $file['tmp_name'];
+                $fileName = $file['name'];
+                $fileSize = $file['size'];
+
+                // 1. File size limit check (5MB)
+                if ($fileSize > 5 * 1024 * 1024) {
+                    throw new InvalidArgumentException("File size exceeds the 5MB limit.");
+                }
+
+                // 2. Extension check
+                $ext = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+                if ($ext !== 'csv') {
+                    throw new InvalidArgumentException("Invalid file extension '.{$ext}'. Only .csv files are permitted.");
+                }
+
+                // 3. MIME type check
+                $finfo = finfo_open(FILEINFO_MIME_TYPE);
+                $mime = finfo_file($finfo, $tmpPath);
+                finfo_close($finfo);
+
+                $allowedMimes = ['text/csv', 'text/plain', 'text/x-csv', 'application/csv', 'application/x-csv', 'application/vnd.ms-excel', 'text/comma-separated-values'];
+                if (!in_array($mime, $allowedMimes, true)) {
+                    throw new InvalidArgumentException("Invalid file content MIME type '{$mime}'. Please upload a valid CSV text file.");
+                }
+
+                // 4. Binary null byte check (prevents executable binaries disguised as CSV)
+                $chunk = file_get_contents($tmpPath, false, null, 0, 4096);
+                if (strpos($chunk, "\0") !== false) {
+                    throw new InvalidArgumentException("Uploaded file contains binary data and cannot be processed as a CSV.");
+                }
+
                 // Store temporary copy for execution phase
                 $batchId = bin2hex(random_bytes(16));
                 $targetFile = sys_get_temp_dir() . "/qb_batch_{$batchId}.csv";
@@ -32,7 +87,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'file_path' => $targetFile,
                     'type' => $importType,
                     'valid_count' => $result['valid_rows_count'],
-                    'invalid_count' => $result['invalid_rows_count']
+                    'invalid_count' => $result['invalid_rows_count'],
+                    'created_at' => time()
                 ];
                 $activePreviewBatch = $_SESSION['bulk_import_batch'];
 
@@ -42,16 +98,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $msg = $e->getMessage();
                 $msgType = 'danger';
             }
-        } else {
-            $msg = "Please upload a valid CSV file.";
-            $msgType = 'danger';
         }
     } elseif ($action === 'execute') {
         $batch = $_SESSION['bulk_import_batch'] ?? null;
         $postedBatchId = $_POST['batch_id'] ?? '';
 
         if (!$batch || $batch['batch_id'] !== $postedBatchId || !file_exists($batch['file_path'])) {
-            $msg = "Import session expired or invalid batch ID. Please re-upload your CSV.";
+            $msg = "Import session expired or invalid batch ID. Please re-upload your CSV file.";
+            $msgType = 'danger';
+        } elseif ((time() - ($batch['created_at'] ?? 0)) > 1800) {
+            @unlink($batch['file_path']);
+            unset($_SESSION['bulk_import_batch']);
+            $msg = "Import preview batch expired (30-minute limit exceeded). Please re-upload your CSV file.";
             $msgType = 'danger';
         } else {
             try {

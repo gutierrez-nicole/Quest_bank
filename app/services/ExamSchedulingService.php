@@ -7,13 +7,13 @@ require_once __DIR__ . '/NotificationService.php';
 
 class ExamSchedulingService {
 
-    public static function createSchedule($examId, $teacherId, $section, $examDate, $startTime, $endTime, $room = '', $remarks = '') {
+    public static function createSchedule($examId, $actorId, $section, $examDate, $startTime, $endTime, $room = '', $remarks = '') {
         $section = strtoupper(trim($section));
         $room = trim($room);
         $remarks = trim($remarks);
 
-        if (empty($examId) || empty($teacherId) || empty($section) || empty($examDate) || empty($startTime) || empty($endTime)) {
-            throw new InvalidArgumentException("Exam ID, teacher ID, section, exam date, start time, and end time are required.");
+        if (empty($examId) || empty($actorId) || empty($section) || empty($examDate) || empty($startTime) || empty($endTime)) {
+            throw new InvalidArgumentException("Exam ID, actor ID, section, exam date, start time, and end time are required.");
         }
 
         if (strtotime($endTime) <= strtotime($startTime)) {
@@ -26,7 +26,16 @@ class ExamSchedulingService {
         }
 
         $activeSy = AcademicStructureService::getActiveSchoolYear();
-        if ($activeSy && !empty($activeSy['start_date']) && !empty($activeSy['end_date'])) {
+        if (!$activeSy) {
+            throw new LogicException("Cannot schedule exam: No active school year configured.");
+        }
+
+        // Enforce alignment between active semester and active school year
+        if (intval($activeSem['school_year_id']) !== intval($activeSy['id'])) {
+            throw new LogicException("Academic Configuration Misalignment: Active semester #{$activeSem['id']} belongs to school year #{$activeSem['school_year_id']}, but active school year is #{$activeSy['id']}.");
+        }
+
+        if (!empty($activeSy['start_date']) && !empty($activeSy['end_date'])) {
             if ($examDate < $activeSy['start_date'] || $examDate > $activeSy['end_date']) {
                 throw new InvalidArgumentException("Exam date '{$examDate}' falls outside the active school year date range ({$activeSy['start_date']} to {$activeSy['end_date']}).");
             }
@@ -34,7 +43,7 @@ class ExamSchedulingService {
 
         $pdo = getDBConnection();
 
-        // 1. Verify exam ownership & existence
+        // 1. Verify exam existence & derive authoritative exam owner
         $stmtEx = $pdo->prepare("SELECT id, title, teacher_id FROM exams WHERE id = ?");
         $stmtEx->execute([$examId]);
         $exam = $stmtEx->fetch(PDO::FETCH_ASSOC);
@@ -43,8 +52,10 @@ class ExamSchedulingService {
             throw new Exception("Exam #{$examId} not found.");
         }
 
+        $examOwnerId = intval($exam['teacher_id']);
+
         $userStmt = $pdo->prepare("SELECT role, status FROM users WHERE id = ?");
-        $userStmt->execute([$teacherId]);
+        $userStmt->execute([$actorId]);
         $user = $userStmt->fetch(PDO::FETCH_ASSOC);
 
         if (!$user || $user['status'] !== 'active') {
@@ -53,11 +64,12 @@ class ExamSchedulingService {
 
         $role = $user['role'];
 
-        if ($role !== 'admin' && intval($exam['teacher_id']) !== intval($teacherId)) {
+        // If actor is a teacher, they can schedule ONLY their own exam
+        if ($role !== 'admin' && $examOwnerId !== intval($actorId)) {
             throw new SecurityException("Unauthorized: Cannot schedule an exam owned by another teacher.");
         }
 
-        // 2. Verify section assignment for teacher
+        // 2. Verify section assignment for teacher actor
         if ($role === 'teacher') {
             $syId = $activeSy ? $activeSy['id'] : 0;
             $stmtAsgn = $pdo->prepare("
@@ -69,24 +81,24 @@ class ExamSchedulingService {
                   AND tsa.school_year_id = ? 
                   AND tsa.status = 'active'
             ");
-            $stmtAsgn->execute([$teacherId, $section, $section, $syId]);
+            $stmtAsgn->execute([$actorId, $section, $section, $syId]);
             if (!$stmtAsgn->fetchColumn()) {
                 throw new SecurityException("Teacher is not assigned to Section '{$section}' for the active school year.");
             }
         }
 
-        // 3. Check overlapping schedule for same teacher on same date
+        // 3. Check overlapping schedule for the exam owner teacher on same date
         $stmtCheckTeacher = $pdo->prepare("
             SELECT id, exam_date, start_time, end_time, section 
             FROM exam_schedules
             WHERE teacher_id = ? AND exam_date = ? AND status != 'cancelled'
               AND ((start_time < ? AND end_time > ?) OR (start_time < ? AND end_time > ?) OR (start_time >= ? AND end_time <= ?))
         ");
-        $stmtCheckTeacher->execute([$teacherId, $examDate, $endTime, $startTime, $endTime, $startTime, $startTime, $endTime]);
+        $stmtCheckTeacher->execute([$examOwnerId, $examDate, $endTime, $startTime, $endTime, $startTime, $startTime, $endTime]);
         $teacherConflict = $stmtCheckTeacher->fetch(PDO::FETCH_ASSOC);
 
         if ($teacherConflict) {
-            throw new LogicException("Teacher scheduling conflict: Teacher already has an exam scheduled for Section '{$teacherConflict['section']}' on {$examDate} between {$teacherConflict['start_time']} and {$teacherConflict['end_time']}.");
+            throw new LogicException("Teacher scheduling conflict: Exam owner already has an exam scheduled for Section '{$teacherConflict['section']}' on {$examDate} between {$teacherConflict['start_time']} and {$teacherConflict['end_time']}.");
         }
 
         // 4. Check overlapping schedule for same section on same date
@@ -105,11 +117,12 @@ class ExamSchedulingService {
 
         $durationMinutes = max(15, round((strtotime($endTime) - strtotime($startTime)) / 60));
 
+        // Always store authoritative $examOwnerId as schedule's teacher_id
         $stmtIns = $pdo->prepare("
             INSERT INTO exam_schedules (exam_id, teacher_id, section, exam_date, start_time, end_time, duration_minutes, room, remarks, semester_id, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled')
         ");
-        $stmtIns->execute([$examId, $teacherId, $section, $examDate, $startTime, $endTime, $durationMinutes, $room, $remarks, $activeSem['id']]);
+        $stmtIns->execute([$examId, $examOwnerId, $section, $examDate, $startTime, $endTime, $durationMinutes, $room, $remarks, $activeSem['id']]);
         $scheduleId = (int)$pdo->lastInsertId();
 
         // 5. Notify students of the scheduled section

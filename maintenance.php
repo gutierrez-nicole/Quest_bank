@@ -27,7 +27,7 @@
                 <i class="fas fa-info-circle me-2"></i><strong>Notice:</strong> Student and teacher portals will return online shortly. Administrators may log in below.
             </div>
             <div class="d-flex justify-content-center gap-2">
-                <a href="/login.php" class="btn btn-outline-primary"><i class="fas fa-user-shield me-1"></i>Admin Login</a>
+                <a href="/index.php" class="btn btn-outline-primary"><i class="fas fa-user-shield me-1"></i>Admin Login</a>
                 <button onclick="location.reload()" class="btn btn-primary"><i class="fas fa-sync me-1"></i>Refresh Status</button>
             </div>
         </div>
