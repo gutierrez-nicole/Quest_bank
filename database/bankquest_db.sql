@@ -1,5 +1,5 @@
 -- QuestBank Database Dump & Backup
--- Generated: 2026-08-06 08:40:31
+-- Generated: 2026-08-06 08:43:57
 -- Database: bankquest_db
 -- Application Version: v2.2-RC1
 
@@ -42,7 +42,7 @@ CREATE TABLE `activity_logs` (
 -- Dumping data for `activity_logs`
 
 INSERT INTO `activity_logs` (`id`, `user_id`, `action_description`, `created_at`) VALUES 
-('1', '10', 'Published exam #10 results for Structural Engineering', '2026-08-06 16:40:22');
+('1', '10', 'Published exam #10 results for Structural Engineering', '2026-08-06 16:43:47');
 
 -- --------------------------------------------------------
 -- Table structure for `ai_generation_batches`
@@ -149,7 +149,7 @@ CREATE TABLE `audit_logs` (
 -- Dumping data for `audit_logs`
 
 INSERT INTO `audit_logs` (`id`, `actor_id`, `action`, `entity_type`, `entity_id`, `old_values`, `new_values`, `reason`, `created_at`, `user_id`, `details`, `ip_address`) VALUES 
-('1', '10', 'EXAM_PUBLISHED', 'exam', '10', NULL, NULL, NULL, '2026-08-06 16:40:22', '10', 'Published exam results for Ashley Nicole Gutierrez', NULL);
+('1', '10', 'EXAM_PUBLISHED', 'exam', '10', NULL, NULL, NULL, '2026-08-06 16:43:47', '10', 'Published exam results for Ashley Nicole Gutierrez', NULL);
 
 -- --------------------------------------------------------
 -- Table structure for `department_objectives`
@@ -190,7 +190,7 @@ CREATE TABLE `departments` (
 -- Dumping data for `departments`
 
 INSERT INTO `departments` (`id`, `dept_code`, `dept_name`, `programs`, `faculty_head`, `created_at`) VALUES 
-('1', 'COE', 'College of Engineering', 'BSCE', 'Prof. Russel Gregorio', '2026-08-06 16:40:22');
+('1', 'COE', 'College of Engineering', 'BSCE', 'Prof. Russel Gregorio', '2026-08-06 16:43:47');
 
 -- --------------------------------------------------------
 -- Table structure for `exam_assignments`
@@ -341,9 +341,9 @@ CREATE TABLE `exam_submissions` (
 -- Dumping data for `exam_submissions`
 
 INSERT INTO `exam_submissions` (`id`, `teacher_id`, `student_id`, `exam_id`, `student_name`, `exam_title`, `upload_type`, `correct_count`, `wrong_count`, `total_score`, `total_possible_score`, `total_items`, `percentage`, `status`, `raw_ocr_data`, `ocr_text`, `ocr_confidence`, `ocr_status`, `ocr_error`, `suggested_manual_review`, `page_count`, `evaluation_result`, `teacher_override_log`, `review_status`, `reviewed_by`, `teacher_remarks`, `reviewed_at`, `published_at`, `created_at`, `file_path`, `original_filename`, `uploaded_file_hash`, `original_ocr_text`, `corrected_ocr_text`, `processed_at`, `extraction_mode`, `per_page_ocr_metadata`, `processing_duration`, `is_demo`, `qualification_status`, `attempt_number`) VALUES 
-('500', '10', '11', '10', 'Ashley Nicole Gutierrez', 'Civil Engineering Board Exam Review - Structural Design & Construction', 'online', '3', '0', '3.00', '3.00', '3', '100.00', 'Pass', NULL, NULL, '0.00', 'completed', NULL, '0', '1', NULL, NULL, 'published', NULL, NULL, NULL, '2026-08-06 16:40:22', '2026-08-06 16:40:22', NULL, NULL, NULL, NULL, NULL, NULL, 'image_ocr', NULL, '0.00', '1', 'pending', '1'),
-('501', '10', '20', '10', 'John Mark Santos', 'Civil Engineering Board Exam Review - Structural Design & Construction', 'scanned', '2', '1', '2.00', '3.00', '3', '66.67', 'Fail', NULL, NULL, '0.00', 'completed', NULL, '0', '1', NULL, NULL, 'pending_review', NULL, NULL, NULL, NULL, '2026-08-06 16:40:22', NULL, NULL, NULL, NULL, NULL, NULL, 'image_ocr', NULL, '0.00', '1', 'pending', '1'),
-('502', '10', '21', '11', 'Maria Angelica Reyes', 'Civil Engineering Comprehensive Qualifying Exam', 'online', '3', '0', '3.00', '3.00', '3', '100.00', 'Pass', NULL, NULL, '0.00', 'completed', NULL, '0', '1', NULL, NULL, 'finalized', NULL, NULL, NULL, NULL, '2026-08-06 16:40:22', NULL, NULL, NULL, NULL, NULL, NULL, 'image_ocr', NULL, '0.00', '1', 'pending', '1');
+('500', '10', '11', '10', 'Ashley Nicole Gutierrez', 'Civil Engineering Board Exam Review - Structural Design & Construction', 'online', '3', '0', '3.00', '3.00', '3', '100.00', 'Pass', NULL, NULL, '0.00', 'completed', NULL, '0', '1', NULL, NULL, 'published', NULL, NULL, NULL, '2026-08-06 16:43:47', '2026-08-06 16:43:47', NULL, NULL, NULL, NULL, NULL, NULL, 'image_ocr', NULL, '0.00', '1', 'pending', '1'),
+('501', '10', '20', '10', 'John Mark Santos', 'Civil Engineering Board Exam Review - Structural Design & Construction', 'scanned', '2', '1', '2.00', '3.00', '3', '66.67', 'Fail', NULL, NULL, '0.00', 'completed', NULL, '0', '1', NULL, NULL, 'pending_review', NULL, NULL, NULL, NULL, '2026-08-06 16:43:47', NULL, NULL, NULL, NULL, NULL, NULL, 'image_ocr', NULL, '0.00', '1', 'pending', '1'),
+('502', '10', '21', '11', 'Maria Angelica Reyes', 'Civil Engineering Comprehensive Qualifying Exam', 'online', '3', '0', '3.00', '3.00', '3', '100.00', 'Pass', NULL, NULL, '0.00', 'completed', NULL, '0', '1', NULL, NULL, 'finalized', NULL, NULL, NULL, NULL, '2026-08-06 16:43:47', NULL, NULL, NULL, NULL, NULL, NULL, 'image_ocr', NULL, '0.00', '1', 'pending', '1');
 
 -- --------------------------------------------------------
 -- Table structure for `exams`
@@ -396,8 +396,8 @@ CREATE TABLE `exams` (
 -- Dumping data for `exams`
 
 INSERT INTO `exams` (`id`, `teacher_id`, `title`, `subject`, `specialization`, `term`, `difficulty`, `time_limit`, `total_items`, `passing_percentage`, `status`, `available_from`, `available_until`, `max_attempts`, `created_at`, `updated_at`, `ai_metadata`, `lesson_ids`, `generation_status`, `generation_error`, `prompt_version`, `ai_model`, `created_by`, `is_demo`, `exam_category`, `qualifying_passing_percentage`, `qualifying_max_attempts`, `qualifying_year_level`, `qualifying_program`, `qualifying_is_required`, `qualifying_unlock_date`, `qualifying_deadline`, `covered_periods`, `source_lesson_count`, `generation_source_type`, `generation_batch_id`) VALUES 
-('10', '10', 'Civil Engineering Board Exam Review - Structural Design & Construction', 'Structural Engineering', 'Structural Engineering', 'Prelim', 'medium', '60', '3', '75.00', 'active', NULL, NULL, '1', '2026-08-06 16:40:22', NULL, NULL, NULL, 'completed', NULL, 'v1.0', NULL, '10', '1', 'regular', '75.00', '1', 'All Year Levels', 'All Programs', '1', NULL, NULL, NULL, '0', NULL, NULL),
-('11', '10', 'Civil Engineering Comprehensive Qualifying Exam', 'Structural Engineering', 'Structural Engineering', 'Prelim', 'hard', '120', '3', '75.00', 'active', NULL, NULL, '1', '2026-08-06 16:40:22', NULL, NULL, NULL, 'completed', NULL, 'v1.0', NULL, '10', '1', 'qualifying', '75.00', '1', 'All Year Levels', 'All Programs', '1', NULL, NULL, NULL, '0', NULL, NULL);
+('10', '10', 'Civil Engineering Board Exam Review - Structural Design & Construction', 'Structural Engineering', 'Structural Engineering', 'Prelim', 'medium', '60', '3', '75.00', 'active', NULL, NULL, '1', '2026-08-06 16:43:47', NULL, NULL, NULL, 'completed', NULL, 'v1.0', NULL, '10', '1', 'regular', '75.00', '1', 'All Year Levels', 'All Programs', '1', NULL, NULL, NULL, '0', NULL, NULL),
+('11', '10', 'Civil Engineering Comprehensive Qualifying Exam', 'Structural Engineering', 'Structural Engineering', 'Prelim', 'hard', '120', '3', '75.00', 'active', NULL, NULL, '1', '2026-08-06 16:43:47', NULL, NULL, NULL, 'completed', NULL, 'v1.0', NULL, '10', '1', 'qualifying', '75.00', '1', 'All Year Levels', 'All Programs', '1', NULL, NULL, NULL, '0', NULL, NULL);
 
 -- --------------------------------------------------------
 -- Table structure for `generated_question_sources`
@@ -482,7 +482,7 @@ CREATE TABLE `lesson_materials` (
 -- Dumping data for `lesson_materials`
 
 INSERT INTO `lesson_materials` (`id`, `teacher_id`, `subject`, `title`, `file_name`, `file_path`, `file_type`, `file_size`, `lesson_text`, `processing_status`, `processing_error`, `word_count`, `page_count`, `extracted_at`, `created_at`, `mime_type`, `original_filename`, `stored_filename`, `is_demo`, `academic_period`, `semester`, `school_year`, `year_level`, `program`) VALUES 
-('10', '10', 'Structural Engineering', 'Structural Steel & Reinforced Concrete Design Fundamentals', 'demo_structural_steel.txt', 'teacher/uploads/demo_structural_steel.txt', 'txt', '1024', 'Reinforced concrete flexural design relies on ultimate limit state analysis and steel tensile reinforcement capacity.', 'completed', NULL, '150', '1', NULL, '2026-08-06 16:40:22', NULL, 'demo_structural_steel.txt', 'demo_structural_steel.txt', '1', 'general', NULL, NULL, NULL, NULL);
+('10', '10', 'Structural Engineering', 'Structural Steel & Reinforced Concrete Design Fundamentals', 'demo_structural_steel.txt', 'teacher/uploads/demo_structural_steel.txt', 'txt', '1024', 'Reinforced concrete flexural design relies on ultimate limit state analysis and steel tensile reinforcement capacity.', 'completed', NULL, '150', '1', NULL, '2026-08-06 16:43:47', NULL, 'demo_structural_steel.txt', 'demo_structural_steel.txt', '1', 'general', NULL, NULL, NULL, NULL);
 
 -- --------------------------------------------------------
 -- Table structure for `notifications`
@@ -518,7 +518,7 @@ CREATE TABLE `school_years` (
 -- Dumping data for `school_years`
 
 INSERT INTO `school_years` (`id`, `school_year`, `start_date`, `end_date`, `status`, `created_at`) VALUES 
-('1', '2025-2026', '2025-06-01', '2026-05-31', 'active', '2026-08-06 16:40:22');
+('1', '2025-2026', '2025-06-01', '2026-05-31', 'active', '2026-08-06 16:43:47');
 
 -- --------------------------------------------------------
 -- Table structure for `sections`
@@ -547,7 +547,7 @@ CREATE TABLE `sections` (
 -- Dumping data for `sections`
 
 INSERT INTO `sections` (`id`, `teacher_id`, `section_name`, `course_name`, `academic_year`, `created_at`, `updated_at`, `section_code`, `adviser_id`, `capacity`, `status`, `course`, `school_year_id`) VALUES 
-('1', NULL, 'Section 4A', 'BSCE', '2025-2026', '2026-08-06 16:40:22', NULL, 'BSCE-4A', NULL, '40', 'active', 'BSCE', '1');
+('1', NULL, 'Section 4A', 'BSCE', '2025-2026', '2026-08-06 16:43:47', NULL, 'BSCE-4A', NULL, '40', 'active', 'BSCE', '1');
 
 -- --------------------------------------------------------
 -- Table structure for `semesters`
@@ -567,7 +567,7 @@ CREATE TABLE `semesters` (
 -- Dumping data for `semesters`
 
 INSERT INTO `semesters` (`id`, `school_year_id`, `semester_name`, `status`, `created_at`) VALUES 
-('1', '1', 'First Semester', 'active', '2026-08-06 16:40:22');
+('1', '1', 'First Semester', 'active', '2026-08-06 16:43:47');
 
 -- --------------------------------------------------------
 -- Table structure for `student_details`
@@ -590,9 +590,9 @@ CREATE TABLE `student_details` (
 -- Dumping data for `student_details`
 
 INSERT INTO `student_details` (`id`, `user_id`, `student_number`, `course`, `section`, `created_at`, `year_level`) VALUES 
-('1', '11', '23-2149184', 'BSCE', 'Section A', '2026-08-06 16:40:22', '4'),
-('2', '20', '23-2149800', 'BSCE', 'Section A', '2026-08-06 16:40:22', '4'),
-('3', '21', '23-2149805', 'BSCE', 'Section B', '2026-08-06 16:40:22', '4');
+('1', '11', '23-2149184', 'BSCE', 'Section A', '2026-08-06 16:43:47', '4'),
+('2', '20', '23-2149800', 'BSCE', 'Section A', '2026-08-06 16:43:47', '4'),
+('3', '21', '23-2149805', 'BSCE', 'Section B', '2026-08-06 16:43:47', '4');
 
 -- --------------------------------------------------------
 -- Table structure for `student_requests`
@@ -652,8 +652,8 @@ CREATE TABLE `subjects` (
 -- Dumping data for `subjects`
 
 INSERT INTO `subjects` (`id`, `code`, `title`, `created_at`) VALUES 
-('1', 'CE-401', 'Structural Engineering', '2026-08-06 16:40:22'),
-('2', 'CE-402', 'Geotechnical Engineering & Foundation Design', '2026-08-06 16:40:22');
+('1', 'CE-401', 'Structural Engineering', '2026-08-06 16:43:47'),
+('2', 'CE-402', 'Geotechnical Engineering & Foundation Design', '2026-08-06 16:43:47');
 
 -- --------------------------------------------------------
 -- Table structure for `submission_answers`
@@ -689,12 +689,12 @@ CREATE TABLE `submission_answers` (
 -- Dumping data for `submission_answers`
 
 INSERT INTO `submission_answers` (`id`, `submission_id`, `question_id`, `student_answer`, `is_correct`, `points_awarded`, `points_possible`, `feedback`, `created_at`, `exam_id`, `student_id`, `correct_answer`, `awarded_points`, `max_points`, `evaluation_status`, `evaluation_reason`, `confidence`, `requires_review`) VALUES 
-('1', '500', '101', '75 mm', '0', '0.00', '1.00', NULL, '2026-08-06 16:40:22', '10', '11', '75 mm', '1.00', '1.00', 'correct', NULL, '100.00', '0'),
-('2', '500', '102', 'true', '0', '0.00', '1.00', NULL, '2026-08-06 16:40:22', '10', '11', 'true', '1.00', '1.00', 'correct', NULL, '100.00', '0'),
-('3', '500', '103', '88.36 kN', '0', '0.00', '1.00', NULL, '2026-08-06 16:40:22', '10', '11', '88.36 kN', '1.00', '1.00', 'correct', NULL, '100.00', '0'),
-('4', '501', '101', '75 mm', '0', '0.00', '1.00', NULL, '2026-08-06 16:40:22', '10', '20', '75 mm', '1.00', '1.00', 'correct', NULL, '100.00', '0'),
-('5', '501', '102', 'true', '0', '0.00', '1.00', NULL, '2026-08-06 16:40:22', '10', '20', 'true', '1.00', '1.00', 'correct', NULL, '100.00', '0'),
-('6', '501', '103', '95.20 kN', '0', '0.00', '1.00', NULL, '2026-08-06 16:40:22', '10', '20', '88.36 kN', '0.00', '1.00', 'incorrect', NULL, '100.00', '0');
+('1', '500', '101', '75 mm', '0', '0.00', '1.00', NULL, '2026-08-06 16:43:47', '10', '11', '75 mm', '1.00', '1.00', 'correct', NULL, '100.00', '0'),
+('2', '500', '102', 'true', '0', '0.00', '1.00', NULL, '2026-08-06 16:43:47', '10', '11', 'true', '1.00', '1.00', 'correct', NULL, '100.00', '0'),
+('3', '500', '103', '88.36 kN', '0', '0.00', '1.00', NULL, '2026-08-06 16:43:47', '10', '11', '88.36 kN', '1.00', '1.00', 'correct', NULL, '100.00', '0'),
+('4', '501', '101', '75 mm', '0', '0.00', '1.00', NULL, '2026-08-06 16:43:47', '10', '20', '75 mm', '1.00', '1.00', 'correct', NULL, '100.00', '0'),
+('5', '501', '102', 'true', '0', '0.00', '1.00', NULL, '2026-08-06 16:43:47', '10', '20', 'true', '1.00', '1.00', 'correct', NULL, '100.00', '0'),
+('6', '501', '103', '95.20 kN', '0', '0.00', '1.00', NULL, '2026-08-06 16:43:47', '10', '20', '88.36 kN', '0.00', '1.00', 'incorrect', NULL, '100.00', '0');
 
 -- --------------------------------------------------------
 -- Table structure for `submission_reprocessing_history`
@@ -826,8 +826,8 @@ CREATE TABLE `teacher_subject_assignments` (
 -- Dumping data for `teacher_subject_assignments`
 
 INSERT INTO `teacher_subject_assignments` (`id`, `teacher_id`, `subject`, `section_id`, `school_year_id`, `status`, `created_at`) VALUES 
-('1', '10', 'Structural Engineering', '1', '1', 'active', '2026-08-06 16:40:22'),
-('2', '12', 'Geotechnical Engineering & Foundation Design', '1', '1', 'active', '2026-08-06 16:40:22');
+('1', '10', 'Structural Engineering', '1', '1', 'active', '2026-08-06 16:43:47'),
+('2', '12', 'Geotechnical Engineering & Foundation Design', '1', '1', 'active', '2026-08-06 16:43:47');
 
 -- --------------------------------------------------------
 -- Table structure for `used_confirmation_tokens`
@@ -890,13 +890,13 @@ CREATE TABLE `users` (
 -- Dumping data for `users`
 
 INSERT INTO `users` (`id`, `fullname`, `username`, `email`, `password`, `role`, `created_at`, `updated_at`, `status`, `is_demo`, `force_password_reset`, `password_changed_at`) VALUES 
-('1', 'System Administrator', 'admin', 'admin@questbank.edu.ph', '$2y$12$0YXXK8ZFWa8J9FhHeKCkgupMpEFfe7ErESzXxK7QVXxw5AQzIbruq', 'admin', '2026-08-06 16:40:22', NULL, 'active', '1', '1', NULL),
-('10', 'Russel Gregorio', 'Russel', 'russel@gmail.com', '$2y$12$0YXXK8ZFWa8J9FhHeKCkgupMpEFfe7ErESzXxK7QVXxw5AQzIbruq', 'admin', '2026-08-06 16:40:22', NULL, 'active', '1', '1', NULL),
-('11', 'Ashley Nicole Gutierrez', 'Nicole', 'nikol@gmail.com', '$2y$12$0YXXK8ZFWa8J9FhHeKCkgupMpEFfe7ErESzXxK7QVXxw5AQzIbruq', 'student', '2026-08-06 16:40:22', NULL, 'active', '1', '1', NULL),
-('12', 'Professor Smith', 'prof_smith', 'smith@questbank.edu.ph', '$2y$12$0YXXK8ZFWa8J9FhHeKCkgupMpEFfe7ErESzXxK7QVXxw5AQzIbruq', 'teacher', '2026-08-06 16:40:22', NULL, 'active', '1', '1', NULL),
-('13', 'Jolas Lasjo', 'lasjo', 'lasjo@gmail.com', '$2y$12$0YXXK8ZFWa8J9FhHeKCkgupMpEFfe7ErESzXxK7QVXxw5AQzIbruq', 'teacher', '2026-08-06 16:40:22', NULL, 'active', '1', '1', NULL),
-('20', 'John Mark Santos', 'jmsantos', 'jmsantos@holycross.edu.ph', '$2y$12$0YXXK8ZFWa8J9FhHeKCkgupMpEFfe7ErESzXxK7QVXxw5AQzIbruq', 'student', '2026-08-06 16:40:22', NULL, 'active', '1', '1', NULL),
-('21', 'Maria Angelica Reyes', 'm_reyes', 'mreyes@holycross.edu.ph', '$2y$12$0YXXK8ZFWa8J9FhHeKCkgupMpEFfe7ErESzXxK7QVXxw5AQzIbruq', 'student', '2026-08-06 16:40:22', NULL, 'active', '1', '1', NULL);
+('1', 'System Administrator', 'admin', 'admin@questbank.edu.ph', '$2y$12$7CJitYn7vs3WFnHhX9CNueg6JMFzuMEcV3myPPxDA30r52sHuJ8TG', 'admin', '2026-08-06 16:43:47', NULL, 'active', '1', '1', NULL),
+('10', 'Russel Gregorio', 'Russel', 'russel@gmail.com', '$2y$12$7CJitYn7vs3WFnHhX9CNueg6JMFzuMEcV3myPPxDA30r52sHuJ8TG', 'admin', '2026-08-06 16:43:47', NULL, 'active', '1', '1', NULL),
+('11', 'Ashley Nicole Gutierrez', 'Nicole', 'nikol@gmail.com', '$2y$12$7CJitYn7vs3WFnHhX9CNueg6JMFzuMEcV3myPPxDA30r52sHuJ8TG', 'student', '2026-08-06 16:43:47', NULL, 'active', '1', '1', NULL),
+('12', 'Professor Smith', 'prof_smith', 'smith@questbank.edu.ph', '$2y$12$7CJitYn7vs3WFnHhX9CNueg6JMFzuMEcV3myPPxDA30r52sHuJ8TG', 'teacher', '2026-08-06 16:43:47', NULL, 'active', '1', '1', NULL),
+('13', 'Jolas Lasjo', 'lasjo', 'lasjo@gmail.com', '$2y$12$7CJitYn7vs3WFnHhX9CNueg6JMFzuMEcV3myPPxDA30r52sHuJ8TG', 'teacher', '2026-08-06 16:43:47', NULL, 'active', '1', '1', NULL),
+('20', 'John Mark Santos', 'jmsantos', 'jmsantos@holycross.edu.ph', '$2y$12$7CJitYn7vs3WFnHhX9CNueg6JMFzuMEcV3myPPxDA30r52sHuJ8TG', 'student', '2026-08-06 16:43:47', NULL, 'active', '1', '1', NULL),
+('21', 'Maria Angelica Reyes', 'm_reyes', 'mreyes@holycross.edu.ph', '$2y$12$7CJitYn7vs3WFnHhX9CNueg6JMFzuMEcV3myPPxDA30r52sHuJ8TG', 'student', '2026-08-06 16:43:47', NULL, 'active', '1', '1', NULL);
 
 SET FOREIGN_KEY_CHECKS=1;
 COMMIT;

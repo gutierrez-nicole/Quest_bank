@@ -16,6 +16,8 @@ require_once __DIR__ . '/services/ExamScoringService.php';
 require_once __DIR__ . '/services/LessonExtractionService.php';
 require_once __DIR__ . '/services/OcrService.php';
 require_once __DIR__ . '/services/ResultWorkflowService.php';
+require_once __DIR__ . '/services/SessionManagementService.php';
+require_once __DIR__ . '/services/SystemSettingsService.php';
 if (file_exists(__DIR__ . '/testing_bootstrap.php')) {
     require_once __DIR__ . '/testing_bootstrap.php';
 }
@@ -30,7 +32,9 @@ if (PHP_SAPI !== 'cli') {
                 $scriptName = basename($_SERVER['SCRIPT_NAME'] ?? '');
                 $allowedScripts = ['login.php', 'logout.php', 'maintenance.php'];
                 if (!in_array($scriptName, $allowedScripts, true)) {
-                    header('Location: /maintenance.php');
+                    $scriptPath = $_SERVER['PHP_SELF'] ?? $_SERVER['SCRIPT_NAME'] ?? '';
+                    $rel = preg_match('#/(admin|teacher|student|api|tests)/#', $scriptPath) ? '../' : '';
+                    header('Location: ' . $rel . 'maintenance.php');
                     exit;
                 }
             }

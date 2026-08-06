@@ -622,7 +622,14 @@ $stmtSd->execute();
 
 $stmtUsr = $pdo->prepare("
     INSERT INTO users (id, username, fullname, email, password, role, force_password_reset) 
-    VALUES (12, 'lasjo', 'jolas', 'lasjo@gmail.com', ?, 'teacher', 1) 
+    VALUES (12, 'prof_smith', 'Professor Smith', 'smith@questbank.edu.ph', ?, 'teacher', 1) 
+    ON DUPLICATE KEY UPDATE id = id
+");
+$stmtUsr->execute([$defaultPassHash]);
+
+$stmtUsr = $pdo->prepare("
+    INSERT INTO users (id, username, fullname, email, password, role, force_password_reset) 
+    VALUES (13, 'lasjo', 'Jolas Lasjo', 'lasjo@gmail.com', ?, 'teacher', 1) 
     ON DUPLICATE KEY UPDATE id = id
 ");
 $stmtUsr->execute([$defaultPassHash]);
