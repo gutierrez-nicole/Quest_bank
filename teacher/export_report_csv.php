@@ -65,6 +65,7 @@ try {
         LEFT JOIN users u ON es.student_id = u.id
         LEFT JOIN student_details sd ON es.student_id = sd.user_id
         WHERE {$whereClause}
+        GROUP BY es.id
         ORDER BY es.id DESC
     ");
     $stmt->execute($params);

@@ -24,13 +24,13 @@ try {
     }
 
     if ($sel_sy !== 'all') {
-        $adminWhere .= " AND (lm.school_year = ? OR e.school_year = ?)";
+        $adminWhere .= " AND (e.school_year = ? OR EXISTS (SELECT 1 FROM lesson_materials lm WHERE lm.exam_id = e.id AND lm.school_year = ?))";
         $adminParams[] = $sel_sy;
         $adminParams[] = $sel_sy;
     }
 
     if ($sel_sem !== 'all') {
-        $adminWhere .= " AND (lm.semester = ? OR e.semester = ?)";
+        $adminWhere .= " AND (e.semester = ? OR EXISTS (SELECT 1 FROM lesson_materials lm WHERE lm.exam_id = e.id AND lm.semester = ?))";
         $adminParams[] = $sel_sem;
         $adminParams[] = $sel_sem;
     }
@@ -41,12 +41,12 @@ try {
             (SELECT COUNT(*) FROM users WHERE role = 'student' AND status = 'active') AS students_count,
             (SELECT COUNT(DISTINCT subject) FROM exams) AS subjects_count,
             (SELECT COUNT(*) FROM exams) AS exams_count,
-            (SELECT COUNT(*) FROM exam_submissions es LEFT JOIN exams e ON es.exam_id = e.id LEFT JOIN student_details sd ON es.student_id = sd.user_id LEFT JOIN lesson_materials lm ON e.id = lm.exam_id {$adminWhere} AND es.review_status = 'published') AS published_exams,
-            (SELECT COUNT(*) FROM exam_submissions es LEFT JOIN exams e ON es.exam_id = e.id LEFT JOIN student_details sd ON es.student_id = sd.user_id LEFT JOIN lesson_materials lm ON e.id = lm.exam_id {$adminWhere} AND es.review_status IN ('pending_review', 'draft')) AS pending_reviews,
-            (SELECT COUNT(*) FROM exam_submissions es LEFT JOIN exams e ON es.exam_id = e.id LEFT JOIN student_details sd ON es.student_id = sd.user_id LEFT JOIN lesson_materials lm ON e.id = lm.exam_id {$adminWhere} AND es.review_status = 'published' AND (es.status = 'Pass' OR es.percentage >= 75)) AS completed_exams,
-            (SELECT COUNT(*) FROM exam_submissions es LEFT JOIN exams e ON es.exam_id = e.id LEFT JOIN student_details sd ON es.student_id = sd.user_id LEFT JOIN lesson_materials lm ON e.id = lm.exam_id {$adminWhere} AND es.review_status = 'published' AND (es.status = 'Fail' OR es.percentage < 75)) AS failed_exams,
-            (SELECT COUNT(*) FROM exam_submissions es LEFT JOIN exams e ON es.exam_id = e.id LEFT JOIN student_details sd ON es.student_id = sd.user_id LEFT JOIN lesson_materials lm ON e.id = lm.exam_id {$adminWhere}) AS total_submissions,
-            (SELECT AVG(es.percentage) FROM exam_submissions es LEFT JOIN exams e ON es.exam_id = e.id LEFT JOIN student_details sd ON es.student_id = sd.user_id LEFT JOIN lesson_materials lm ON e.id = lm.exam_id {$adminWhere} AND es.review_status = 'published') AS avg_score
+            (SELECT COUNT(DISTINCT es.id) FROM exam_submissions es LEFT JOIN exams e ON es.exam_id = e.id LEFT JOIN student_details sd ON es.student_id = sd.user_id {$adminWhere} AND es.review_status = 'published') AS published_exams,
+            (SELECT COUNT(DISTINCT es.id) FROM exam_submissions es LEFT JOIN exams e ON es.exam_id = e.id LEFT JOIN student_details sd ON es.student_id = sd.user_id {$adminWhere} AND es.review_status IN ('pending_review', 'draft')) AS pending_reviews,
+            (SELECT COUNT(DISTINCT es.id) FROM exam_submissions es LEFT JOIN exams e ON es.exam_id = e.id LEFT JOIN student_details sd ON es.student_id = sd.user_id {$adminWhere} AND es.review_status = 'published' AND (es.status = 'Pass' OR es.percentage >= 75)) AS completed_exams,
+            (SELECT COUNT(DISTINCT es.id) FROM exam_submissions es LEFT JOIN exams e ON es.exam_id = e.id LEFT JOIN student_details sd ON es.student_id = sd.user_id {$adminWhere} AND es.review_status = 'published' AND (es.status = 'Fail' OR es.percentage < 75)) AS failed_exams,
+            (SELECT COUNT(DISTINCT es.id) FROM exam_submissions es LEFT JOIN exams e ON es.exam_id = e.id LEFT JOIN student_details sd ON es.student_id = sd.user_id {$adminWhere}) AS total_submissions,
+            (SELECT AVG(es.percentage) FROM exam_submissions es LEFT JOIN exams e ON es.exam_id = e.id LEFT JOIN student_details sd ON es.student_id = sd.user_id {$adminWhere} AND es.review_status = 'published') AS avg_score
     ");
 
     $execParams = array_merge(

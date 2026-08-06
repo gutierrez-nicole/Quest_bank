@@ -52,27 +52,27 @@ if ($selected_period !== 'all') {
 }
 
 if ($selected_semester !== 'all') {
-    $where .= " AND (e.semester = ? OR lm.semester = ?)";
+    $where .= " AND (e.semester = ? OR EXISTS (SELECT 1 FROM lesson_materials lm WHERE lm.exam_id = e.id AND lm.semester = ?))";
     $params[] = $selected_semester;
     $params[] = $selected_semester;
 }
 
 if ($selected_sy !== 'all') {
-    $where .= " AND (e.school_year = ? OR lm.school_year = ?)";
+    $where .= " AND (e.school_year = ? OR EXISTS (SELECT 1 FROM lesson_materials lm WHERE lm.exam_id = e.id AND lm.school_year = ?))";
     $params[] = $selected_sy;
     $params[] = $selected_sy;
 }
 
 $stmtStats = $pdo->prepare("
     SELECT 
-        COUNT(*) as total_submissions,
+        COUNT(DISTINCT es.id) as total_submissions,
         SUM(CASE WHEN es.review_status = 'published' THEN 1 ELSE 0 END) as total_published,
         SUM(CASE WHEN es.review_status IN ('pending_review', 'draft') THEN 1 ELSE 0 END) as pending_review,
         SUM(CASE WHEN es.review_status = 'published' AND DATE(es.published_at) = CURRENT_DATE() THEN 1 ELSE 0 END) as published_today,
-        SUM(CASE WHEN es.status = 'Pass' OR (es.review_status = 'published' AND es.percentage >= 75) THEN 1 ELSE 0 END) as total_pass,
-        SUM(CASE WHEN es.status = 'Fail' OR (es.review_status = 'published' AND es.percentage < 75) THEN 1 ELSE 0 END) as total_fail,
-        SUM(CASE WHEN es.qualification_status = 'qualified' THEN 1 ELSE 0 END) as total_qualified,
-        SUM(CASE WHEN es.qualification_status = 'not_qualified' THEN 1 ELSE 0 END) as total_not_qualified,
+        SUM(CASE WHEN es.review_status = 'published' AND (es.status = 'Pass' OR es.percentage >= 75) THEN 1 ELSE 0 END) as total_pass,
+        SUM(CASE WHEN es.review_status = 'published' AND (es.status = 'Fail' OR es.percentage < 75) THEN 1 ELSE 0 END) as total_fail,
+        SUM(CASE WHEN es.review_status = 'published' AND es.qualification_status = 'qualified' THEN 1 ELSE 0 END) as total_qualified,
+        SUM(CASE WHEN es.review_status = 'published' AND es.qualification_status = 'not_qualified' THEN 1 ELSE 0 END) as total_not_qualified,
         SUM(CASE WHEN es.qualification_status = 'pending' THEN 1 ELSE 0 END) as total_pending_qual,
         AVG(CASE WHEN es.review_status = 'published' THEN es.percentage ELSE NULL END) as avg_percentage,
         MAX(CASE WHEN es.review_status = 'published' THEN es.percentage ELSE NULL END) as max_percentage,
@@ -80,7 +80,6 @@ $stmtStats = $pdo->prepare("
     FROM exam_submissions es
     LEFT JOIN exams e ON es.exam_id = e.id
     LEFT JOIN student_details sd ON es.student_id = sd.user_id
-    LEFT JOIN lesson_materials lm ON e.id = lm.exam_id
     $where
 ");
 $stmtStats->execute($params);
@@ -91,8 +90,8 @@ $stmtList = $pdo->prepare("
     LEFT JOIN exams e ON es.exam_id = e.id
     LEFT JOIN users u ON es.student_id = u.id
     LEFT JOIN student_details sd ON es.student_id = sd.user_id
-    LEFT JOIN lesson_materials lm ON e.id = lm.exam_id
     $where 
+    GROUP BY es.id
     ORDER BY es.id DESC LIMIT 200
 ");
 $stmtList->execute($params);
@@ -106,8 +105,8 @@ $pending_review = intval($stats['pending_review'] ?? 0);
 $published_today = intval($stats['published_today'] ?? 0);
 $pass = intval($stats['total_pass'] ?? 0);
 $fail = intval($stats['total_fail'] ?? 0);
-$pass_rate = $total_published > 0 ? round(($pass / $total_published) * 100, 1) : 0.0;
-$fail_rate = $total_published > 0 ? round(($fail / $total_published) * 100, 1) : 0.0;
+$pass_rate = $total_published > 0 ? min(100.0, round(($pass / $total_published) * 100, 1)) : 0.0;
+$fail_rate = $total_published > 0 ? min(100.0, round(($fail / $total_published) * 100, 1)) : 0.0;
 $avg_percentage = floatval($stats['avg_percentage'] ?? 0.0);
 $max_percentage = floatval($stats['max_percentage'] ?? 0.0);
 

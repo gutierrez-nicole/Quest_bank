@@ -41,6 +41,7 @@ try {
         FROM exam_submissions es
         LEFT JOIN exams e ON es.exam_id = e.id
         WHERE {$whereClause}
+        GROUP BY es.id
         ORDER BY es.created_at DESC
     ");
     $stmt->execute($params);

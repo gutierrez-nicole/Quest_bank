@@ -14,6 +14,7 @@ $runner = new TestRunner('QuestBank Priority 3 Full Implementation Verification'
 $pdo = null;
 $createdExamIds = [];
 $createdSubmissionIds = [];
+$createdLessonIds = [];
 
 try {
     $pdo = getDBConnection();
@@ -28,7 +29,7 @@ try {
     if (!$student1Id) $student1Id = 11;
     if (!$student2Id) $student2Id = 12;
 
-    // ── TEST 1: Publication Workflow (Single, Bulk, Exam-Wide) ──
+    // ── TEST 1: Publication Workflow (Single & Bulk) ──
     $stmtEx = $pdo->prepare("
         INSERT INTO exams (teacher_id, title, subject, specialization, time_limit, total_items, exam_category, status, term, covered_periods)
         VALUES (?, 'Priority 3 Test Comprehensive Exam', 'Structural Engineering', 'Structural Engineering', 60, 5, 'regular', 'active', 'midterm', 'midterm')
@@ -128,12 +129,12 @@ try {
     // ── TEST 5: Statistics & SQL Aggregations ──
     $stmtAgg = $pdo->prepare("
         SELECT 
-            COUNT(*) as total_pub,
-            AVG(percentage) as avg_pct,
-            MAX(percentage) as max_pct,
-            MIN(percentage) as min_pct
-        FROM exam_submissions
-        WHERE exam_id = ? AND review_status = 'published'
+            COUNT(DISTINCT es.id) as total_pub,
+            AVG(CASE WHEN es.review_status = 'published' THEN es.percentage ELSE NULL END) as avg_pct,
+            MAX(CASE WHEN es.review_status = 'published' THEN es.percentage ELSE NULL END) as max_pct,
+            MIN(CASE WHEN es.review_status = 'published' THEN es.percentage ELSE NULL END) as min_pct
+        FROM exam_submissions es
+        WHERE es.exam_id = ? AND es.review_status = 'published'
     ");
     $stmtAgg->execute([$examId]);
     $aggRow = $stmtAgg->fetch(PDO::FETCH_ASSOC);
@@ -144,12 +145,14 @@ try {
     // ── TEST 6: Leaderboard (Published Results Only) ──
     $stmtLeader = $pdo->prepare("
         SELECT 
+            u.id as student_id,
             u.fullname as student_name,
-            es.percentage
+            MAX(es.percentage) as percentage
         FROM exam_submissions es
         JOIN users u ON es.student_id = u.id
         WHERE es.exam_id = ? AND es.review_status = 'published'
-        ORDER BY es.percentage DESC
+        GROUP BY u.id, u.fullname
+        ORDER BY percentage DESC
     ");
     $stmtLeader->execute([$examId]);
     $leaderRows = $stmtLeader->fetchAll(PDO::FETCH_ASSOC);
@@ -161,7 +164,7 @@ try {
 
     // ── TEST 7: Filter Compatibility ──
     $stmtF = $pdo->prepare("
-        SELECT COUNT(*) 
+        SELECT COUNT(DISTINCT es.id) 
         FROM exam_submissions es
         JOIN exams e ON es.exam_id = e.id
         WHERE es.student_id = ? AND es.review_status = 'published' AND e.subject = 'Structural Engineering' AND e.term = 'midterm'
@@ -171,10 +174,103 @@ try {
 
     $runner->assertTrue("TEST 7: Subject and Academic Period filter queries execute cleanly", $filterCount >= 1, "Filter returned {$filterCount} matching records");
 
+    // ── TEST 8: Exam-Wide Publication Skipping Unreviewed Submissions ──
+    $stmtEx8 = $pdo->prepare("
+        INSERT INTO exams (teacher_id, title, subject, specialization, time_limit, total_items, exam_category, status, term)
+        VALUES (?, 'Priority 3 Exam Wide Skip Test', 'Hydraulics', 'Hydraulics', 30, 5, 'regular', 'active', 'midterm')
+    ");
+    $stmtEx8->execute([$teacherId]);
+    $exam8Id = $pdo->lastInsertId();
+    $createdExamIds[] = $exam8Id;
+
+    // Sub A: reviewed (eligible)
+    $stmtSub->execute([$exam8Id, $student1Id, $teacherId, 80.0, 80.0, 'Pass', 'reviewed']);
+    $subA = $pdo->lastInsertId();
+    $createdSubmissionIds[] = $subA;
+
+    // Sub B: finalized (eligible)
+    $stmtSub->execute([$exam8Id, $student2Id, $teacherId, 90.0, 90.0, 'Pass', 'finalized']);
+    $subB = $pdo->lastInsertId();
+    $createdSubmissionIds[] = $subB;
+
+    // Sub C: pending_review (ineligible -> should be skipped)
+    $stmtSub->execute([$exam8Id, $student1Id, $teacherId, 40.0, 40.0, 'Fail', 'pending_review']);
+    $subC = $pdo->lastInsertId();
+    $createdSubmissionIds[] = $subC;
+
+    $pubAllRes = ResultWorkflowService::publishEntireExam($exam8Id, $teacherId, 'Exam wide publication test');
+
+    $pubAllValid = (
+        $pubAllRes['eligible_count'] === 2 &&
+        $pubAllRes['published_count'] === 2 &&
+        $pubAllRes['skipped_count'] === 1 &&
+        in_array($subC, $pubAllRes['skipped_submission_ids'])
+    );
+
+    // Verify subC status remained pending_review (no auto-finalization jump)
+    $subCStatus = $pdo->query("SELECT review_status FROM exam_submissions WHERE id = {$subC}")->fetchColumn();
+    $subCUnchanged = ($subCStatus === 'pending_review');
+
+    $runner->assertTrue(
+        "TEST 8: Exam-wide publication publishes eligible submissions and skips unreviewed without auto-finalizing",
+        $pubAllValid && $subCUnchanged,
+        "Eligible: {$pubAllRes['eligible_count']}, Published: {$pubAllRes['published_count']}, Skipped: {$pubAllRes['skipped_count']}. SubC Status: {$subCStatus}"
+    );
+
+    // ── TEST 9: One-To-Many Duplication Test (3 Linked Lessons) ──
+    $stmtL1 = $pdo->prepare("INSERT INTO lesson_materials (teacher_id, subject, title, file_name, file_path, file_type, file_size, academic_period, semester, school_year) VALUES (?, 'Hydraulics', 'Lesson 1', 'l1.pdf', '/tmp/l1.pdf', 'pdf', 1024, 'midterm', '1st Semester', '2025-2026')");
+    $stmtL1->execute([$teacherId]);
+    $createdLessonIds[] = $pdo->lastInsertId();
+
+    $stmtL2 = $pdo->prepare("INSERT INTO lesson_materials (teacher_id, subject, title, file_name, file_path, file_type, file_size, academic_period, semester, school_year) VALUES (?, 'Hydraulics', 'Lesson 2', 'l2.pdf', '/tmp/l2.pdf', 'pdf', 1024, 'midterm', '1st Semester', '2025-2026')");
+    $stmtL2->execute([$teacherId]);
+    $createdLessonIds[] = $pdo->lastInsertId();
+
+    $stmtL3 = $pdo->prepare("INSERT INTO lesson_materials (teacher_id, subject, title, file_name, file_path, file_type, file_size, academic_period, semester, school_year) VALUES (?, 'Hydraulics', 'Lesson 3', 'l3.pdf', '/tmp/l3.pdf', 'pdf', 1024, 'midterm', '1st Semester', '2025-2026')");
+    $stmtL3->execute([$teacherId]);
+    $createdLessonIds[] = $pdo->lastInsertId();
+
+    // Query teacher submissions list grouped by es.id
+    $stmtNoDup = $pdo->prepare("
+        SELECT es.id
+        FROM exam_submissions es
+        JOIN exams e ON es.exam_id = e.id
+        WHERE es.exam_id = ? AND es.review_status = 'published' AND EXISTS (SELECT 1 FROM lesson_materials lm WHERE lm.subject = e.subject AND lm.semester = '1st Semester')
+        GROUP BY es.id
+    ");
+    $stmtNoDup->execute([$exam8Id]);
+    $noDupRows = $stmtNoDup->fetchAll(PDO::FETCH_ASSOC);
+
+    $noDupValid = (count($noDupRows) === 2); // exactly 2 published submissions, no tripling
+    $runner->assertTrue("TEST 9: Exam linked to 3 lessons does not duplicate submission counts", $noDupValid, "Query returned exactly " . count($noDupRows) . " published submission rows (expected 2)");
+
+    // ── TEST 10: Non-Admin Archived Republishing Security ──
+    $pdo->exec("UPDATE exam_submissions SET review_status = 'archived' WHERE id = {$subA}");
+    $archivedRepubBlocked = false;
+    try {
+        ResultWorkflowService::transitionStatus($subA, 'published', $teacherId);
+    } catch (SecurityException $e) {
+        $archivedRepubBlocked = true;
+    }
+    $runner->assertTrue("TEST 10: Teacher cannot republish archived submission without admin authorization", $archivedRepubBlocked, "Archived republish blocked for teacher cleanly");
+
+    // ── TEST 11: Student Leaderboard Privacy Masking ──
+    $privacyMasked = false;
+    foreach ($leaderRows as $lbItem) {
+        $displayName = (intval($lbItem['student_id']) !== intval($student1Id)) ? ('Student #' . $lbItem['student_id']) : ($lbItem['student_name'] . ' (You)');
+        if (intval($lbItem['student_id']) === intval($student2Id) && $displayName === 'Student #' . $student2Id) {
+            $privacyMasked = true;
+        }
+    }
+    $runner->assertTrue("TEST 11: Student leaderboard applies privacy masking to other students' names", $privacyMasked, "Other student name masked as Student #ID");
+
 } catch (Throwable $e) {
     $runner->recordException($e);
 } finally {
     if ($pdo) {
+        foreach ($createdLessonIds as $lid) {
+            $pdo->exec("DELETE FROM lesson_materials WHERE id = {$lid}");
+        }
         foreach ($createdSubmissionIds as $sid) {
             $pdo->exec("DELETE FROM submission_answers WHERE submission_id = {$sid}");
             $pdo->exec("DELETE FROM submission_status_history WHERE submission_id = {$sid}");

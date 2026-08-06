@@ -672,37 +672,66 @@ class ResultWorkflowService {
         }
 
         $stmtSubs = $pdo->prepare("
-            SELECT id FROM exam_submissions 
-            WHERE exam_id = ? AND review_status IN ('reviewed', 'finalized', 'draft', 'pending_review')
+            SELECT id, review_status 
+            FROM exam_submissions 
+            WHERE exam_id = ?
         ");
         $stmtSubs->execute([$examId]);
-        $subIds = $stmtSubs->fetchAll(PDO::FETCH_COLUMN);
+        $submissions = $stmtSubs->fetchAll(PDO::FETCH_ASSOC);
 
+        $eligibleCount = 0;
         $publishedCount = 0;
+        $skippedCount = 0;
+        $failedCount = 0;
+        $skippedSubmissionIds = [];
+        $skippedDetails = [];
         $errors = [];
 
-        foreach ($subIds as $sId) {
-            try {
-                $stmtCheck = $pdo->prepare("SELECT review_status FROM exam_submissions WHERE id = ?");
-                $stmtCheck->execute([$sId]);
-                $cStatus = $stmtCheck->fetchColumn();
+        foreach ($submissions as $sub) {
+            $sId = (int)$sub['id'];
+            $cStatus = strtolower(trim($sub['review_status'] ?? 'pending_review'));
 
-                if (in_array($cStatus, ['draft', 'pending_review'], true)) {
-                    $pdo->exec("UPDATE exam_submissions SET review_status = 'finalized' WHERE id = {$sId}");
-                }
+            if (!in_array($cStatus, ['reviewed', 'finalized'], true)) {
+                $skippedCount++;
+                $skippedSubmissionIds[] = $sId;
+                $reason = "Ineligible review status '{$cStatus}' (submission must be reviewed or finalized before publication).";
+                $skippedDetails[] = [
+                    'submission_id' => $sId,
+                    'status' => $cStatus,
+                    'reason' => $reason
+                ];
+                $errors[] = "Submission #{$sId}: {$reason}";
+                continue;
+            }
+
+            $eligibleCount++;
+
+            try {
                 self::transitionStatus($sId, 'published', $teacherId, $remarks);
                 $publishedCount++;
             } catch (Exception $e) {
+                $failedCount++;
+                $skippedSubmissionIds[] = $sId;
+                $skippedDetails[] = [
+                    'submission_id' => $sId,
+                    'status' => $cStatus,
+                    'reason' => $e->getMessage()
+                ];
                 $errors[] = "Submission #{$sId}: " . $e->getMessage();
             }
         }
 
         return [
-            'success' => true,
-            'exam_id' => $examId,
+            'success' => ($publishedCount > 0 && $skippedCount === 0 && $failedCount === 0),
+            'exam_id' => (int)$examId,
+            'total_submissions' => count($submissions),
+            'eligible_count' => $eligibleCount,
             'published_count' => $publishedCount,
+            'skipped_count' => $skippedCount,
+            'failed_count' => $failedCount,
+            'skipped_submission_ids' => $skippedSubmissionIds,
+            'skipped_details' => $skippedDetails,
             'errors' => $errors
         ];
     }
 }
-

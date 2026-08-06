@@ -558,13 +558,13 @@ try {
     }
 
     if ($hist_semester !== 'all') {
-        $histWhere .= " AND (e.semester = ? OR lm.semester = ?)";
+        $histWhere .= " AND (e.semester = ? OR EXISTS (SELECT 1 FROM lesson_materials lm WHERE lm.exam_id = e.id AND lm.semester = ?))";
         $histParams[] = $hist_semester;
         $histParams[] = $hist_semester;
     }
 
     if ($hist_sy !== 'all') {
-        $histWhere .= " AND (e.school_year = ? OR lm.school_year = ?)";
+        $histWhere .= " AND (e.school_year = ? OR EXISTS (SELECT 1 FROM lesson_materials lm WHERE lm.exam_id = e.id AND lm.school_year = ?))";
         $histParams[] = $hist_sy;
         $histParams[] = $hist_sy;
     }
@@ -589,8 +589,8 @@ try {
             FROM exam_submissions es
             LEFT JOIN exams e ON es.exam_id = e.id
             LEFT JOIN users uT ON (es.teacher_id = uT.id OR e.teacher_id = uT.id)
-            LEFT JOIN lesson_materials lm ON e.id = lm.exam_id
             $histWhere
+            GROUP BY es.id
             ORDER BY es.created_at DESC
             LIMIT 100
         ");
@@ -600,7 +600,7 @@ try {
         $exam_history = [];
     }
 
-    // Priority 3: Top Performers Leaderboard
+    // Priority 3: Top Performers Leaderboard (Privacy Masked for Students)
     $student_leaderboard = [];
     try {
         $leader_subject = trim($_GET['leader_subject'] ?? 'all');
@@ -614,6 +614,7 @@ try {
 
         $stmtLb = $pdo->prepare("
             SELECT 
+                u.id as student_id,
                 u.fullname as student_name,
                 COALESCE(e.subject, 'Civil Engineering') as subject,
                 sd.section,
@@ -630,6 +631,15 @@ try {
         ");
         $stmtLb->execute($lbParams);
         $student_leaderboard = $stmtLb->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($student_leaderboard as &$lbItem) {
+            if (intval($lbItem['student_id'] ?? 0) !== intval($student_id)) {
+                $lbItem['display_name'] = 'Student #' . intval($lbItem['student_id']);
+            } else {
+                $lbItem['display_name'] = $lbItem['student_name'] . ' (You)';
+            }
+        }
+        unset($lbItem);
     } catch (Exception $e) {
         $student_leaderboard = [];
     }
