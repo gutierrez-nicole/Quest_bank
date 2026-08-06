@@ -14,12 +14,12 @@
 
 ### 1. Developer Package
 - **Filename:** `QuestBank-v2.2-RC1-Developer.zip`
-- **SHA-256 Checksum:** `e8ab9d1035162031dfa3d9116786ab86996049adace6462beb356713f5acfecd`
+- **SHA-256 Checksum:** `ae7411593da57a3d69e4fed820a31d7553a29cb71bbd983a2b5af8e46fe284ea`
 - **Contents:** Full production PHP source, database migrations, clean seed dataset, 22/22 verifier scripts, test runner framework, Playwright E2E suite, fixtures, developer documentation.
 
 ### 2. Client / Production Package
 - **Filename:** `QuestBank-v2.2-RC1-Production.zip`
-- **SHA-256 Checksum:** `d0478cd9794e9dbbca3096a1f2c277bae0587b26d524260c5b9e6f85e03d0559`
+- **SHA-256 Checksum:** `1a94fc96d84f17f2ebc1db42498f19b7b5aa450496677fca9522d98d6bd3c79e`
 - **Contents:** Production PHP source, web assets, canonical clean database dump (`database/bankquest_db.sql`), migrations, deployment guides, user/admin manuals.
 - **Excluded Items:**
   - `tests/` directory
