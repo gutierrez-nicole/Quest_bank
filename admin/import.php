@@ -75,9 +75,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new InvalidArgumentException("Uploaded file contains binary data and cannot be processed as a CSV.");
                 }
 
-                // Store temporary copy for execution phase
+                // Store temporary copy for execution phase in dedicated QuestBank storage/tmp
                 $batchId = bin2hex(random_bytes(16));
-                $targetFile = sys_get_temp_dir() . "/qb_batch_{$batchId}.csv";
+                $targetFile = StorageManagementService::getQuestBankTempDir() . "/qb_batch_{$batchId}.csv";
                 copy($tmpPath, $targetFile);
 
                 $result = BulkImportService::processCSV($targetFile, $importType, false, $adminId);

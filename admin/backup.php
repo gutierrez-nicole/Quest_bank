@@ -38,20 +38,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // Handle Direct Download Request
 if (isset($_GET['action']) && $_GET['action'] === 'download') {
-    $filename = basename($_GET['file'] ?? '');
-    $backupDir = realpath(__DIR__ . '/../database/backups');
-    $filePath = $backupDir . '/' . $filename;
+    $filename = $_GET['file'] ?? '';
+    $backupDir = BackupService::getBackupDir();
+    $filePath = $backupDir . '/' . basename($filename);
+    $realPath = realpath($filePath);
 
-    if ($filename && file_exists($filePath) && strpos(realpath($filePath), $backupDir) === 0) {
+    if (BackupService::isValidBackupFilename($filename) && $realPath && strpos($realPath, $backupDir) === 0 && file_exists($realPath)) {
         AuditLogService::logAction($adminId, "Downloaded Database Backup", "File: {$filename}");
         header('Content-Type: application/octet-stream');
-        header('Content-Disposition: attachment; filename="' . $filename . '"');
-        header('Content-Length: ' . filesize($filePath));
-        readfile($filePath);
+        header('Content-Disposition: attachment; filename="' . basename($filename) . '"');
+        header('Content-Length: ' . filesize($realPath));
+        readfile($realPath);
         exit;
     } else {
-        $msg = "Invalid backup file specified for download.";
-        $msgType = 'danger';
+        renderErrorPage(403, "Access Denied: Invalid backup file specified for download.");
     }
 }
 

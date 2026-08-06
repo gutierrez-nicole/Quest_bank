@@ -37,17 +37,11 @@ try {
         $subRecord = $stmtCheck->fetch(PDO::FETCH_ASSOC);
 
         if (!$subRecord) {
-            http_response_code(404);
-            header('Content-Type: text/plain');
-            echo "404 Not Found: Submission record #{$single_id} does not exist.";
-            exit;
+            renderErrorPage(404, "Exam submission record #{$single_id} does not exist.");
         }
 
         if (intval($subRecord['student_id']) !== intval($student_id) || $subRecord['review_status'] !== 'published') {
-            http_response_code(403);
-            header('Content-Type: text/plain');
-            echo "403 Forbidden: Unauthorized access to submission record #{$single_id}.";
-            exit;
+            renderErrorPage(403, "Access Denied: You do not have authorization to view or export submission record #{$single_id}.");
         }
 
         $where[] = "es.id = ? AND es.student_id = ?";

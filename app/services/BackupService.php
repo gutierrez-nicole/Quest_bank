@@ -6,13 +6,34 @@ require_once __DIR__ . '/SystemSettingsService.php';
 
 class BackupService {
 
-    private static function getBackupDir() {
+    public static function getBackupDir() {
         $dir = __DIR__ . '/../../database/backups';
         if (!is_dir($dir)) {
             @mkdir($dir, 0755, true);
         }
-        @file_put_contents($dir . '/.htaccess', "Deny from all\n");
+        $htaccess = $dir . '/.htaccess';
+        if (!file_exists($htaccess)) {
+            @file_put_contents($htaccess, "Deny from all\n");
+        }
         return realpath($dir) ?: $dir;
+    }
+
+    public static function isValidBackupFilename(string $filename): bool {
+        $base = basename($filename);
+        if ($base !== $filename || empty($filename)) {
+            return false; // Traversal or path segment attempts rejected
+        }
+        if (strpos($base, '.') === 0) {
+            return false; // Dotfiles (.htaccess, .env) rejected
+        }
+        if (strtolower(pathinfo($base, PATHINFO_EXTENSION)) !== 'sql') {
+            return false; // Non-SQL files rejected
+        }
+        // Allow ONLY qb_backup_<timestamp>_<random>.sql and qb_safety_backup_<timestamp>_<random>.sql
+        if (preg_match('/^qb_(safety_)?backup_\d{4}-\d{2}-\d{2}_\d{6}_[a-f0-9]+\.sql$/i', $base)) {
+            return true;
+        }
+        return false;
     }
 
     public static function createBackup($actorId = null, $prefix = 'qb_backup_') {
@@ -104,10 +125,10 @@ class BackupService {
 
         foreach ($files as $file) {
             $name = basename($file);
+            if (!self::isValidBackupFilename($name)) continue;
+
             $size = filesize($file);
             $mtime = filemtime($file);
-
-            $head = file_get_contents($file, false, null, 0, 512);
             $tableCount = substr_count(file_get_contents($file), "CREATE TABLE");
 
             $backups[] = [
@@ -132,29 +153,34 @@ class BackupService {
     }
 
     public static function restoreBackup($filename, $actorId, $confirmationPhrase = 'RESTORE') {
+        if (!self::isValidBackupFilename($filename)) {
+            throw new InvalidArgumentException("Invalid or untrusted backup filename '{$filename}'. Operations permitted on valid QuestBank SQL backups only.");
+        }
+
         $backupDir = self::getBackupDir();
         $safeName = basename($filename);
         $filePath = $backupDir . '/' . $safeName;
+        $realPath = realpath($filePath);
+
+        if (!$realPath || strpos($realPath, $backupDir) !== 0 || !file_exists($realPath) || !is_readable($realPath)) {
+            throw new InvalidArgumentException("Backup file '{$safeName}' not found or path traversal detected.");
+        }
 
         if ($confirmationPhrase !== 'RESTORE') {
             throw new InvalidArgumentException("Restore confirmation failed. Please type the explicit phrase 'RESTORE'.");
         }
 
-        if (!file_exists($filePath) || !is_readable($filePath)) {
-            throw new InvalidArgumentException("Backup file '{$safeName}' not found or unreadable.");
-        }
-
-        $headerChunk = file_get_contents($filePath, false, null, 0, 1024);
+        $headerChunk = file_get_contents($realPath, false, null, 0, 1024);
         if (strpos($headerChunk, "-- QuestBank Database Dump") === false && strpos($headerChunk, "CREATE TABLE") === false) {
             throw new InvalidArgumentException("Backup file integrity validation failed: File is not a recognized QuestBank SQL backup.");
         }
 
-        $sql = file_get_contents($filePath);
+        $sql = file_get_contents($realPath);
         if (empty($sql)) {
             throw new InvalidArgumentException("Backup file is empty.");
         }
 
-        $sourceSha256 = hash_file('sha256', $filePath);
+        $sourceSha256 = hash_file('sha256', $realPath);
 
         // 1. Create a fresh Safety Backup of current DB before attempting restore
         $safetyBackup = self::createBackup($actorId, 'qb_safety_backup_');
@@ -195,12 +221,17 @@ class BackupService {
     }
 
     public static function deleteBackup($filename, $actorId) {
+        if (!self::isValidBackupFilename($filename)) {
+            return false;
+        }
+
         $backupDir = self::getBackupDir();
         $safeName = basename($filename);
         $filePath = $backupDir . '/' . $safeName;
+        $realPath = realpath($filePath);
 
-        if (file_exists($filePath)) {
-            @unlink($filePath);
+        if ($realPath && strpos($realPath, $backupDir) === 0 && file_exists($realPath)) {
+            @unlink($realPath);
             AuditLogService::logAction($actorId, "Deleted Database Backup", "Deleted backup: {$safeName}");
             return true;
         }

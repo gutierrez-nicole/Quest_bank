@@ -70,21 +70,64 @@ class SystemHealthService {
         ];
 
         // 6. OCR Engine Availability
-        $tesseractPath = exec('which tesseract 2>/dev/null');
-        $diagnostics['ocr_engine'] = [
-            'status' => 'PASS',
-            'label' => 'OCR Command Availability',
-            'details' => !empty($tesseractPath) ? "Tesseract CLI available at {$tesseractPath}" : 'PHP GD image processing available for OCR parser.'
-        ];
+        $tesseractPath = exec('which tesseract 2>/dev/null') ?: exec('command -v tesseract 2>/dev/null');
+        $hasGd = extension_loaded('gd');
+        $hasImagick = extension_loaded('imagick');
+        
+        $submissionsDir = __DIR__ . '/../../uploads/submissions';
+        if (!is_dir($submissionsDir)) {
+            @mkdir($submissionsDir, 0755, true);
+        }
+        $submissionsWritable = is_writable($submissionsDir);
+
+        if (!empty($tesseractPath) && $submissionsWritable) {
+            $diagnostics['ocr_engine'] = [
+                'status' => 'PASS',
+                'label' => 'OCR Command Availability',
+                'details' => "Tesseract CLI processor active at {$tesseractPath}"
+            ];
+        } elseif (($hasGd || $hasImagick) && $submissionsWritable) {
+            $extName = $hasGd ? 'GD' : 'Imagick';
+            $diagnostics['ocr_engine'] = [
+                'status' => 'WARNING',
+                'label' => 'OCR Command Availability',
+                'details' => "Tesseract CLI missing; verified PHP {$extName} image processing fallback active."
+            ];
+        } else {
+            $diagnostics['ocr_engine'] = [
+                'status' => 'FAIL',
+                'label' => 'OCR Command Availability',
+                'details' => "No usable OCR processor found! Please install Tesseract CLI or enable PHP GD/Imagick extension."
+            ];
+        }
 
         // 7. Groq AI Configuration
-        $aiKey = getenv('GROQ_API_KEY') ?: (defined('GROQ_API_KEY') ? GROQ_API_KEY : '');
-        $hasKey = (!empty($aiKey) && strlen($aiKey) > 10);
-        $diagnostics['groq_ai'] = [
-            'status' => $hasKey ? 'PASS' : 'WARNING',
-            'label' => 'Groq AI API Key Configured',
-            'details' => $hasKey ? 'Groq API Key configured and active.' : 'Groq API Key missing (Deterministic offline mock AI generators active).'
-        ];
+        $isTestMockActive = (defined('QUESTBANK_TESTING_MODE') && QUESTBANK_TESTING_MODE === true) || (defined('QUESTBANK_MOCK_AI') && QUESTBANK_MOCK_AI === true);
+
+        if ($isTestMockActive) {
+            $diagnostics['groq_ai'] = [
+                'status' => 'PASS',
+                'label' => 'Testing Mock Provider Active',
+                'details' => 'Secure testing environment mock provider active.'
+            ];
+        } else {
+            $aiKey = getenv('GROQ_API_KEY') ?: (defined('GROQ_API_KEY') ? GROQ_API_KEY : '');
+            $hasKey = (!empty($aiKey) && strlen($aiKey) > 10 && strpos($aiKey, 'gsk_') === 0);
+
+            if ($hasKey) {
+                $diagnostics['groq_ai'] = [
+                    'status' => 'PASS',
+                    'label' => 'Groq AI Service',
+                    'details' => 'Groq API Key configured and active.'
+                ];
+            } else {
+                $diagnostics['groq_ai'] = [
+                    'status' => 'WARNING',
+                    'label' => 'Groq AI Service',
+                    'details' => 'Groq API Key missing or unconfigured. AI generation feature offline.'
+                ];
+            }
+        }
 
         // 8. Active School Year
         $activeSy = AcademicStructureService::getActiveSchoolYear();

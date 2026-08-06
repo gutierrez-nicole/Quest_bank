@@ -128,13 +128,26 @@ class StorageManagementService {
         return $orphaned;
     }
 
+    public static function getQuestBankTempDir() {
+        $dir = __DIR__ . '/../../storage/tmp';
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0755, true);
+        }
+        @file_put_contents($dir . '/.htaccess', "Deny from all\n");
+        return realpath($dir) ?: $dir;
+    }
+
     public static function deleteOrphanedFiles($filePaths, $actorId = null) {
         $pdo = getDBConnection();
+
+        $qbTempDir = self::getQuestBankTempDir();
+        $sysTempDir = realpath(sys_get_temp_dir());
 
         $approvedRoots = [
             realpath(__DIR__ . '/../../teacher/uploads'),
             realpath(__DIR__ . '/../../uploads/submissions'),
-            realpath(sys_get_temp_dir())
+            realpath(__DIR__ . '/../../uploads/exports'),
+            $qbTempDir
         ];
         $approvedRoots = array_values(array_filter($approvedRoots));
 
@@ -143,6 +156,8 @@ class StorageManagementService {
         $rejectedCount = 0;
         $freedBytes = 0;
         $rejections = [];
+
+        $safeSysTempPrefixes = ['qb_batch_', 'qb_preview_', 'qb_export_', 'test_subj_', 'test_stud_', 'test_students_'];
 
         foreach ($filePaths as $path) {
             if (is_link($path)) {
@@ -164,25 +179,45 @@ class StorageManagementService {
                 continue;
             }
 
+            $base = basename($realPath);
             $ext = strtolower(pathinfo($realPath, PATHINFO_EXTENSION));
             $blacklistedExts = ['php', 'sql', 'env', 'json', 'htaccess', 'sh', 'exe', 'bat', 'cmd', 'py', 'pl'];
-            if (in_array($ext, $blacklistedExts, true) || strpos(basename($realPath), '.') === 0) {
+            if (in_array($ext, $blacklistedExts, true) || strpos($base, '.') === 0) {
                 $rejectedCount++;
                 $rejections[] = ['file' => $path, 'reason' => "Protected system/source file type '.{$ext}' cannot be deleted."];
                 continue;
             }
 
-            $inApprovedRoot = false;
-            foreach ($approvedRoots as $root) {
-                if ($root && (strpos($realPath, $root . DIRECTORY_SEPARATOR) === 0 || $realPath === $root)) {
-                    $inApprovedRoot = true;
-                    break;
+            $dirOfFile = realpath(dirname($realPath));
+
+            // System temp directory legacy handling
+            if ($sysTempDir && $dirOfFile === $sysTempDir) {
+                $isSafeSysTemp = false;
+                foreach ($safeSysTempPrefixes as $pref) {
+                    if (strpos($base, $pref) === 0) {
+                        $isSafeSysTemp = true;
+                        break;
+                    }
                 }
-            }
-            if (!$inApprovedRoot) {
-                $rejectedCount++;
-                $rejections[] = ['file' => $path, 'reason' => 'File path is outside approved upload directories.'];
-                continue;
+                if (!$isSafeSysTemp) {
+                    $rejectedCount++;
+                    $rejections[] = ['file' => $path, 'reason' => 'Unrelated OS system temporary file cannot be deleted.'];
+                    continue;
+                }
+            } else {
+                // Approved boundary check for non-system-temp paths
+                $inApprovedRoot = false;
+                foreach ($approvedRoots as $root) {
+                    if ($root && (strpos($realPath, $root . DIRECTORY_SEPARATOR) === 0 || $realPath === $root)) {
+                        $inApprovedRoot = true;
+                        break;
+                    }
+                }
+                if (!$inApprovedRoot) {
+                    $rejectedCount++;
+                    $rejections[] = ['file' => $path, 'reason' => 'File path is outside approved QuestBank upload/storage directories.'];
+                    continue;
+                }
             }
 
             $base = basename($realPath);

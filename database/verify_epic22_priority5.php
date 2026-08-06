@@ -13,7 +13,7 @@ require_once __DIR__ . '/../app/services/SessionManagementService.php';
 require_once __DIR__ . '/../app/services/SecurityAuditService.php';
 require_once __DIR__ . '/../app/services/AuditLogService.php';
 
-$runner = new TestRunner('QuestBank Priority 5 Operations & Security Corrections Verification');
+$runner = new TestRunner('QuestBank Priority 5 Operations & Security Hardening Verification');
 
 $pdo = null;
 $createdBackupFiles = [];
@@ -100,14 +100,20 @@ try {
     $resTrav = StorageManagementService::deleteOrphanedFiles([$travFile], $adminId);
     $runner->assertTrue("TEST 3b: Path traversal deletion strictly rejected", $resTrav['deleted_count'] === 0 && $resTrav['rejected_count'] === 1, "Rejected count: {$resTrav['rejected_count']}");
 
-    // 3c: Real orphaned file inside approved directory -> deletion succeeds!
-    $approvedDir = __DIR__ . '/../teacher/uploads';
-    if (!is_dir($approvedDir)) @mkdir($approvedDir, 0755, true);
-    $testOrphanFile = $approvedDir . '/test_orphan_file_' . bin2hex(random_bytes(4)) . '.txt';
-    file_put_contents($testOrphanFile, 'test orphan content');
+    // 3c: Attempt deleting arbitrary OS temp file -> MUST BE REJECTED!
+    $sysTempFile = sys_get_temp_dir() . '/random_os_file_' . bin2hex(random_bytes(4)) . '.txt';
+    file_put_contents($sysTempFile, 'unrelated os content');
+    $resSysTemp = StorageManagementService::deleteOrphanedFiles([$sysTempFile], $adminId);
+    @unlink($sysTempFile);
+    $runner->assertTrue("TEST 3c: Arbitrary OS system-temp file deletion strictly rejected", $resSysTemp['deleted_count'] === 0 && $resSysTemp['rejected_count'] === 1, "Rejected arbitrary temp file count: {$resSysTemp['rejected_count']}");
 
-    $resOrphan = StorageManagementService::deleteOrphanedFiles([$testOrphanFile], $adminId);
-    $runner->assertTrue("TEST 3c: Real unreferenced file in approved directory deleted successfully", $resOrphan['deleted_count'] === 1, "Deleted count: {$resOrphan['deleted_count']}");
+    // 3d: Dedicated QuestBank storage temp file -> deletion succeeds!
+    $qbTempDir = StorageManagementService::getQuestBankTempDir();
+    $testQbTempFile = $qbTempDir . '/qb_batch_test_' . bin2hex(random_bytes(4)) . '.csv';
+    file_put_contents($testQbTempFile, 'qb temp content');
+
+    $resQbTemp = StorageManagementService::deleteOrphanedFiles([$testQbTempFile], $adminId);
+    $runner->assertTrue("TEST 3d: Dedicated QuestBank temp file deletion succeeds", $resQbTemp['deleted_count'] === 1, "Deleted count: {$resQbTemp['deleted_count']}");
 
     // ── TEST 4: Database Restore Safety & Pre-Restore Recovery Backup ──
     $backup = BackupService::createBackup($adminId);
@@ -128,6 +134,12 @@ try {
     $safetyExists = file_exists(__DIR__ . '/../database/backups/' . $restoreRes['safety_backup']);
     $runner->assertTrue("TEST 4b: Safety backup created automatically before restore", $safetyExists, "Safety backup: {$restoreRes['safety_backup']}");
 
+    // 4c: Reusable backup filename pattern validation & .htaccess protection
+    $runner->assertTrue("TEST 4c: Valid backup pattern accepted", BackupService::isValidBackupFilename('qb_backup_2026-08-06_123456_abc123.sql'), "Valid normal pattern accepted");
+    $runner->assertTrue("TEST 4d: Valid safety backup pattern accepted", BackupService::isValidBackupFilename('qb_safety_backup_2026-08-06_123456_abc123.sql'), "Valid safety pattern accepted");
+    $runner->assertTrue("TEST 4e: .htaccess backup deletion strictly rejected", !BackupService::deleteBackup('.htaccess', $adminId), ".htaccess delete rejected");
+    $runner->assertTrue("TEST 4f: Unrelated filename rejected by backup validator", !BackupService::isValidBackupFilename('random_backup.sql') && !BackupService::isValidBackupFilename('.env'), "Unrelated filenames rejected");
+
     // ── TEST 5: Audit Log Actor Integrity (No False Attribution) ──
     // 5a: Invalid actor ID -> stored as NULL (not mapped to real user ID)
     AuditLogService::logAction(999999, 'CLI Test Action Invalid Actor', 'Details test');
@@ -139,7 +151,7 @@ try {
     $stmtSysLog = $pdo->query("SELECT user_id, actor_id FROM audit_logs WHERE action = 'System Automated Task' ORDER BY id DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
     $runner->assertTrue("TEST 5b: System action stored as NULL actor without mapping to real user", $stmtSysLog['user_id'] === null && $stmtSysLog['actor_id'] === null, "Actor ID: " . var_export($stmtSysLog['actor_id'], true));
 
-    // ── TEST 6: Deployment Readiness Checklist Failures ──
+    // ── TEST 6: Deployment Readiness Checklist Failures & Diagnostics Accuracy ──
     SystemSettingsService::setSetting('maintenance_mode', 'on');
     $chkMModeOn = SystemHealthService::getDeploymentChecklist();
     $runner->assertTrue("TEST 6a: Deployment checklist overall status is FAIL when maintenance mode is ON", $chkMModeOn['overall_status'] === 'FAIL', "Overall status: {$chkMModeOn['overall_status']}");
