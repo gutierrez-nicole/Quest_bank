@@ -35,6 +35,8 @@ app.log
 test-results/
 playwright-report/
 .last-run.json
+tests/test_state.json
+
 
 # Local archive releases
 *.zip
