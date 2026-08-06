@@ -403,7 +403,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
         async function openCameraScanner() {
             const modal = document.getElementById('cameraModal');
             const errorBanner = document.getElementById('cameraErrorBanner');
-            const switchBtn = document.getElementById('switchCameraBtn');
 
             errorBanner.classList.add('hidden');
             modal.classList.remove('hidden');
@@ -421,16 +420,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
                 return;
             }
 
-            try {
-                const devices = await navigator.mediaDevices.enumerateDevices();
-                const videoDevices = devices.filter(d => d.kind === 'videoinput');
-                if (videoDevices.length > 1) {
-                    switchBtn.classList.remove('hidden');
-                } else {
-                    switchBtn.classList.add('hidden');
-                }
-            } catch(e) {}
-
             startCameraStream();
         }
 
@@ -438,7 +427,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
             stopCameraStream();
 
             const video = document.getElementById('cameraVideo');
-            const constraints = {
+            const switchBtn = document.getElementById('switchCameraBtn');
+
+            let constraints = {
                 video: {
                     facingMode: { ideal: currentFacingMode },
                     width: { ideal: 1920 },
@@ -449,17 +440,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
 
             try {
                 mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-                video.srcObject = mediaStream;
-                video.play();
-            } catch (err) {
-                console.error("Camera access error:", err);
-                let msg = "Camera permission was denied. You may upload an image instead.";
-                if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-                    msg = "No camera hardware device found. You may upload an image file instead.";
-                } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
-                    msg = "Camera is already in use by another application. Please release the camera or upload an image file instead.";
+            } catch (firstErr) {
+                console.warn("First camera attempt failed with constraints, trying simple video stream:", firstErr);
+                try {
+                    mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                } catch (err) {
+                    console.error("Camera access error:", err);
+                    let msg = "Camera permission was denied. You may upload an image instead.";
+                    if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+                        msg = "No camera hardware device found. You may upload an image file instead.";
+                    } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+                        msg = "Camera is already in use by another application. Please release the camera or upload an image file instead.";
+                    } else if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                        msg = "Camera permission was denied. You may upload an image instead.";
+                    }
+                    showCameraError(msg);
+                    return;
                 }
-                showCameraError(msg);
+            }
+
+            if (mediaStream) {
+                video.srcObject = mediaStream;
+                try {
+                    await video.play();
+                } catch(e) {}
+
+                try {
+                    const devices = await navigator.mediaDevices.enumerateDevices();
+                    const videoDevices = devices.filter(d => d.kind === 'videoinput');
+                    if (videoDevices.length > 1) {
+                        switchBtn.classList.remove('hidden');
+                    } else {
+                        switchBtn.classList.add('hidden');
+                    }
+                } catch(e) {}
             }
         }
 
