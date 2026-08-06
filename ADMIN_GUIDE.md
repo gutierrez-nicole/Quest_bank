@@ -46,8 +46,8 @@ This guide details system administration, user management, database operations, 
 - The **Deployment Readiness Checklist** computes overall `PASS`, `WARNING`, or `FAIL` status.
 
 ### Storage Management & Orphaned Cleanup (`admin/files.php`)
-- Monitor storage allocation across Lesson Materials, Submissions, Backups, and Temporary files.
-- Run **Orphaned File Cleanup** to scan disk files against active database records. Boundary protections restrict deletion to approved upload directories.
+- Monitor storage allocation across Lesson Materials, Scanned Submissions (including camera captures), Backups, and Temporary files.
+- Run **Orphaned File Cleanup** to scan disk files against active database records. Boundary protections restrict deletion to approved upload directories (`uploads/ocr_sheets/`, `teacher/uploads/`).
 
 ---
 

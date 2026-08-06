@@ -78,6 +78,7 @@ Ensure Apache has `AllowOverride All` enabled. QuestBank automatically enforces 
 ## 🛡️ Production Security Checklist
 
 - [x] **HTTPS Enforcement:** Set `ini_set('session.cookie_secure', 1)` for HTTPS environments.
+- [x] **Camera API Requirement:** Browser `getUserMedia()` media streams require HTTPS TLS encryption or `localhost` origin. Ensure SSL certificates (Let's Encrypt / TLS 1.3) are properly configured on production domains so mobile devices can access rear-facing cameras (`facingMode: "environment"`).
 - [x] **Environment Security:** `APP_ENV=production` in `.env`.
 - [x] **Database Isolation:** Restrict MySQL user permissions to `bankquest_db` only.
 - [x] **Backup Protection:** Direct HTTP access to `database/backups/` is prohibited.

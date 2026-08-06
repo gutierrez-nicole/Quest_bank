@@ -41,11 +41,19 @@ Upon logging in, students are presented with their personal academic dashboard:
 4. Click **Generate AI Exam**.
 5. Review the draft exam, adjust item points if needed, and save to your active exam repository.
 
-### 4. OCR Answer Sheet Evaluator (`teacher/upload_submissions.php`)
-1. Select the target **Exam**.
-2. Upload student scanned answer sheets (`.png`, `.jpg`, `.pdf`).
-3. Click **Process OCR Evaluation**.
-4. The system parses student details, evaluates answers, computes awarded points, and reports confidence scores.
+### 4. OCR Answer Sheet Evaluator & Camera Scanner (`teacher/upload_check.php`)
+1. Select the target **Stored Exam** and **Enrolled Student**.
+2. Choose your input method:
+   - **Scan Using Camera:** Click **Scan Using Camera** to launch live device camera preview.
+     - Position student answer sheet inside document framing box.
+     - Ensure adequate lighting and avoid heavy shadows.
+     - Click **Capture Answer Sheet** to take photo.
+     - Review preview, image dimensions, and low-resolution warnings.
+     - Adjust image if needed: **Rotate Left/Right**, **Crop Boundary**, or **Reset**.
+     - Click **Use Photo & Attach** to confirm capture.
+   - **Upload Image or PDF:** Click **Upload Image or PDF** to select a `.jpg`, `.png`, or `.pdf` file from your device storage.
+3. Click **Process & Grade Server-Side**.
+4. The system parses student answers via `OcrService`, evaluates answers against the answer key, computes awarded points, and saves the result as **Pending Review**.
 
 ### 5. Review & Score Overrides (`teacher/submissions.php`)
 1. Open any submission in **Pending Review** status.

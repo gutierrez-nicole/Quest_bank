@@ -48,3 +48,11 @@ This document provides resolutions for common runtime issues, database errors, O
 - **Resolution:**
   1. QuestBank preserves your database prior to restore in a Safety Backup (`database/backups/qb_safety_backup_*.sql`).
   2. Access `admin/backup.php` and restore from the generated safety backup file.
+
+### 7. Camera Scanner Permission / Non-HTTPS Access Error
+- **Symptom:** "Camera permission was denied" or "Camera access requires an HTTPS connection or localhost origin".
+- **Cause:** Browser camera permission was denied, another app is using the camera, or the site is accessed over insecure HTTP on a remote IP address.
+- **Resolution:**
+  1. Access the portal using an HTTPS domain (`https://questbank.edu.ph`) or `http://localhost`.
+  2. Grant camera access in browser site settings (click lock icon in address bar -> Permissions -> Camera -> Allow).
+  3. If physical camera hardware is absent, use the built-in fallback button **Upload Image or PDF** (`.jpg`, `.png`, `.pdf`).

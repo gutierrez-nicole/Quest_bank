@@ -18,12 +18,14 @@ require_once __DIR__ . '/smoke/AuthSmokeTest.php';
 require_once __DIR__ . '/smoke/ExamScoringTest.php';
 require_once __DIR__ . '/smoke/ResultWorkflowTest.php';
 require_once __DIR__ . '/smoke/MigrationSmokeTest.php';
+require_once __DIR__ . '/smoke/OcrCameraUploadTest.php';
 
 $tests = [
     'test_auth_smoke',
     'test_exam_scoring_smoke',
     'test_result_workflow_smoke',
-    'test_migration_smoke'
+    'test_migration_smoke',
+    'test_ocr_camera_upload_smoke'
 ];
 
 $passed = 0;

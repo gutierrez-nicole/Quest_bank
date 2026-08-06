@@ -3,6 +3,7 @@ require_once __DIR__ . '/../app/bootstrap.php';
 require_once __DIR__ . '/../app/services/OcrService.php';
 require_once __DIR__ . '/../app/services/AnswerSheetParser.php';
 require_once __DIR__ . '/../app/services/ExamScoringService.php';
+require_once __DIR__ . '/../app/services/FileValidationService.php';
 
 AuthService::enforceRole('teacher');
 $pdo = getDBConnection();
@@ -13,12 +14,10 @@ try {
     $stmt->execute([$teacher_id]);
     $teacher = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    
     $stmtExams = $pdo->prepare("SELECT id, title, subject, passing_percentage FROM exams WHERE teacher_id = ? OR created_by = ? ORDER BY id DESC");
     $stmtExams->execute([$teacher_id, $teacher_id]);
     $available_exams = $stmtExams->fetchAll(PDO::FETCH_ASSOC);
 
-    
     $stmtStudents = $pdo->query("SELECT id, fullname, email FROM users WHERE role = 'student' ORDER BY fullname ASC");
     $available_students = $stmtStudents->fetchAll(PDO::FETCH_ASSOC);
 
@@ -39,76 +38,90 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
     if (empty($exam_id) || empty($student_id)) {
         $error_msg = "Please select a valid Exam and Enrolled Student.";
     } elseif (!isset($_FILES['exam_file']) || $_FILES['exam_file']['error'] !== UPLOAD_ERR_OK) {
-        $error_msg = "Please attach a valid answer sheet file (JPG, PNG, PDF).";
+        $error_msg = "Please attach a valid answer sheet file or camera capture (JPG, PNG, PDF).";
     } else {
-        
         $stmtCheck = $pdo->prepare("SELECT * FROM exams WHERE id = ? AND (teacher_id = ? OR created_by = ?)");
         $stmtCheck->execute([$exam_id, $teacher_id, $teacher_id]);
         $examObj = $stmtCheck->fetch(PDO::FETCH_ASSOC);
 
+        $stmtCheckStudent = $pdo->prepare("SELECT id FROM users WHERE id = ? AND role = 'student'");
+        $stmtCheckStudent->execute([$student_id]);
+        $studentExists = $stmtCheckStudent->fetchColumn();
+
         if (!$examObj) {
             $error_msg = "Unauthorized: Selected exam does not belong to your account.";
+        } elseif (!$studentExists) {
+            $error_msg = "Unauthorized: Selected student does not exist or is not an enrolled student.";
         } else {
             $file_name = $_FILES['exam_file']['name'];
             $file_tmp = $_FILES['exam_file']['tmp_name'];
-            $file_ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
 
-            
-            $upload_dir = __DIR__ . '/../uploads/ocr_sheets/';
-            if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
-            $target_file = $upload_dir . uniqid('ocr_') . '.' . $file_ext;
-
-            if (move_uploaded_file($file_tmp, $target_file)) {
-                
-                $ocrRes = OcrService::processAnswerSheet($target_file, $file_ext);
-                $ocrText = $ocrRes['text'] ?? '';
-
-                
-                $qStmt = $pdo->prepare("SELECT * FROM exam_questions WHERE exam_id = ? ORDER BY id ASC");
-                $qStmt->execute([$exam_id]);
-                $examQuestions = $qStmt->fetchAll(PDO::FETCH_ASSOC);
-
-                
-                $parsedOcr = AnswerSheetParser::parseAnswerSheet($ocrText, $examQuestions);
-                $submittedAnswers = $parsedOcr['answers'];
-
-                
-                if (!empty($_POST['corrected_ocr_text'])) {
-                    $correctedText = trim(sanitizeInput($_POST['corrected_ocr_text']));
-                    $parsedCorr = AnswerSheetParser::parseAnswerSheet($correctedText, $examQuestions);
-                    $submittedAnswers = $parsedCorr['answers'];
-                }
-
-                
-                try {
-                    $fileMeta = [
-                        'ocr_text' => $ocrText,
-                        'ocr_confidence' => $ocrRes['confidence'],
-                        'ocr_status' => $ocrRes['status'],
-                        'suggested_manual_review' => ($ocrRes['confidence'] < 75.0 || $parsedOcr['requires_review']) ? 1 : 0,
-                        'page_count' => $ocrRes['page_count'],
-                        'file_path' => 'uploads/ocr_sheets/' . basename($target_file),
-                        'original_filename' => $file_name
-                    ];
-
-                    $evalRes = ExamScoringService::evaluateAndSaveSubmission(
-                        $exam_id,
-                        $student_id,
-                        $submittedAnswers,
-                        $teacher_id,
-                        'scanned',
-                        $fileMeta
-                    );
-
-                    logActivity("Processed OCR grading for submission #{$evalRes['submission_id']} (Exam #{$exam_id}).", $teacher_id);
-                    $success_msg = "Answer sheet processed & scored server-side! Submission #{$evalRes['submission_id']} saved as Pending Review.";
-                    $evaluation_summary = $evalRes;
-
-                } catch (Exception $e) {
-                    $error_msg = "Scoring Error: " . $e->getMessage();
-                }
+            $validation = FileValidationService::validateFile($file_tmp, $file_name, 10485760);
+            if (!$validation['success']) {
+                $error_msg = "Security Validation Failed: " . $validation['error'];
             } else {
-                $error_msg = "Failed to store uploaded file on server.";
+                $file_ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
+
+                if (in_array($file_ext, ['jpg', 'jpeg', 'png'], true)) {
+                    $imgInfo = @getimagesize($file_tmp);
+                    if (!$imgInfo || $imgInfo[0] < 10 || $imgInfo[1] < 10) {
+                        $error_msg = "Security Validation Failed: Invalid or corrupted image file format.";
+                    }
+                }
+
+                if (empty($error_msg)) {
+                    $upload_dir = __DIR__ . '/../uploads/ocr_sheets/';
+                    if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
+                    $target_file = $upload_dir . uniqid('ocr_') . '.' . $file_ext;
+
+                    if (move_uploaded_file($file_tmp, $target_file)) {
+                        $ocrRes = OcrService::processAnswerSheet($target_file, $file_ext);
+                        $ocrText = $ocrRes['text'] ?? '';
+
+                        $qStmt = $pdo->prepare("SELECT * FROM exam_questions WHERE exam_id = ? ORDER BY id ASC");
+                        $qStmt->execute([$exam_id]);
+                        $examQuestions = $qStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                        $parsedOcr = AnswerSheetParser::parseAnswerSheet($ocrText, $examQuestions);
+                        $submittedAnswers = $parsedOcr['answers'];
+
+                        if (!empty($_POST['corrected_ocr_text'])) {
+                            $correctedText = trim(sanitizeInput($_POST['corrected_ocr_text']));
+                            $parsedCorr = AnswerSheetParser::parseAnswerSheet($correctedText, $examQuestions);
+                            $submittedAnswers = $parsedCorr['answers'];
+                        }
+
+                        try {
+                            $fileMeta = [
+                                'ocr_text' => $ocrText,
+                                'ocr_confidence' => $ocrRes['confidence'],
+                                'ocr_status' => $ocrRes['status'],
+                                'suggested_manual_review' => ($ocrRes['confidence'] < 75.0 || $parsedOcr['requires_review']) ? 1 : 0,
+                                'page_count' => $ocrRes['page_count'],
+                                'file_path' => 'uploads/ocr_sheets/' . basename($target_file),
+                                'original_filename' => $file_name
+                            ];
+
+                            $evalRes = ExamScoringService::evaluateAndSaveSubmission(
+                                $exam_id,
+                                $student_id,
+                                $submittedAnswers,
+                                $teacher_id,
+                                'scanned',
+                                $fileMeta
+                            );
+
+                            logActivity("Processed OCR grading for submission #{$evalRes['submission_id']} (Exam #{$exam_id}).", $teacher_id);
+                            $success_msg = "Answer sheet processed & scored server-side! Submission #{$evalRes['submission_id']} saved as Pending Review.";
+                            $evaluation_summary = $evalRes;
+
+                        } catch (Exception $e) {
+                            $error_msg = "Scoring Error: " . $e->getMessage();
+                        }
+                    } else {
+                        $error_msg = "Failed to store uploaded file on server.";
+                    }
+                }
             }
         }
     }
@@ -141,7 +154,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
         <header class="bg-white border-b border-stone-200 px-6 py-4 flex items-center justify-between flex-shrink-0">
             <div>
                 <h2 class="text-lg font-bold text-stone-800"><i class="fa-solid fa-camera-retro text-orange-600 mr-2"></i>Optical Answer Sheet Evaluator</h2>
-                <p class="text-xs text-stone-400">Scan or upload student answer sheets for automated server-side answer key comparison.</p>
+                <p class="text-xs text-stone-400">Scan using device camera or upload student answer sheets for automated server-side answer key comparison.</p>
             </div>
             
             <div class="flex items-center gap-3 pl-2 border-l border-stone-200">
@@ -176,13 +189,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
                     <i class="fa-solid fa-file-arrow-up text-orange-600"></i> Process Student Answer Sheet
                 </h3>
 
-                <form action="upload_check.php" method="POST" enctype="multipart/form-data" class="space-y-4">
+                <form action="upload_check.php" method="POST" enctype="multipart/form-data" class="space-y-4" id="ocrUploadForm">
                     <?php echo csrfInputField(); ?>
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-xs font-bold text-stone-700 mb-1">Select Stored Exam</label>
-                            <select name="exam_id" required class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500">
+                            <select name="exam_id" id="examSelect" required class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500">
                                 <option value="">-- Choose Exam --</option>
                                 <?php foreach ($available_exams as $ex): ?>
                                     <option value="<?php echo $ex['id']; ?>">
@@ -194,7 +207,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
 
                         <div>
                             <label class="block text-xs font-bold text-stone-700 mb-1">Select Enrolled Student</label>
-                            <select name="student_id" required class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500">
+                            <select name="student_id" id="studentSelect" required class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500">
                                 <option value="">-- Choose Student --</option>
                                 <?php foreach ($available_students as $st): ?>
                                     <option value="<?php echo $st['id']; ?>">
@@ -205,9 +218,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
                         </div>
                     </div>
 
-                    <div>
-                        <label class="block text-xs font-bold text-stone-700 mb-1">Upload Answer Sheet (JPG, PNG, PDF)</label>
-                        <input type="file" name="exam_file" required accept=".jpg,.jpeg,.png,.pdf" class="w-full bg-stone-50 border border-stone-200 rounded-xl p-2 text-xs font-semibold text-stone-800">
+                    <!-- Input Methods (Scan vs Upload) -->
+                    <div class="space-y-3">
+                        <label class="block text-xs font-bold text-stone-700 mb-1">Answer Sheet Source</label>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <button type="button" id="openCameraButton" data-testid="scan-using-camera-btn" onclick="openCameraScanner()" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs py-3 px-4 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-camera text-sm"></i> Scan Using Camera
+                            </button>
+
+                            <label for="examFileInput" class="w-full bg-stone-100 hover:bg-stone-200 border border-stone-300 text-stone-700 font-bold text-xs py-3 px-4 rounded-xl cursor-pointer transition-all flex items-center justify-center gap-2 text-center">
+                                <i class="fa-solid fa-upload text-sm"></i> Upload Image or PDF
+                            </label>
+                        </div>
+
+                        <!-- Selected File / Camera Capture Status Box -->
+                        <div class="p-3 bg-stone-50 border border-stone-200 rounded-xl flex items-center justify-between gap-2" id="fileStatusContainer">
+                            <div class="flex items-center gap-2 overflow-hidden">
+                                <i class="fa-solid fa-file-image text-orange-500 text-base flex-shrink-0" id="fileIcon"></i>
+                                <span class="text-xs font-semibold text-stone-700 truncate" id="fileNameDisplay">No answer sheet selected yet</span>
+                            </div>
+                            <input type="file" name="exam_file" id="examFileInput" required accept=".jpg,.jpeg,.png,.pdf" onchange="onFileSelected(event)" class="hidden">
+                            <span class="text-[10px] font-bold text-stone-400 uppercase flex-shrink-0" id="fileSizeDisplay"></span>
+                        </div>
                     </div>
 
                     <button type="submit" name="process_ocr_grading" class="w-full bg-orange-gradient text-white font-bold text-xs py-3 rounded-xl shadow hover:opacity-95 transition-all flex items-center justify-center gap-2">
@@ -244,5 +276,388 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
 
         </div>
     </main>
+
+    <!-- Camera Answer Sheet Scanner Modal -->
+    <div id="cameraModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden flex flex-col items-center justify-center p-3 sm:p-6" data-testid="camera-modal">
+        <div class="bg-white border border-stone-200 rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[95vh] overflow-hidden">
+            
+            <!-- Modal Header -->
+            <div class="bg-stone-900 text-white px-5 py-3.5 flex items-center justify-between flex-shrink-0">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-orange-500/20 text-orange-400 flex items-center justify-center">
+                        <i class="fa-solid fa-camera text-sm"></i>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-extrabold text-stone-100 leading-tight">Camera Answer Sheet Scanner</h4>
+                        <p class="text-[10px] text-stone-400">Position student answer sheet inside the framing box</p>
+                    </div>
+                </div>
+                <button type="button" data-testid="close-camera-btn" onclick="closeCameraScanner()" class="w-8 h-8 text-stone-400 hover:text-white rounded-lg flex items-center justify-center hover:bg-stone-800 transition-all" aria-label="Close Camera Scanner">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Camera Viewfinder & Preview Container -->
+            <div class="relative bg-black flex-grow flex items-center justify-center min-h-[300px] max-h-[60vh] overflow-hidden select-none">
+                
+                <!-- Live Video Feed -->
+                <video id="cameraVideo" autoplay playsinline class="w-full h-full object-contain" data-testid="camera-video-preview"></video>
+
+                <!-- Document Framing Overlay Guide -->
+                <div id="framingOverlay" data-testid="document-framing-overlay" class="absolute inset-0 pointer-events-none flex flex-col items-center justify-between p-4">
+                    <div class="w-full text-center bg-black/70 backdrop-blur-xs text-white text-[11px] font-semibold py-1.5 px-3 rounded-full border border-white/20 shadow">
+                        <i class="fa-solid fa-circle-info text-orange-400 mr-1.5"></i>
+                        Position the complete answer sheet inside the frame. Avoid shadows and keep camera steady.
+                    </div>
+                    <div class="w-full h-full max-w-md max-h-[75%] border-2 border-dashed border-orange-400/90 rounded-2xl relative shadow-[0_0_0_9999px_rgba(0,0,0,0.35)] transition-all">
+                        <div class="absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-orange-400"></div>
+                        <div class="absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-orange-400"></div>
+                        <div class="absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-orange-400"></div>
+                        <div class="absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-orange-400"></div>
+                    </div>
+                    <div class="text-[10px] text-stone-300 bg-black/60 px-3 py-1 rounded-full">
+                        Ensure adequate lighting for optimal OCR accuracy
+                    </div>
+                </div>
+
+                <!-- Captured Image Preview Container -->
+                <div id="previewContainer" class="hidden absolute inset-0 bg-black flex flex-col items-center justify-center">
+                    <img id="capturedImagePreview" data-testid="captured-image-preview" class="w-full h-full object-contain" alt="Captured Answer Sheet Preview">
+                </div>
+
+                <!-- Error & Permission Banner -->
+                <div id="cameraErrorBanner" data-testid="camera-error-message" class="hidden absolute inset-4 bg-rose-900/95 border border-rose-500 text-rose-100 p-5 rounded-2xl flex flex-col items-center justify-center text-center space-y-3">
+                    <i class="fa-solid fa-triangle-exclamation text-3xl text-rose-300"></i>
+                    <p id="cameraErrorText" class="text-xs font-bold leading-relaxed max-w-md">Camera permission was denied. You may upload an image instead.</p>
+                    <button type="button" onclick="closeCameraScanner()" class="bg-white text-rose-900 font-bold text-xs py-2 px-4 rounded-xl hover:bg-stone-100 transition-all">
+                        Close Scanner
+                    </button>
+                </div>
+            </div>
+
+            <!-- Meta Display Bar -->
+            <div id="imageMetaBar" class="hidden bg-stone-100 border-t border-stone-200 px-5 py-2 flex flex-wrap items-center justify-between text-xs text-stone-700 gap-2">
+                <span id="imageDimensionsDisplay" data-testid="image-dimensions" class="font-mono font-bold text-[11px] text-stone-600">Dimensions: 0 x 0 px</span>
+                <div id="lowResWarning" data-testid="low-resolution-warning" class="hidden text-amber-800 bg-amber-100 border border-amber-300 px-2.5 py-0.5 rounded-md font-bold text-[10px] flex items-center gap-1">
+                    <i class="fa-solid fa-triangle-exclamation"></i> Low resolution (< 800px width). OCR accuracy may decrease.
+                </div>
+            </div>
+
+            <!-- Controls Bar -->
+            <div class="bg-stone-50 border-t border-stone-200 p-4 flex-shrink-0">
+                <!-- Stream Controls (Before Capture) -->
+                <div id="streamControls" class="flex items-center justify-between gap-3">
+                    <button type="button" id="switchCameraBtn" data-testid="switch-camera-btn" onclick="switchCamera()" class="hidden bg-stone-200 hover:bg-stone-300 text-stone-700 font-bold text-xs py-2.5 px-3.5 rounded-xl transition-all flex items-center gap-1.5" aria-label="Switch Camera">
+                        <i class="fa-solid fa-camera-rotate"></i> Switch Camera
+                    </button>
+
+                    <button type="button" id="captureBtn" data-testid="capture-btn" onclick="capturePhoto()" class="mx-auto bg-orange-gradient text-white font-extrabold text-xs py-3 px-6 rounded-xl shadow hover:opacity-95 transition-all flex items-center gap-2" aria-label="Capture Answer Sheet">
+                        <i class="fa-solid fa-circle text-rose-500 animate-pulse text-xs"></i> Capture Answer Sheet
+                    </button>
+
+                    <button type="button" onclick="closeCameraScanner()" class="bg-stone-200 hover:bg-stone-300 text-stone-700 font-bold text-xs py-2.5 px-3.5 rounded-xl transition-all">
+                        Cancel
+                    </button>
+                </div>
+
+                <!-- Adjustment & Confirmation Controls (After Capture) -->
+                <div id="adjustmentControls" class="hidden flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex items-center gap-1.5">
+                        <button type="button" data-testid="rotate-left-btn" onclick="rotateImage(-90)" class="bg-stone-200 hover:bg-stone-300 text-stone-700 text-xs font-bold py-2 px-3 rounded-lg transition-all flex items-center gap-1" title="Rotate Left 90°" aria-label="Rotate Left 90 Degrees">
+                            <i class="fa-solid fa-rotate-left"></i> Left
+                        </button>
+                        <button type="button" data-testid="rotate-right-btn" onclick="rotateImage(90)" class="bg-stone-200 hover:bg-stone-300 text-stone-700 text-xs font-bold py-2 px-3 rounded-lg transition-all flex items-center gap-1" title="Rotate Right 90°" aria-label="Rotate Right 90 Degrees">
+                            <i class="fa-solid fa-rotate-right"></i> Right
+                        </button>
+                        <button type="button" data-testid="crop-btn" onclick="cropImageBoundary()" class="bg-stone-200 hover:bg-stone-300 text-stone-700 text-xs font-bold py-2 px-3 rounded-lg transition-all flex items-center gap-1" title="Crop Boundary" aria-label="Crop Boundary Margins">
+                            <i class="fa-solid fa-crop-simple"></i> Crop
+                        </button>
+                        <button type="button" data-testid="reset-adjustments-btn" onclick="resetImageAdjustments()" class="bg-stone-200 hover:bg-stone-300 text-stone-700 text-xs font-bold py-2 px-3 rounded-lg transition-all flex items-center gap-1" title="Reset Image" aria-label="Reset Image Adjustments">
+                            <i class="fa-solid fa-arrow-rotate-left"></i> Reset
+                        </button>
+                    </div>
+
+                    <div class="flex items-center gap-2 ms-auto">
+                        <button type="button" data-testid="retake-btn" onclick="retakePhoto()" class="bg-stone-200 hover:bg-stone-300 text-stone-700 font-bold text-xs py-2 px-4 rounded-xl transition-all flex items-center gap-1.5" aria-label="Retake Photo">
+                            <i class="fa-solid fa-arrows-rotate"></i> Retake
+                        </button>
+
+                        <button type="button" data-testid="use-photo-btn" onclick="confirmCapturedPhoto()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs py-2 px-5 rounded-xl shadow transition-all flex items-center gap-1.5" aria-label="Use Photo and Process OCR">
+                            <i class="fa-solid fa-check"></i> Use Photo & Attach
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Camera Scanner Interactive JS -->
+    <script>
+        let mediaStream = null;
+        let currentFacingMode = 'environment';
+        let rawCapturedCanvas = null;
+        let activeCanvas = null;
+        let currentRotation = 0;
+
+        async function openCameraScanner() {
+            const modal = document.getElementById('cameraModal');
+            const errorBanner = document.getElementById('cameraErrorBanner');
+            const switchBtn = document.getElementById('switchCameraBtn');
+
+            errorBanner.classList.add('hidden');
+            modal.classList.remove('hidden');
+            document.body.classList.add('overflow-hidden');
+
+            resetCapturedState();
+
+            if (!window.isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+                showCameraError("Camera access requires an HTTPS connection or localhost origin. Please use HTTPS or upload a file instead.");
+                return;
+            }
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                showCameraError("Camera permission was denied. You may upload an image instead.");
+                return;
+            }
+
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(d => d.kind === 'videoinput');
+                if (videoDevices.length > 1) {
+                    switchBtn.classList.remove('hidden');
+                } else {
+                    switchBtn.classList.add('hidden');
+                }
+            } catch(e) {}
+
+            startCameraStream();
+        }
+
+        async function startCameraStream() {
+            stopCameraStream();
+
+            const video = document.getElementById('cameraVideo');
+            const constraints = {
+                video: {
+                    facingMode: { ideal: currentFacingMode },
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 }
+                },
+                audio: false
+            };
+
+            try {
+                mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = mediaStream;
+                video.play();
+            } catch (err) {
+                console.error("Camera access error:", err);
+                let msg = "Camera permission was denied. You may upload an image instead.";
+                if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+                    msg = "No camera hardware device found. You may upload an image file instead.";
+                } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+                    msg = "Camera is already in use by another application. Please release the camera or upload an image file instead.";
+                }
+                showCameraError(msg);
+            }
+        }
+
+        function showCameraError(msg) {
+            const errorBanner = document.getElementById('cameraErrorBanner');
+            const errorText = document.getElementById('cameraErrorText');
+            errorText.textContent = msg;
+            errorBanner.classList.remove('hidden');
+        }
+
+        function stopCameraStream() {
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(t => t.stop());
+                mediaStream = null;
+            }
+            const video = document.getElementById('cameraVideo');
+            if (video) video.srcObject = null;
+        }
+
+        function switchCamera() {
+            currentFacingMode = (currentFacingMode === 'environment') ? 'user' : 'environment';
+            startCameraStream();
+        }
+
+        function capturePhoto() {
+            const video = document.getElementById('cameraVideo');
+            if (!video || !video.videoWidth) {
+                showCameraError("Camera video feed is not active yet. Please wait a moment and try again.");
+                return;
+            }
+
+            rawCapturedCanvas = document.createElement('canvas');
+            rawCapturedCanvas.width = video.videoWidth;
+            rawCapturedCanvas.height = video.videoHeight;
+
+            const ctx = rawCapturedCanvas.getContext('2d');
+            ctx.drawImage(video, 0, 0, rawCapturedCanvas.width, rawCapturedCanvas.height);
+
+            activeCanvas = document.createElement('canvas');
+            activeCanvas.width = rawCapturedCanvas.width;
+            activeCanvas.height = rawCapturedCanvas.height;
+            activeCanvas.getContext('2d').drawImage(rawCapturedCanvas, 0, 0);
+
+            currentRotation = 0;
+            updatePreviewDisplay();
+
+            video.pause();
+            document.getElementById('framingOverlay').classList.add('hidden');
+            document.getElementById('previewContainer').classList.remove('hidden');
+            document.getElementById('streamControls').classList.add('hidden');
+            document.getElementById('adjustmentControls').classList.remove('hidden');
+            document.getElementById('imageMetaBar').classList.remove('hidden');
+        }
+
+        function updatePreviewDisplay() {
+            if (!activeCanvas) return;
+
+            const imgPreview = document.getElementById('capturedImagePreview');
+            const dimDisplay = document.getElementById('imageDimensionsDisplay');
+            const lowResWarning = document.getElementById('lowResWarning');
+
+            imgPreview.src = activeCanvas.toDataURL('image/jpeg', 0.90);
+            dimDisplay.textContent = `Dimensions: ${activeCanvas.width} x ${activeCanvas.height} px`;
+
+            if (activeCanvas.width < 800 || activeCanvas.height < 600) {
+                lowResWarning.classList.remove('hidden');
+            } else {
+                lowResWarning.classList.add('hidden');
+            }
+        }
+
+        function rotateImage(deg) {
+            if (!activeCanvas) return;
+            currentRotation = (currentRotation + deg) % 360;
+
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+
+            if (Math.abs(deg) === 90 || Math.abs(deg) === 270) {
+                tempCanvas.width = activeCanvas.height;
+                tempCanvas.height = activeCanvas.width;
+            } else {
+                tempCanvas.width = activeCanvas.width;
+                tempCanvas.height = activeCanvas.height;
+            }
+
+            tempCtx.translate(tempCanvas.width / 2, tempCanvas.height / 2);
+            tempCtx.rotate((deg * Math.PI) / 180);
+            tempCtx.drawImage(activeCanvas, -activeCanvas.width / 2, -activeCanvas.height / 2);
+
+            activeCanvas = tempCanvas;
+            updatePreviewDisplay();
+        }
+
+        function cropImageBoundary() {
+            if (!activeCanvas) return;
+
+            const cropX = Math.round(activeCanvas.width * 0.1);
+            const cropY = Math.round(activeCanvas.height * 0.1);
+            const cropW = Math.round(activeCanvas.width * 0.8);
+            const cropH = Math.round(activeCanvas.height * 0.8);
+
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = cropW;
+            tempCanvas.height = cropH;
+
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(activeCanvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+
+            activeCanvas = tempCanvas;
+            updatePreviewDisplay();
+        }
+
+        function resetImageAdjustments() {
+            if (!rawCapturedCanvas) return;
+            activeCanvas = document.createElement('canvas');
+            activeCanvas.width = rawCapturedCanvas.width;
+            activeCanvas.height = rawCapturedCanvas.height;
+            activeCanvas.getContext('2d').drawImage(rawCapturedCanvas, 0, 0);
+            currentRotation = 0;
+            updatePreviewDisplay();
+        }
+
+        function retakePhoto() {
+            resetCapturedState();
+            const video = document.getElementById('cameraVideo');
+            if (video) video.play();
+        }
+
+        function resetCapturedState() {
+            rawCapturedCanvas = null;
+            activeCanvas = null;
+            currentRotation = 0;
+
+            document.getElementById('framingOverlay').classList.remove('hidden');
+            document.getElementById('previewContainer').classList.add('hidden');
+            document.getElementById('streamControls').classList.remove('hidden');
+            document.getElementById('adjustmentControls').classList.add('hidden');
+            document.getElementById('imageMetaBar').classList.add('hidden');
+            document.getElementById('cameraErrorBanner').classList.add('hidden');
+        }
+
+        function confirmCapturedPhoto() {
+            if (!activeCanvas) return;
+
+            activeCanvas.toBlob((blob) => {
+                if (!blob) {
+                    alert("Failed to generate JPEG image from camera capture.");
+                    return;
+                }
+
+                const fileName = `camera_scan_${Date.now()}.jpg`;
+                const file = new File([blob], fileName, { type: 'image/jpeg' });
+
+                const fileInput = document.getElementById('examFileInput');
+                if (fileInput && window.DataTransfer) {
+                    const dt = new DataTransfer();
+                    dt.items.add(file);
+                    fileInput.files = dt.files;
+                    
+                    onFileSelected({ target: fileInput });
+                }
+
+                closeCameraScanner();
+            }, 'image/jpeg', 0.88);
+        }
+
+        function closeCameraScanner() {
+            stopCameraStream();
+            const modal = document.getElementById('cameraModal');
+            modal.classList.add('hidden');
+            document.body.classList.remove('overflow-hidden');
+        }
+
+        function onFileSelected(event) {
+            const input = event.target;
+            const nameDisplay = document.getElementById('fileNameDisplay');
+            const sizeDisplay = document.getElementById('fileSizeDisplay');
+            const fileIcon = document.getElementById('fileIcon');
+
+            if (input.files && input.files[0]) {
+                const file = input.files[0];
+                nameDisplay.textContent = file.name;
+                
+                const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+                sizeDisplay.textContent = `${sizeMB} MB`;
+
+                if (file.name.startsWith('camera_scan_')) {
+                    fileIcon.className = "fa-solid fa-camera text-orange-600 text-base flex-shrink-0";
+                } else {
+                    fileIcon.className = "fa-solid fa-file-image text-orange-500 text-base flex-shrink-0";
+                }
+            } else {
+                nameDisplay.textContent = "No answer sheet selected yet";
+                sizeDisplay.textContent = "";
+                fileIcon.className = "fa-solid fa-file-image text-orange-500 text-base flex-shrink-0";
+            }
+        }
+    </script>
 </body>
 </html>
