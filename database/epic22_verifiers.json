@@ -192,6 +192,15 @@
       "reason": "Validates School Years, Semesters, Academic Calendar, Exam Scheduling with conflict detection, Teacher Subject Assignments, Bulk CSV Import/Export, System Settings, and In-App Notifications.",
       "replacement": null
     },
+    {
+      "filename": "verify_epic22_priority5.php",
+      "label": "Priority 5 Complete Operational Readiness",
+      "classification": "authoritative",
+      "dependency_tier": "full",
+      "timeout": 120,
+      "reason": "Validates Database Backup, Restore, System Health Diagnostics, Storage Management, Active Session Management, Password Administration, Security Review, and Deployment Readiness.",
+      "replacement": null
+    },
 
     {
       "filename": "verification_archive/verify_epic22_preflight_consolidation.php",

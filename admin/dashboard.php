@@ -341,7 +341,46 @@ try {
                     </div>
                 </div>
 
-                
+                <!-- Priority 5 Operations & Governance Control Center -->
+                <div class="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-5 rounded-2xl shadow-sm space-y-4">
+                    <div class="flex items-center justify-between border-b border-stone-100 dark:border-stone-800 pb-3">
+                        <h4 class="text-xs font-black uppercase text-stone-800 dark:text-stone-100 flex items-center gap-2">
+                            <i class="fa-solid fa-screwdriver-wrench text-orange-500"></i> Operational Readiness & System Governance Console
+                        </h4>
+                        <span class="text-[10px] bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 font-extrabold px-2.5 py-0.5 rounded-full">v2.2-PROD Ready</span>
+                    </div>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 text-center text-xs">
+                        <a href="backup.php" class="p-3 bg-stone-50 dark:bg-stone-800/50 hover:bg-orange-50 dark:hover:bg-orange-950/40 rounded-xl border border-stone-200 dark:border-stone-700 transition-all block">
+                            <i class="fa-solid fa-database text-orange-500 text-lg mb-1 block"></i>
+                            <span class="font-bold block text-[11px]">DB Backup</span>
+                        </a>
+                        <a href="health.php" class="p-3 bg-stone-50 dark:bg-stone-800/50 hover:bg-orange-50 dark:hover:bg-orange-950/40 rounded-xl border border-stone-200 dark:border-stone-700 transition-all block">
+                            <i class="fa-solid fa-heartbeat text-rose-500 text-lg mb-1 block"></i>
+                            <span class="font-bold block text-[11px]">System Health</span>
+                        </a>
+                        <a href="sessions.php" class="p-3 bg-stone-50 dark:bg-stone-800/50 hover:bg-orange-50 dark:hover:bg-orange-950/40 rounded-xl border border-stone-200 dark:border-stone-700 transition-all block">
+                            <i class="fa-solid fa-users-gear text-blue-500 text-lg mb-1 block"></i>
+                            <span class="font-bold block text-[11px]">Active Sessions</span>
+                        </a>
+                        <a href="files.php" class="p-3 bg-stone-50 dark:bg-stone-800/50 hover:bg-orange-50 dark:hover:bg-orange-950/40 rounded-xl border border-stone-200 dark:border-stone-700 transition-all block">
+                            <i class="fa-solid fa-folder-tree text-amber-500 text-lg mb-1 block"></i>
+                            <span class="font-bold block text-[11px]">File Manager</span>
+                        </a>
+                        <a href="security_review.php" class="p-3 bg-stone-50 dark:bg-stone-800/50 hover:bg-orange-50 dark:hover:bg-orange-950/40 rounded-xl border border-stone-200 dark:border-stone-700 transition-all block">
+                            <i class="fa-solid fa-shield-halved text-purple-500 text-lg mb-1 block"></i>
+                            <span class="font-bold block text-[11px]">Security Review</span>
+                        </a>
+                        <a href="system_info.php" class="p-3 bg-stone-50 dark:bg-stone-800/50 hover:bg-orange-50 dark:hover:bg-orange-950/40 rounded-xl border border-stone-200 dark:border-stone-700 transition-all block">
+                            <i class="fa-solid fa-circle-info text-cyan-500 text-lg mb-1 block"></i>
+                            <span class="font-bold block text-[11px]">System Specs</span>
+                        </a>
+                        <a href="docs.php" class="p-3 bg-stone-50 dark:bg-stone-800/50 hover:bg-orange-50 dark:hover:bg-orange-950/40 rounded-xl border border-stone-200 dark:border-stone-700 transition-all block">
+                            <i class="fa-solid fa-book-bookmark text-emerald-500 text-lg mb-1 block"></i>
+                            <span class="font-bold block text-[11px]">Admin Manual</span>
+                        </a>
+                    </div>
+                </div>
+
                 <div class="bg-gradient-to-r from-stone-900 to-stone-950 text-white rounded-2xl p-6 shadow-xl border border-stone-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                     <div class="space-y-1">
                         <span class="bg-orange-600 text-white text-[10px] font-black px-2.5 py-0.5 rounded-md uppercase tracking-wider">AI Predictive Insights Model</span>

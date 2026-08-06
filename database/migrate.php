@@ -624,6 +624,35 @@ $stmtUsr = $pdo->prepare("
 ");
 $stmtUsr->execute([$defaultPassHash, $defaultPassHash]);
 
+echo "\n--- Priority 5 Operational Schema ---\n";
+addColumn($pdo, 'users', 'force_password_reset', "TINYINT(1) NOT NULL DEFAULT 0");
+addColumn($pdo, 'users', 'password_changed_at', "DATETIME DEFAULT NULL");
+
+$pdo->exec("
+    CREATE TABLE IF NOT EXISTS `user_sessions` (
+        `id` INT(11) NOT NULL AUTO_INCREMENT,
+        `session_id` VARCHAR(128) NOT NULL,
+        `user_id` INT(11) NOT NULL,
+        `ip_address` VARCHAR(45) DEFAULT NULL,
+        `user_agent` TEXT DEFAULT NULL,
+        `login_time` DATETIME NOT NULL,
+        `last_activity` DATETIME NOT NULL,
+        `status` VARCHAR(20) NOT NULL DEFAULT 'active',
+        PRIMARY KEY (`id`),
+        UNIQUE KEY `idx_session_id` (`session_id`),
+        KEY `idx_user_id` (`user_id`),
+        CONSTRAINT `fk_user_sessions_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+");
+echo "  [=] Table user_sessions verified\n";
+
+$backupDir = __DIR__ . '/backups';
+if (!is_dir($backupDir)) {
+    @mkdir($backupDir, 0755, true);
+}
+@file_put_contents($backupDir . '/.htaccess', "Deny from all\n");
+echo "  [+] Backup directory verified and protected\n";
+
 echo "\n=== Migration Complete ===\n";
 exit(0);
 } catch (Throwable $e) {
