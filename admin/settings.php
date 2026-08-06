@@ -10,6 +10,7 @@ $msg = '';
 $msgType = 'success';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    validateCSRFToken();
     try {
         SystemSettingsService::setSetting('school_name', $_POST['school_name'] ?? '');
         SystemSettingsService::setSetting('passing_percentage', $_POST['passing_percentage'] ?? '75.00');
@@ -58,6 +59,7 @@ $settings = SystemSettingsService::getAllSettings();
                 <div class="card-header bg-white"><h5 class="card-title mb-0">Global Configuration Parameters</h5></div>
                 <div class="card-body">
                     <form method="POST">
+                        <?= csrfInputField() ?>
                         <div class="mb-3">
                             <label class="form-label font-weight-bold">Institution / School Name</label>
                             <input type="text" name="school_name" class="form-control" value="<?= htmlspecialchars($settings['school_name']) ?>" required>

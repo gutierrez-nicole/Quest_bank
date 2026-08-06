@@ -51,7 +51,8 @@ class NotificationService {
             UPDATE notifications SET is_read = 1
             WHERE id = ? AND user_id = ?
         ");
-        return $stmt->execute([intval($notificationId), intval($userId)]);
+        $stmt->execute([intval($notificationId), intval($userId)]);
+        return $stmt->rowCount() > 0;
     }
 
     public static function markAllAsRead($userId) {
@@ -60,7 +61,8 @@ class NotificationService {
             UPDATE notifications SET is_read = 1
             WHERE user_id = ?
         ");
-        return $stmt->execute([intval($userId)]);
+        $stmt->execute([intval($userId)]);
+        return true;
     }
 
     public static function deleteNotification($notificationId, $userId) {
@@ -69,6 +71,7 @@ class NotificationService {
             DELETE FROM notifications
             WHERE id = ? AND user_id = ?
         ");
-        return $stmt->execute([intval($notificationId), intval($userId)]);
+        $stmt->execute([intval($notificationId), intval($userId)]);
+        return $stmt->rowCount() > 0;
     }
 }

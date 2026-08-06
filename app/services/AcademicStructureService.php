@@ -24,6 +24,9 @@ class AcademicStructureService {
         if (empty($schoolYear) || empty($startDate) || empty($endDate)) {
             throw new InvalidArgumentException("School year, start date, and end date are required.");
         }
+        if (strtotime($startDate) === false || strtotime($endDate) === false) {
+            throw new InvalidArgumentException("Invalid start or end date format.");
+        }
         if (strtotime($endDate) <= strtotime($startDate)) {
             throw new InvalidArgumentException("End date must be after start date.");
         }
@@ -61,12 +64,14 @@ class AcademicStructureService {
             $pdo->commit();
             return true;
         } catch (Exception $e) {
-            $pdo->rollBack();
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
             throw $e;
         }
     }
 
-    public static function archiveSchoolYear($id) {
+    public static function archiveSchoolYear($id, $force = false) {
         $pdo = getDBConnection();
         $stmtCheck = $pdo->prepare("SELECT * FROM school_years WHERE id = ?");
         $stmtCheck->execute([$id]);
@@ -74,6 +79,13 @@ class AcademicStructureService {
 
         if (!$sy) {
             throw new Exception("School year #{$id} not found.");
+        }
+
+        if ($sy['status'] === 'active' && !$force) {
+            $otherActive = $pdo->query("SELECT COUNT(*) FROM school_years WHERE status = 'active' AND id != " . intval($id))->fetchColumn();
+            if (!$otherActive) {
+                throw new LogicException("Cannot archive the active school year without activating another school year first.");
+            }
         }
 
         $stmtUpd = $pdo->prepare("UPDATE school_years SET status = 'archived' WHERE id = ?");
@@ -108,6 +120,17 @@ class AcademicStructureService {
         }
 
         $pdo = getDBConnection();
+        $stmtSy = $pdo->prepare("SELECT status FROM school_years WHERE id = ?");
+        $stmtSy->execute([$schoolYearId]);
+        $syStatus = $stmtSy->fetchColumn();
+
+        if (!$syStatus) {
+            throw new InvalidArgumentException("School Year #{$schoolYearId} not found.");
+        }
+        if ($syStatus === 'archived') {
+            throw new LogicException("Cannot create a semester for an archived school year.");
+        }
+
         $stmtCheck = $pdo->prepare("SELECT id FROM semesters WHERE school_year_id = ? AND semester_name = ?");
         $stmtCheck->execute([$schoolYearId, $semesterName]);
         if ($stmtCheck->fetchColumn()) {
@@ -140,20 +163,52 @@ class AcademicStructureService {
             $pdo->commit();
             return true;
         } catch (Exception $e) {
-            $pdo->rollBack();
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
             throw $e;
         }
     }
 
-    public static function closeSemester($id) {
+    public static function closeSemester($id, $force = false) {
         $pdo = getDBConnection();
+        $stmtCheck = $pdo->prepare("SELECT * FROM semesters WHERE id = ?");
+        $stmtCheck->execute([$id]);
+        $sem = $stmtCheck->fetch(PDO::FETCH_ASSOC);
+
+        if (!$sem) {
+            throw new Exception("Semester #{$id} not found.");
+        }
+
+        if ($sem['status'] === 'active' && !$force) {
+            $otherActive = $pdo->query("SELECT COUNT(*) FROM semesters WHERE status = 'active' AND id != " . intval($id))->fetchColumn();
+            if (!$otherActive) {
+                throw new LogicException("Cannot close the active semester without activating another semester first.");
+            }
+        }
+
         $stmtUpd = $pdo->prepare("UPDATE semesters SET status = 'closed' WHERE id = ?");
         $stmtUpd->execute([$id]);
         return true;
     }
 
-    public static function archiveSemester($id) {
+    public static function archiveSemester($id, $force = false) {
         $pdo = getDBConnection();
+        $stmtCheck = $pdo->prepare("SELECT * FROM semesters WHERE id = ?");
+        $stmtCheck->execute([$id]);
+        $sem = $stmtCheck->fetch(PDO::FETCH_ASSOC);
+
+        if (!$sem) {
+            throw new Exception("Semester #{$id} not found.");
+        }
+
+        if ($sem['status'] === 'active' && !$force) {
+            $otherActive = $pdo->query("SELECT COUNT(*) FROM semesters WHERE status = 'active' AND id != " . intval($id))->fetchColumn();
+            if (!$otherActive) {
+                throw new LogicException("Cannot archive the active semester without activating another semester first.");
+            }
+        }
+
         $stmtUpd = $pdo->prepare("UPDATE semesters SET status = 'archived' WHERE id = ?");
         $stmtUpd->execute([$id]);
         return true;
@@ -175,8 +230,22 @@ class AcademicStructureService {
     public static function addCalendarEvent($title, $type, $startDate, $endDate, $description = '', $createdBy = null) {
         $title = trim($title);
         $type = trim($type);
+        $allowedTypes = ['prelim_week', 'midterm_week', 'finals_week', 'qualifying_exam', 'review_week', 'holiday', 'suspension', 'school_activity'];
+
         if (empty($title) || empty($type) || empty($startDate) || empty($endDate)) {
             throw new InvalidArgumentException("Event title, type, start date, and end date are required.");
+        }
+
+        if (!in_array($type, $allowedTypes, true)) {
+            throw new InvalidArgumentException("Invalid calendar event type. Allowed types: " . implode(', ', $allowedTypes));
+        }
+
+        if (strtotime($startDate) === false || strtotime($endDate) === false) {
+            throw new InvalidArgumentException("Invalid date format for event start or end date.");
+        }
+
+        if (strtotime($endDate) < strtotime($startDate)) {
+            throw new InvalidArgumentException("Event end date must be on or after start date.");
         }
 
         $pdo = getDBConnection();
@@ -199,8 +268,9 @@ class AcademicStructureService {
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public static function createSection($sectionCode, $adviserId = null, $capacity = 40) {
+    public static function createSection($sectionCode, $course = 'BSCE', $adviserId = null, $capacity = 40, $schoolYearId = null) {
         $sectionCode = strtoupper(trim($sectionCode));
+        $course = trim($course) ?: 'BSCE';
         $capacity = intval($capacity);
 
         if (empty($sectionCode)) {
@@ -211,23 +281,43 @@ class AcademicStructureService {
         }
 
         $pdo = getDBConnection();
+
+        // 1. Resolve Active School Year
+        $sy = null;
+        if ($schoolYearId) {
+            $stmtSy = $pdo->prepare("SELECT * FROM school_years WHERE id = ?");
+            $stmtSy->execute([$schoolYearId]);
+            $sy = $stmtSy->fetch(PDO::FETCH_ASSOC);
+        } else {
+            $sy = self::getActiveSchoolYear();
+        }
+
+        if (!$sy) {
+            throw new LogicException("Cannot create section: No active school year configured.");
+        }
+
+        // 2. Validate Adviser if provided
+        if ($adviserId) {
+            $stmtAdv = $pdo->prepare("SELECT role, status FROM users WHERE id = ?");
+            $stmtAdv->execute([$adviserId]);
+            $usr = $stmtAdv->fetch(PDO::FETCH_ASSOC);
+            if (!$usr || $usr['role'] !== 'teacher' || $usr['status'] !== 'active') {
+                throw new InvalidArgumentException("Section adviser must be an active teacher.");
+            }
+        }
+
+        // 3. Enforce Unique Section Code
         $stmtCheck = $pdo->prepare("SELECT id FROM sections WHERE section_code = ? OR section_name = ?");
         $stmtCheck->execute([$sectionCode, $sectionCode]);
         if ($stmtCheck->fetchColumn()) {
             throw new InvalidArgumentException("Section code '{$sectionCode}' already exists.");
         }
 
-        if ($adviserId) {
-            $stmtAdv = $pdo->prepare("SELECT role FROM users WHERE id = ?");
-            $stmtAdv->execute([$adviserId]);
-            $role = $stmtAdv->fetchColumn();
-            if ($role !== 'teacher') {
-                throw new InvalidArgumentException("Section adviser must be a valid teacher.");
-            }
-        }
-
-        $stmt = $pdo->prepare("INSERT INTO sections (section_code, section_name, course_name, academic_year, teacher_id, adviser_id, capacity, status) VALUES (?, ?, 'BSCE', '2025-2026', ?, ?, ?, 'active')");
-        $stmt->execute([$sectionCode, $sectionCode, $adviserId ?: 10, $adviserId, $capacity]);
+        $stmt = $pdo->prepare("
+            INSERT INTO sections (section_code, section_name, course, course_name, academic_year, school_year_id, teacher_id, adviser_id, capacity, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')
+        ");
+        $stmt->execute([$sectionCode, $sectionCode, $course, $course, $sy['school_year'], $sy['id'], $adviserId ?: null, $adviserId ?: null, $capacity]);
         return (int)$pdo->lastInsertId();
     }
 
@@ -237,7 +327,7 @@ class AcademicStructureService {
         $pdo = getDBConnection();
         if ($teacherId) {
             $stmt = $pdo->prepare("
-                SELECT tsa.*, u.fullname as teacher_name, sec.section_code, sy.school_year
+                SELECT tsa.*, u.fullname as teacher_name, COALESCE(sec.section_code, sec.section_name) as section_code, sy.school_year
                 FROM teacher_subject_assignments tsa
                 JOIN users u ON tsa.teacher_id = u.id
                 JOIN sections sec ON tsa.section_id = sec.id
@@ -248,7 +338,7 @@ class AcademicStructureService {
             $stmt->execute([$teacherId]);
         } else {
             $stmt = $pdo->query("
-                SELECT tsa.*, u.fullname as teacher_name, sec.section_code, sy.school_year
+                SELECT tsa.*, u.fullname as teacher_name, COALESCE(sec.section_code, sec.section_name) as section_code, sy.school_year
                 FROM teacher_subject_assignments tsa
                 JOIN users u ON tsa.teacher_id = u.id
                 JOIN sections sec ON tsa.section_id = sec.id
@@ -266,10 +356,11 @@ class AcademicStructureService {
         }
 
         $pdo = getDBConnection();
-        $stmtUser = $pdo->prepare("SELECT role FROM users WHERE id = ?");
+        $stmtUser = $pdo->prepare("SELECT role, status FROM users WHERE id = ?");
         $stmtUser->execute([$teacherId]);
-        if ($stmtUser->fetchColumn() !== 'teacher') {
-            throw new InvalidArgumentException("User #{$teacherId} must be a valid teacher.");
+        $user = $stmtUser->fetch(PDO::FETCH_ASSOC);
+        if (!$user || $user['role'] !== 'teacher' || $user['status'] !== 'active') {
+            throw new InvalidArgumentException("User #{$teacherId} must be an active teacher.");
         }
 
         $stmtCheck = $pdo->prepare("

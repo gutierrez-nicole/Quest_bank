@@ -12,6 +12,7 @@ $msg = '';
 $msgType = 'success';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    validateCSRFToken();
     $action = $_POST['action'] ?? '';
     try {
         if ($action === 'create_schedule') {
@@ -81,6 +82,7 @@ $teachers = $pdo->query("SELECT id, fullname FROM users WHERE role = 'teacher' A
                 <div class="card-header bg-primary text-white"><h5 class="card-title mb-0">Schedule New Exam</h5></div>
                 <div class="card-body">
                     <form method="POST">
+                        <?= csrfInputField() ?>
                         <input type="hidden" name="action" value="create_schedule">
                         <div class="mb-3">
                             <label class="form-label">Select Exam</label>

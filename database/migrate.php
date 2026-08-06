@@ -532,9 +532,14 @@ $pdo->exec("
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ");
 addColumn($pdo, 'sections', 'section_code', "VARCHAR(50) DEFAULT NULL");
+addColumn($pdo, 'sections', 'course', "VARCHAR(100) DEFAULT NULL");
+addColumn($pdo, 'sections', 'school_year_id', "INT(11) DEFAULT NULL");
 addColumn($pdo, 'sections', 'adviser_id', "INT(11) DEFAULT NULL");
 addColumn($pdo, 'sections', 'capacity', "INT(11) NOT NULL DEFAULT 40");
 addColumn($pdo, 'sections', 'status', "VARCHAR(20) NOT NULL DEFAULT 'active'");
+try {
+    $pdo->exec("ALTER TABLE sections MODIFY teacher_id INT(11) NULL DEFAULT NULL");
+} catch (Exception $e) {}
 echo "  [=] Table sections verified\n";
 
 $pdo->exec("

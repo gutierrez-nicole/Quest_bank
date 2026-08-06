@@ -25,10 +25,19 @@ function csrfInputField() {
     return '<input type="hidden" name="csrf_token" value="' . htmlspecialchars($token, ENT_QUOTES, 'UTF-8') . '">';
 }
 
+function verifyCSRFToken($token = null) {
+    if ($token === null) {
+        $token = $_POST['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
+    }
+    if (empty($token) || empty($_SESSION['csrf_token'])) {
+        return false;
+    }
+    return hash_equals($_SESSION['csrf_token'], $token);
+}
+
 function validateCSRFToken() {
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        $token = $_POST['csrf_token'] ?? '';
-        if (empty($token) || !hash_equals($_SESSION['csrf_token'] ?? '', $token)) {
+        if (!verifyCSRFToken()) {
             http_response_code(403);
             die("<div style='font-family:sans-serif;text-align:center;padding:50px;'><h2>403 Forbidden - Security Error</h2><p>Invalid or expired CSRF token. Please go back, refresh the page, and try again.</p></div>");
         }

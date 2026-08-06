@@ -12,6 +12,7 @@ $msgType = 'success';
 
 // Handle POST actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    validateCSRFToken();
     $action = $_POST['action'] ?? '';
     try {
         if ($action === 'create_school_year') {
@@ -108,6 +109,7 @@ $teachers = $pdo->query("SELECT id, fullname FROM users WHERE role = 'teacher' A
                         <div class="card-header bg-primary text-white"><h5 class="card-title mb-0">Create School Year</h5></div>
                         <div class="card-body">
                             <form method="POST">
+                                <?= csrfInputField() ?>
                                 <input type="hidden" name="action" value="create_school_year">
                                 <div class="mb-3">
                                     <label class="form-label">School Year (e.g. 2025-2026)</label>
@@ -154,6 +156,7 @@ $teachers = $pdo->query("SELECT id, fullname FROM users WHERE role = 'teacher' A
                                             <td>
                                                 <?php if ($sy['status'] !== 'active' && $sy['status'] !== 'archived'): ?>
                                                     <form method="POST" class="d-inline">
+                                                        <?= csrfInputField() ?>
                                                         <input type="hidden" name="action" value="activate_school_year">
                                                         <input type="hidden" name="sy_id" value="<?= $sy['id'] ?>">
                                                         <button class="btn btn-sm btn-outline-success">Activate</button>
@@ -161,6 +164,7 @@ $teachers = $pdo->query("SELECT id, fullname FROM users WHERE role = 'teacher' A
                                                 <?php endif; ?>
                                                 <?php if ($sy['status'] !== 'archived'): ?>
                                                     <form method="POST" class="d-inline">
+                                                        <?= csrfInputField() ?>
                                                         <input type="hidden" name="action" value="archive_school_year">
                                                         <input type="hidden" name="sy_id" value="<?= $sy['id'] ?>">
                                                         <button class="btn btn-sm btn-outline-secondary">Archive</button>
@@ -185,6 +189,7 @@ $teachers = $pdo->query("SELECT id, fullname FROM users WHERE role = 'teacher' A
                         <div class="card-header bg-success text-white"><h5 class="card-title mb-0">Create Semester</h5></div>
                         <div class="card-body">
                             <form method="POST">
+                                <?= csrfInputField() ?>
                                 <input type="hidden" name="action" value="create_semester">
                                 <div class="mb-3">
                                     <label class="form-label">School Year</label>
@@ -233,6 +238,7 @@ $teachers = $pdo->query("SELECT id, fullname FROM users WHERE role = 'teacher' A
                                             <td>
                                                 <?php if ($sem['status'] !== 'active' && !in_array($sem['status'], ['closed', 'archived'])): ?>
                                                     <form method="POST" class="d-inline">
+                                                        <?= csrfInputField() ?>
                                                         <input type="hidden" name="action" value="activate_semester">
                                                         <input type="hidden" name="sem_id" value="<?= $sem['id'] ?>">
                                                         <button class="btn btn-sm btn-outline-success">Activate</button>
@@ -240,6 +246,7 @@ $teachers = $pdo->query("SELECT id, fullname FROM users WHERE role = 'teacher' A
                                                 <?php endif; ?>
                                                 <?php if ($sem['status'] === 'active'): ?>
                                                     <form method="POST" class="d-inline">
+                                                        <?= csrfInputField() ?>
                                                         <input type="hidden" name="action" value="close_semester">
                                                         <input type="hidden" name="sem_id" value="<?= $sem['id'] ?>">
                                                         <button class="btn btn-sm btn-outline-danger">Close</button>
@@ -264,6 +271,7 @@ $teachers = $pdo->query("SELECT id, fullname FROM users WHERE role = 'teacher' A
                         <div class="card-header bg-info text-white"><h5 class="card-title mb-0">Add Calendar Event</h5></div>
                         <div class="card-body">
                             <form method="POST">
+                                <?= csrfInputField() ?>
                                 <input type="hidden" name="action" value="add_event">
                                 <div class="mb-3">
                                     <label class="form-label">Event Title</label>
@@ -337,6 +345,7 @@ $teachers = $pdo->query("SELECT id, fullname FROM users WHERE role = 'teacher' A
                         <div class="card-header bg-warning text-dark"><h5 class="card-title mb-0">Create Section</h5></div>
                         <div class="card-body">
                             <form method="POST">
+                                <?= csrfInputField() ?>
                                 <input type="hidden" name="action" value="create_section">
                                 <div class="mb-3">
                                     <label class="form-label">Section Code (e.g. CE-4A)</label>
@@ -398,6 +407,7 @@ $teachers = $pdo->query("SELECT id, fullname FROM users WHERE role = 'teacher' A
                         <div class="card-header bg-dark text-white"><h5 class="card-title mb-0">Assign Teacher Subject</h5></div>
                         <div class="card-body">
                             <form method="POST">
+                                <?= csrfInputField() ?>
                                 <input type="hidden" name="action" value="assign_teacher">
                                 <div class="mb-3">
                                     <label class="form-label">Teacher</label>

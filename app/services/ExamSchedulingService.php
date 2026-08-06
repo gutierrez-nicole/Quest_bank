@@ -25,6 +25,13 @@ class ExamSchedulingService {
             throw new LogicException("Cannot schedule exam: No active semester configured.");
         }
 
+        $activeSy = AcademicStructureService::getActiveSchoolYear();
+        if ($activeSy && !empty($activeSy['start_date']) && !empty($activeSy['end_date'])) {
+            if ($examDate < $activeSy['start_date'] || $examDate > $activeSy['end_date']) {
+                throw new InvalidArgumentException("Exam date '{$examDate}' falls outside the active school year date range ({$activeSy['start_date']} to {$activeSy['end_date']}).");
+            }
+        }
+
         $pdo = getDBConnection();
 
         // 1. Verify exam ownership & existence
@@ -36,15 +43,39 @@ class ExamSchedulingService {
             throw new Exception("Exam #{$examId} not found.");
         }
 
-        $userStmt = $pdo->prepare("SELECT role FROM users WHERE id = ?");
+        $userStmt = $pdo->prepare("SELECT role, status FROM users WHERE id = ?");
         $userStmt->execute([$teacherId]);
-        $role = $userStmt->fetchColumn();
+        $user = $userStmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$user || $user['status'] !== 'active') {
+            throw new SecurityException("Scheduling actor must be an active user.");
+        }
+
+        $role = $user['role'];
 
         if ($role !== 'admin' && intval($exam['teacher_id']) !== intval($teacherId)) {
             throw new SecurityException("Unauthorized: Cannot schedule an exam owned by another teacher.");
         }
 
-        // 2. Check overlapping schedule for same teacher on same date
+        // 2. Verify section assignment for teacher
+        if ($role === 'teacher') {
+            $syId = $activeSy ? $activeSy['id'] : 0;
+            $stmtAsgn = $pdo->prepare("
+                SELECT tsa.id 
+                FROM teacher_subject_assignments tsa
+                JOIN sections s ON tsa.section_id = s.id
+                WHERE tsa.teacher_id = ? 
+                  AND (s.section_code = ? OR s.section_name = ?)
+                  AND tsa.school_year_id = ? 
+                  AND tsa.status = 'active'
+            ");
+            $stmtAsgn->execute([$teacherId, $section, $section, $syId]);
+            if (!$stmtAsgn->fetchColumn()) {
+                throw new SecurityException("Teacher is not assigned to Section '{$section}' for the active school year.");
+            }
+        }
+
+        // 3. Check overlapping schedule for same teacher on same date
         $stmtCheckTeacher = $pdo->prepare("
             SELECT id, exam_date, start_time, end_time, section 
             FROM exam_schedules
@@ -58,7 +89,7 @@ class ExamSchedulingService {
             throw new LogicException("Teacher scheduling conflict: Teacher already has an exam scheduled for Section '{$teacherConflict['section']}' on {$examDate} between {$teacherConflict['start_time']} and {$teacherConflict['end_time']}.");
         }
 
-        // 3. Check overlapping schedule for same section on same date
+        // 4. Check overlapping schedule for same section on same date
         $stmtCheckSection = $pdo->prepare("
             SELECT id, exam_date, start_time, end_time, teacher_id 
             FROM exam_schedules
@@ -81,7 +112,7 @@ class ExamSchedulingService {
         $stmtIns->execute([$examId, $teacherId, $section, $examDate, $startTime, $endTime, $durationMinutes, $room, $remarks, $activeSem['id']]);
         $scheduleId = (int)$pdo->lastInsertId();
 
-        // 4. Notify students of the scheduled section
+        // 5. Notify students of the scheduled section
         $stmtStud = $pdo->prepare("
             SELECT user_id FROM student_details WHERE section = ?
         ");
