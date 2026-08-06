@@ -9,6 +9,11 @@ $teacher_id = $_SESSION['user_id'];
 $selected_exam = $_GET['exam_title'] ?? 'all';
 $selected_category = $_GET['exam_category'] ?? 'all';
 $selected_qual_status = $_GET['qualification_status'] ?? 'all';
+$selected_subject = $_GET['subject'] ?? 'all';
+$selected_section = $_GET['section'] ?? 'all';
+$selected_period = $_GET['academic_period'] ?? 'all';
+$selected_semester = $_GET['semester'] ?? 'all';
+$selected_sy = $_GET['school_year'] ?? 'all';
 
 $where = "WHERE es.teacher_id = ?";
 $params = [$teacher_id];
@@ -28,27 +33,65 @@ if ($selected_qual_status !== 'all') {
     $params[] = $selected_qual_status;
 }
 
+if ($selected_subject !== 'all') {
+    $where .= " AND (e.subject = ? OR es.subject = ?)";
+    $params[] = $selected_subject;
+    $params[] = $selected_subject;
+}
+
+if ($selected_section !== 'all') {
+    $where .= " AND (es.section = ? OR sd.section = ?)";
+    $params[] = $selected_section;
+    $params[] = $selected_section;
+}
+
+if ($selected_period !== 'all') {
+    $where .= " AND (e.academic_period = ? OR e.covered_periods LIKE ?)";
+    $params[] = $selected_period;
+    $params[] = "%" . $selected_period . "%";
+}
+
+if ($selected_semester !== 'all') {
+    $where .= " AND (e.semester = ? OR lm.semester = ?)";
+    $params[] = $selected_semester;
+    $params[] = $selected_semester;
+}
+
+if ($selected_sy !== 'all') {
+    $where .= " AND (e.school_year = ? OR lm.school_year = ?)";
+    $params[] = $selected_sy;
+    $params[] = $selected_sy;
+}
+
 $stmtStats = $pdo->prepare("
     SELECT 
-        COUNT(*) as total_students,
-        SUM(CASE WHEN es.status = 'Pass' THEN 1 ELSE 0 END) as total_pass,
-        SUM(CASE WHEN es.status = 'Fail' THEN 1 ELSE 0 END) as total_fail,
+        COUNT(*) as total_submissions,
+        SUM(CASE WHEN es.review_status = 'published' THEN 1 ELSE 0 END) as total_published,
+        SUM(CASE WHEN es.review_status IN ('pending_review', 'draft') THEN 1 ELSE 0 END) as pending_review,
+        SUM(CASE WHEN es.review_status = 'published' AND DATE(es.published_at) = CURRENT_DATE() THEN 1 ELSE 0 END) as published_today,
+        SUM(CASE WHEN es.status = 'Pass' OR (es.review_status = 'published' AND es.percentage >= 75) THEN 1 ELSE 0 END) as total_pass,
+        SUM(CASE WHEN es.status = 'Fail' OR (es.review_status = 'published' AND es.percentage < 75) THEN 1 ELSE 0 END) as total_fail,
         SUM(CASE WHEN es.qualification_status = 'qualified' THEN 1 ELSE 0 END) as total_qualified,
         SUM(CASE WHEN es.qualification_status = 'not_qualified' THEN 1 ELSE 0 END) as total_not_qualified,
         SUM(CASE WHEN es.qualification_status = 'pending' THEN 1 ELSE 0 END) as total_pending_qual,
-        AVG(es.percentage) as avg_percentage,
-        MAX(es.percentage) as max_percentage,
-        MIN(es.percentage) as min_percentage
+        AVG(CASE WHEN es.review_status = 'published' THEN es.percentage ELSE NULL END) as avg_percentage,
+        MAX(CASE WHEN es.review_status = 'published' THEN es.percentage ELSE NULL END) as max_percentage,
+        MIN(CASE WHEN es.review_status = 'published' THEN es.percentage ELSE NULL END) as min_percentage
     FROM exam_submissions es
     LEFT JOIN exams e ON es.exam_id = e.id
+    LEFT JOIN student_details sd ON es.student_id = sd.user_id
+    LEFT JOIN lesson_materials lm ON e.id = lm.exam_id
     $where
 ");
 $stmtStats->execute($params);
 
 $stmtList = $pdo->prepare("
-    SELECT es.*, e.exam_category, e.qualifying_passing_percentage, e.qualifying_max_attempts
+    SELECT es.*, e.exam_category, e.qualifying_passing_percentage, e.qualifying_max_attempts, u.fullname as student_name, sd.section as student_section
     FROM exam_submissions es
     LEFT JOIN exams e ON es.exam_id = e.id
+    LEFT JOIN users u ON es.student_id = u.id
+    LEFT JOIN student_details sd ON es.student_id = sd.user_id
+    LEFT JOIN lesson_materials lm ON e.id = lm.exam_id
     $where 
     ORDER BY es.id DESC LIMIT 200
 ");
@@ -57,10 +100,14 @@ $stmtList->execute($params);
 $stats = $stmtStats->fetch(PDO::FETCH_ASSOC);
 $submissions = $stmtList->fetchAll(PDO::FETCH_ASSOC);
 
-$total_students = intval($stats['total_students'] ?? 0);
+$total_submissions = intval($stats['total_submissions'] ?? 0);
+$total_published = intval($stats['total_published'] ?? 0);
+$pending_review = intval($stats['pending_review'] ?? 0);
+$published_today = intval($stats['published_today'] ?? 0);
 $pass = intval($stats['total_pass'] ?? 0);
 $fail = intval($stats['total_fail'] ?? 0);
-$pass_rate = $total_students > 0 ? round(($pass / $total_students) * 100, 1) : 0.0;
+$pass_rate = $total_published > 0 ? round(($pass / $total_published) * 100, 1) : 0.0;
+$fail_rate = $total_published > 0 ? round(($fail / $total_published) * 100, 1) : 0.0;
 $avg_percentage = floatval($stats['avg_percentage'] ?? 0.0);
 $max_percentage = floatval($stats['max_percentage'] ?? 0.0);
 
@@ -121,6 +168,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rerun_ocr_ai'])) {
         }
     } else {
         $error_msg = "OCR Reprocessing Error: Invalid submission ID.";
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_publish'])) {
+    validateCSRFToken();
+    $sub_ids = $_POST['submission_ids'] ?? [];
+    if (is_array($sub_ids) && !empty($sub_ids)) {
+        $sub_ids = array_map('intval', $sub_ids);
+        $res = ResultWorkflowService::bulkPublishSubmissions($sub_ids, $teacher_id, 'Bulk published by teacher');
+        $success_msg = "Successfully published {$res['published_count']} submission(s)!";
+        if (!empty($res['errors'])) {
+            $error_msg = "Notice during bulk publish: " . implode('; ', $res['errors']);
+        }
+    } else {
+        $error_msg = "No submissions selected for bulk publication.";
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['publish_entire_exam'])) {
+    validateCSRFToken();
+    $exam_id = intval($_POST['exam_id'] ?? 0);
+    if ($exam_id > 0) {
+        try {
+            $res = ResultWorkflowService::publishEntireExam($exam_id, $teacher_id, 'Published entire exam by teacher');
+            $success_msg = "Successfully published all {$res['published_count']} submission(s) for Exam #{$exam_id}!";
+            if (!empty($res['errors'])) {
+                $error_msg = "Notice during exam publication: " . implode('; ', $res['errors']);
+            }
+        } catch (Exception $e) {
+            $error_msg = "Exam Publication Error: " . $e->getMessage();
+        }
+    } else {
+        $error_msg = "Invalid exam ID specified for publication.";
     }
 }
 ?>

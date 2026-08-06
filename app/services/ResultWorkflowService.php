@@ -9,10 +9,10 @@ class ResultWorkflowService {
     
     const ALLOWED_TRANSITIONS = [
         'pending_review' => ['reviewed'],
-        'reviewed'       => ['finalized'],
+        'reviewed'       => ['finalized', 'published'],
         'finalized'      => ['published'],
         'published'      => ['archived'],
-        'archived'       => []
+        'archived'       => ['published']
     ];
 
     
@@ -79,8 +79,8 @@ class ResultWorkflowService {
 
         
         if ($targetStatus === 'published') {
-            if ($currentStatus !== 'finalized' && $currentStatus !== 'archived') {
-                throw new LogicException("Publication rejected: Submission must be in 'finalized' status before publishing.");
+            if (!in_array($currentStatus, ['reviewed', 'finalized', 'archived'], true)) {
+                throw new LogicException("Publication rejected: Submission must be reviewed or finalized before publishing.");
             }
 
             if (empty($reviewerId)) {
@@ -633,6 +633,76 @@ class ResultWorkflowService {
         }
 
         return ['allowed' => true, 'submission' => $sub];
+    }
+
+    public static function bulkPublishSubmissions(array $submissionIds, $teacherId, $remarks = '') {
+        $publishedCount = 0;
+        $errors = [];
+        foreach ($submissionIds as $sId) {
+            try {
+                self::transitionStatus($sId, 'published', $teacherId, $remarks);
+                $publishedCount++;
+            } catch (Exception $e) {
+                $errors[] = "Submission #{$sId}: " . $e->getMessage();
+            }
+        }
+        return [
+            'success' => true,
+            'published_count' => $publishedCount,
+            'errors' => $errors
+        ];
+    }
+
+    public static function publishEntireExam($examId, $teacherId, $remarks = '') {
+        $pdo = getDBConnection();
+        $stmtEx = $pdo->prepare("SELECT teacher_id FROM exams WHERE id = ?");
+        $stmtEx->execute([$examId]);
+        $exTeacher = $stmtEx->fetchColumn();
+
+        if (!$exTeacher) {
+            throw new Exception("Exam #{$examId} not found.");
+        }
+
+        $stmtUser = $pdo->prepare("SELECT role FROM users WHERE id = ?");
+        $stmtUser->execute([$teacherId]);
+        $role = strtolower(trim($stmtUser->fetchColumn() ?: ''));
+
+        if ($role !== 'admin' && intval($exTeacher) !== intval($teacherId)) {
+            throw new SecurityException("Unauthorized: Cannot publish results for exam #{$examId} owned by another teacher.");
+        }
+
+        $stmtSubs = $pdo->prepare("
+            SELECT id FROM exam_submissions 
+            WHERE exam_id = ? AND review_status IN ('reviewed', 'finalized', 'draft', 'pending_review')
+        ");
+        $stmtSubs->execute([$examId]);
+        $subIds = $stmtSubs->fetchAll(PDO::FETCH_COLUMN);
+
+        $publishedCount = 0;
+        $errors = [];
+
+        foreach ($subIds as $sId) {
+            try {
+                $stmtCheck = $pdo->prepare("SELECT review_status FROM exam_submissions WHERE id = ?");
+                $stmtCheck->execute([$sId]);
+                $cStatus = $stmtCheck->fetchColumn();
+
+                if (in_array($cStatus, ['draft', 'pending_review'], true)) {
+                    $pdo->exec("UPDATE exam_submissions SET review_status = 'finalized' WHERE id = {$sId}");
+                }
+                self::transitionStatus($sId, 'published', $teacherId, $remarks);
+                $publishedCount++;
+            } catch (Exception $e) {
+                $errors[] = "Submission #{$sId}: " . $e->getMessage();
+            }
+        }
+
+        return [
+            'success' => true,
+            'exam_id' => $examId,
+            'published_count' => $publishedCount,
+            'errors' => $errors
+        ];
     }
 }
 

@@ -22,34 +22,34 @@ if ($selected_exam !== 'all') {
     $stmtStats = $pdo->prepare("
         SELECT 
             COUNT(*) as total_students,
-            SUM(CASE WHEN status = 'Pass' THEN 1 ELSE 0 END) as total_pass,
-            SUM(CASE WHEN status = 'Fail' THEN 1 ELSE 0 END) as total_fail,
+            SUM(CASE WHEN status = 'Pass' OR percentage >= 75 THEN 1 ELSE 0 END) as total_pass,
+            SUM(CASE WHEN status = 'Fail' OR percentage < 75 THEN 1 ELSE 0 END) as total_fail,
             AVG(percentage) as avg_percentage,
             MAX(percentage) as max_percentage,
             MIN(percentage) as min_percentage
         FROM exam_submissions 
-        WHERE teacher_id = ? AND exam_title = ?
+        WHERE teacher_id = ? AND exam_title = ? AND review_status = 'published'
     ");
     $stmtStats->execute([$teacher_id, $selected_exam]);
 
-    $stmtList = $pdo->prepare("SELECT * FROM exam_submissions WHERE teacher_id = ? AND exam_title = ? ORDER BY id DESC");
+    $stmtList = $pdo->prepare("SELECT * FROM exam_submissions WHERE teacher_id = ? AND exam_title = ? AND review_status = 'published' ORDER BY id DESC");
     $stmtList->execute([$teacher_id, $selected_exam]);
     $report_title = "EXAM PERFORMANCE REPORT: " . strtoupper($selected_exam);
 } else {
     $stmtStats = $pdo->prepare("
         SELECT 
             COUNT(*) as total_students,
-            SUM(CASE WHEN status = 'Pass' THEN 1 ELSE 0 END) as total_pass,
-            SUM(CASE WHEN status = 'Fail' THEN 1 ELSE 0 END) as total_fail,
+            SUM(CASE WHEN status = 'Pass' OR percentage >= 75 THEN 1 ELSE 0 END) as total_pass,
+            SUM(CASE WHEN status = 'Fail' OR percentage < 75 THEN 1 ELSE 0 END) as total_fail,
             AVG(percentage) as avg_percentage,
             MAX(percentage) as max_percentage,
             MIN(percentage) as min_percentage
         FROM exam_submissions 
-        WHERE teacher_id = ?
+        WHERE teacher_id = ? AND review_status = 'published'
     ");
     $stmtStats->execute([$teacher_id]);
 
-    $stmtList = $pdo->prepare("SELECT * FROM exam_submissions WHERE teacher_id = ? ORDER BY id DESC");
+    $stmtList = $pdo->prepare("SELECT * FROM exam_submissions WHERE teacher_id = ? AND review_status = 'published' ORDER BY id DESC");
     $stmtList->execute([$teacher_id]);
     $report_title = "FACULTY MASTER CLASS PERFORMANCE & ANALYTICS REPORT";
 }

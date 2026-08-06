@@ -443,26 +443,197 @@ try {
     }
 
     
-    $exam_history = [];
+    // Priority 3: Student Performance Summary
+    $student_performance_summary = [
+        'total_published' => 0,
+        'passed_count' => 0,
+        'failed_count' => 0,
+        'avg_percentage' => 0.0,
+        'highest_score' => 0.0,
+        'lowest_score' => 0.0,
+        'passing_rate' => 0.0,
+        'qualifying_status' => 'Pending',
+        'qualifying_attempts_remaining' => 0
+    ];
+
     try {
-        $stmt = $pdo->prepare("
+        $stmtSum = $pdo->prepare("
             SELECT 
-                e.title,
-                es.percentage,
-                es.created_at
+                COUNT(*) as total_published,
+                SUM(CASE WHEN es.status = 'Pass' OR es.percentage >= 75 THEN 1 ELSE 0 END) as passed_count,
+                SUM(CASE WHEN es.status = 'Fail' OR es.percentage < 75 THEN 1 ELSE 0 END) as failed_count,
+                AVG(es.percentage) as avg_percentage,
+                MAX(es.percentage) as highest_score,
+                MIN(es.percentage) as lowest_score
+            FROM exam_submissions es
+            WHERE es.student_id = ? AND es.review_status = 'published'
+        ");
+        $stmtSum->execute([$student_id]);
+        $sumRow = $stmtSum->fetch(PDO::FETCH_ASSOC);
+
+        if ($sumRow && intval($sumRow['total_published']) > 0) {
+            $tot = intval($sumRow['total_published']);
+            $pas = intval($sumRow['passed_count']);
+            $student_performance_summary['total_published'] = $tot;
+            $student_performance_summary['passed_count'] = $pas;
+            $student_performance_summary['failed_count'] = intval($sumRow['failed_count']);
+            $student_performance_summary['avg_percentage'] = round(floatval($sumRow['avg_percentage']), 1);
+            $student_performance_summary['highest_score'] = round(floatval($sumRow['highest_score']), 1);
+            $student_performance_summary['lowest_score'] = round(floatval($sumRow['lowest_score']), 1);
+            $student_performance_summary['passing_rate'] = round(($pas / $tot) * 100, 1);
+        }
+
+        $stmtQualSum = $pdo->prepare("
+            SELECT 
+                es.qualification_status,
+                e.qualifying_max_attempts,
+                (SELECT COUNT(*) FROM exam_submissions WHERE student_id = ? AND exam_id = e.id) as attempts_used
             FROM exam_submissions es
             JOIN exams e ON es.exam_id = e.id
-            WHERE es.student_id = ? AND es.review_status = 'published'
-            ORDER BY es.created_at DESC
-            LIMIT 5
+            WHERE es.student_id = ? AND e.exam_category = 'qualifying' AND es.review_status = 'published'
+            ORDER BY es.id DESC LIMIT 1
         ");
-        $stmt->execute([$student_id]);
-        $exam_history = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $stmtQualSum->execute([$student_id, $student_id]);
+        $qualRow = $stmtQualSum->fetch(PDO::FETCH_ASSOC);
+
+        if ($qualRow) {
+            $student_performance_summary['qualifying_status'] = ucfirst($qualRow['qualification_status'] ?? 'Pending');
+            $maxAtt = intval($qualRow['qualifying_max_attempts'] ?? 1);
+            $usedAtt = intval($qualRow['attempts_used'] ?? 1);
+            $student_performance_summary['qualifying_attempts_remaining'] = max(0, $maxAtt - $usedAtt);
+        }
+    } catch (Exception $e) {
+    }
+
+    // Priority 3: Subject Performance Breakdown
+    $student_subject_performance = [];
+    try {
+        $stmtSubj = $pdo->prepare("
+            SELECT 
+                COALESCE(e.subject, es.exam_title) as subject,
+                COUNT(es.id) as exams_completed,
+                AVG(es.percentage) as avg_score,
+                MAX(es.percentage) as highest_score,
+                MIN(es.percentage) as lowest_score,
+                ROUND((SUM(CASE WHEN es.status = 'Pass' OR es.percentage >= 75 THEN 1 ELSE 0 END) / COUNT(es.id)) * 100, 1) as pass_rate
+            FROM exam_submissions es
+            LEFT JOIN exams e ON es.exam_id = e.id
+            WHERE es.student_id = ? AND es.review_status = 'published'
+            GROUP BY COALESCE(e.subject, es.exam_title)
+            ORDER BY avg_score DESC
+        ");
+        $stmtSubj->execute([$student_id]);
+        $student_subject_performance = $stmtSubj->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+        $student_subject_performance = [];
+    }
+
+    // Priority 3: Student Exam History Filtered
+    $hist_search = trim($_GET['search'] ?? '');
+    $hist_subject = trim($_GET['subject'] ?? 'all');
+    $hist_period = trim($_GET['academic_period'] ?? $_GET['term'] ?? 'all');
+    $hist_semester = trim($_GET['semester'] ?? 'all');
+    $hist_sy = trim($_GET['school_year'] ?? 'all');
+
+    $histWhere = "WHERE es.student_id = ? AND es.review_status = 'published'";
+    $histParams = [$student_id];
+
+    if (!empty($hist_search)) {
+        $histWhere .= " AND (COALESCE(e.title, es.exam_title) LIKE ? OR COALESCE(e.subject, 'Civil Engineering') LIKE ? OR uT.fullname LIKE ?)";
+        $histParams[] = "%{$hist_search}%";
+        $histParams[] = "%{$hist_search}%";
+        $histParams[] = "%{$hist_search}%";
+    }
+
+    if ($hist_subject !== 'all') {
+        $histWhere .= " AND (COALESCE(e.subject, 'Civil Engineering') = ? OR es.subject = ?)";
+        $histParams[] = $hist_subject;
+        $histParams[] = $hist_subject;
+    }
+
+    if ($hist_period !== 'all') {
+        $histWhere .= " AND (COALESCE(es.term, e.academic_period) = ? OR e.covered_periods LIKE ?)";
+        $histParams[] = $hist_period;
+        $histParams[] = "%{$hist_period}%";
+    }
+
+    if ($hist_semester !== 'all') {
+        $histWhere .= " AND (e.semester = ? OR lm.semester = ?)";
+        $histParams[] = $hist_semester;
+        $histParams[] = $hist_semester;
+    }
+
+    if ($hist_sy !== 'all') {
+        $histWhere .= " AND (e.school_year = ? OR lm.school_year = ?)";
+        $histParams[] = $hist_sy;
+        $histParams[] = $hist_sy;
+    }
+
+    $exam_history = [];
+    try {
+        $stmtHist = $pdo->prepare("
+            SELECT 
+                es.id,
+                COALESCE(e.title, es.exam_title) AS title,
+                COALESCE(e.subject, 'Civil Engineering') AS subject,
+                COALESCE(uT.fullname, 'Course Professor') AS teacher_name,
+                COALESCE(es.term, e.academic_period, 'General') AS academic_period,
+                es.total_score,
+                es.correct_count AS score,
+                es.total_items,
+                es.percentage,
+                es.status,
+                es.created_at AS date_taken,
+                es.published_at AS published_date,
+                e.exam_category
+            FROM exam_submissions es
+            LEFT JOIN exams e ON es.exam_id = e.id
+            LEFT JOIN users uT ON (es.teacher_id = uT.id OR e.teacher_id = uT.id)
+            LEFT JOIN lesson_materials lm ON e.id = lm.exam_id
+            $histWhere
+            ORDER BY es.created_at DESC
+            LIMIT 100
+        ");
+        $stmtHist->execute($histParams);
+        $exam_history = $stmtHist->fetchAll(PDO::FETCH_ASSOC);
     } catch (PDOException $e) {
         $exam_history = [];
     }
 
-    
+    // Priority 3: Top Performers Leaderboard
+    $student_leaderboard = [];
+    try {
+        $leader_subject = trim($_GET['leader_subject'] ?? 'all');
+        $lbWhere = "WHERE es.review_status = 'published'";
+        $lbParams = [];
+
+        if ($leader_subject !== 'all') {
+            $lbWhere .= " AND (COALESCE(e.subject, 'Civil Engineering') = ?)";
+            $lbParams[] = $leader_subject;
+        }
+
+        $stmtLb = $pdo->prepare("
+            SELECT 
+                u.fullname as student_name,
+                COALESCE(e.subject, 'Civil Engineering') as subject,
+                sd.section,
+                MAX(es.percentage) as top_percentage,
+                MAX(es.total_score) as top_score
+            FROM exam_submissions es
+            JOIN users u ON es.student_id = u.id
+            LEFT JOIN student_details sd ON u.id = sd.user_id
+            LEFT JOIN exams e ON es.exam_id = e.id
+            $lbWhere
+            GROUP BY u.id, u.fullname, COALESCE(e.subject, 'Civil Engineering'), sd.section
+            ORDER BY top_percentage DESC, top_score DESC
+            LIMIT 10
+        ");
+        $stmtLb->execute($lbParams);
+        $student_leaderboard = $stmtLb->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+        $student_leaderboard = [];
+    }
+
     $notifications = [];
     try {
         $stmt = $pdo->prepare("
@@ -481,7 +652,6 @@ try {
         $notifications = [];
     }
 
-    
     if (empty($notifications)) {
         $notifications = [];
     }

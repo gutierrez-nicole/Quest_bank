@@ -9,33 +9,68 @@ try {
     $stmt->execute([getCurrentUserId()]);
     $admin = $stmt->fetch();
 
-    $stats = $pdo->query("
+    $sel_program = $_GET['program'] ?? $_GET['department'] ?? 'all';
+    $sel_sy = $_GET['school_year'] ?? 'all';
+    $sel_sem = $_GET['semester'] ?? 'all';
+
+    $adminWhere = "WHERE 1=1";
+    $adminParams = [];
+
+    if ($sel_program !== 'all') {
+        $adminWhere .= " AND (sd.course = ? OR sd.program = ? OR e.specialization = ?)";
+        $adminParams[] = $sel_program;
+        $adminParams[] = $sel_program;
+        $adminParams[] = $sel_program;
+    }
+
+    if ($sel_sy !== 'all') {
+        $adminWhere .= " AND (lm.school_year = ? OR e.school_year = ?)";
+        $adminParams[] = $sel_sy;
+        $adminParams[] = $sel_sy;
+    }
+
+    if ($sel_sem !== 'all') {
+        $adminWhere .= " AND (lm.semester = ? OR e.semester = ?)";
+        $adminParams[] = $sel_sem;
+        $adminParams[] = $sel_sem;
+    }
+
+    $stmtStats = $pdo->prepare("
         SELECT
-            (SELECT COUNT(*) FROM users WHERE role = 'teacher') AS teachers_count,
-            (SELECT COUNT(*) FROM users WHERE role = 'student') AS students_count,
+            (SELECT COUNT(*) FROM users WHERE role = 'teacher' AND status = 'active') AS teachers_count,
+            (SELECT COUNT(*) FROM users WHERE role = 'student' AND status = 'active') AS students_count,
             (SELECT COUNT(DISTINCT subject) FROM exams) AS subjects_count,
             (SELECT COUNT(*) FROM exams) AS exams_count,
-            (SELECT COUNT(*) FROM exam_submissions WHERE review_status = 'published' AND (status = 'Pass' OR percentage >= 75)) AS completed_exams,
-            (SELECT COUNT(*) FROM exam_submissions WHERE review_status = 'published' AND (status = 'Fail' OR percentage < 75)) AS pending_exams,
-            (SELECT COUNT(*) FROM exam_submissions WHERE review_status = 'published') AS total_submissions,
-            (SELECT AVG(percentage) FROM exam_submissions WHERE review_status = 'published') AS avg_score,
-            (SELECT COUNT(*) FROM exam_submissions WHERE review_status = 'pending_review') AS pie_pending
-    ")->fetch(PDO::FETCH_ASSOC);
+            (SELECT COUNT(*) FROM exam_submissions es LEFT JOIN exams e ON es.exam_id = e.id LEFT JOIN student_details sd ON es.student_id = sd.user_id LEFT JOIN lesson_materials lm ON e.id = lm.exam_id {$adminWhere} AND es.review_status = 'published') AS published_exams,
+            (SELECT COUNT(*) FROM exam_submissions es LEFT JOIN exams e ON es.exam_id = e.id LEFT JOIN student_details sd ON es.student_id = sd.user_id LEFT JOIN lesson_materials lm ON e.id = lm.exam_id {$adminWhere} AND es.review_status IN ('pending_review', 'draft')) AS pending_reviews,
+            (SELECT COUNT(*) FROM exam_submissions es LEFT JOIN exams e ON es.exam_id = e.id LEFT JOIN student_details sd ON es.student_id = sd.user_id LEFT JOIN lesson_materials lm ON e.id = lm.exam_id {$adminWhere} AND es.review_status = 'published' AND (es.status = 'Pass' OR es.percentage >= 75)) AS completed_exams,
+            (SELECT COUNT(*) FROM exam_submissions es LEFT JOIN exams e ON es.exam_id = e.id LEFT JOIN student_details sd ON es.student_id = sd.user_id LEFT JOIN lesson_materials lm ON e.id = lm.exam_id {$adminWhere} AND es.review_status = 'published' AND (es.status = 'Fail' OR es.percentage < 75)) AS failed_exams,
+            (SELECT COUNT(*) FROM exam_submissions es LEFT JOIN exams e ON es.exam_id = e.id LEFT JOIN student_details sd ON es.student_id = sd.user_id LEFT JOIN lesson_materials lm ON e.id = lm.exam_id {$adminWhere}) AS total_submissions,
+            (SELECT AVG(es.percentage) FROM exam_submissions es LEFT JOIN exams e ON es.exam_id = e.id LEFT JOIN student_details sd ON es.student_id = sd.user_id LEFT JOIN lesson_materials lm ON e.id = lm.exam_id {$adminWhere} AND es.review_status = 'published') AS avg_score
+    ");
+
+    $execParams = array_merge(
+        $adminParams, $adminParams, $adminParams, $adminParams, $adminParams, $adminParams
+    );
+    $stmtStats->execute($execParams);
+    $stats = $stmtStats->fetch(PDO::FETCH_ASSOC);
 
     $teachers_count = intval($stats['teachers_count'] ?? 0);
     $students_count = intval($stats['students_count'] ?? 0);
     $subjects_count = intval($stats['subjects_count'] ?? 0);
     $exams_count = intval($stats['exams_count'] ?? 0);
+    $published_exams = intval($stats['published_exams'] ?? 0);
+    $pending_reviews = intval($stats['pending_reviews'] ?? 0);
     $completed_exams = intval($stats['completed_exams'] ?? 0);
-    $pending_exams = intval($stats['pending_exams'] ?? 0);
+    $failed_exams = intval($stats['failed_exams'] ?? 0);
     $total_submissions = intval($stats['total_submissions'] ?? 0);
     $avg_score = $stats['avg_score'] !== null ? floatval($stats['avg_score']) : 0.0;
-    $pie_pending = intval($stats['pie_pending'] ?? 0);
+    $pie_pending = $pending_reviews;
 
-    $pass_rate = $total_submissions > 0 ? round(($completed_exams / $total_submissions) * 100, 1) : 0.0;
+    $pass_rate = $published_exams > 0 ? round(($completed_exams / $published_exams) * 100, 1) : 0.0;
     $ai_prediction = number_format($pass_rate, 1) . '% Pass Rate';
     $pie_passed = $completed_exams;
-    $pie_failed = $pending_exams;
+    $pie_failed = $failed_exams;
 
     
     $ce_stmt = $pdo->query("
