@@ -156,6 +156,62 @@ class ExamService {
         return ['eligible' => true, 'attempt_count' => $attemptCount, 'remaining_attempts' => 999];
     }
 
+    public static function getEligibleStudentsForExam($pdo, $examId, $teacherId) {
+        $stmtEx = $pdo->prepare("SELECT * FROM exams WHERE id = ? AND (teacher_id = ? OR created_by = ?)");
+        $stmtEx->execute([$examId, $teacherId, $teacherId]);
+        $exam = $stmtEx->fetch(PDO::FETCH_ASSOC);
+        if (!$exam) {
+            return [];
+        }
+
+        $examCategory = $exam['exam_category'] ?? 'regular';
+        $qProgram = $exam['qualifying_program'] ?? 'All Programs';
+        $qYearLevel = $exam['qualifying_year_level'] ?? 'All Year Levels';
+        $examSec = $exam['section'] ?? null;
+
+        $sql = "
+            SELECT DISTINCT u.id, u.fullname, u.email, sd.student_number, sd.section, sd.course, sd.year_level
+            FROM users u
+            JOIN student_details sd ON u.id = sd.user_id
+            WHERE u.role = 'student' AND (
+                u.id IN (SELECT student_id FROM exam_assignments WHERE exam_id = ? AND student_id IS NOT NULL)
+                OR sd.section COLLATE utf8mb4_general_ci IN (SELECT s.section_name COLLATE utf8mb4_general_ci FROM sections s JOIN exam_assignments ea ON ea.section_id = s.id WHERE ea.exam_id = ?)
+                OR sd.section COLLATE utf8mb4_general_ci IN (SELECT s.section_code COLLATE utf8mb4_general_ci FROM sections s JOIN exam_assignments ea ON ea.section_id = s.id WHERE ea.exam_id = ?)
+                OR sd.section COLLATE utf8mb4_general_ci IN (SELECT section COLLATE utf8mb4_general_ci FROM exam_schedules WHERE exam_id = ?)
+                OR (? IS NOT NULL AND ? != '' AND LOWER(sd.section COLLATE utf8mb4_general_ci) = LOWER(? COLLATE utf8mb4_general_ci))
+                OR (? = 'qualifying' AND 
+                    (? = 'All Programs' OR LOWER(sd.course COLLATE utf8mb4_general_ci) = LOWER(? COLLATE utf8mb4_general_ci)) AND 
+                    (? = 'All Year Levels' OR LOWER(sd.year_level COLLATE utf8mb4_general_ci) = LOWER(? COLLATE utf8mb4_general_ci))
+                )
+                OR (
+                    NOT EXISTS (SELECT 1 FROM exam_assignments WHERE exam_id = ?) AND
+                    NOT EXISTS (SELECT 1 FROM exam_schedules WHERE exam_id = ?) AND
+                    (? IS NULL OR ? = '') AND
+                    ? != 'qualifying'
+                )
+            )
+            ORDER BY u.fullname ASC
+        ";
+
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([
+            $examId,
+            $examId,
+            $examId,
+            $examId,
+            $examSec, $examSec, $examSec,
+            $examCategory,
+            $qProgram, $qProgram,
+            $qYearLevel, $qYearLevel,
+            $examId,
+            $examId,
+            $examSec, $examSec,
+            $examCategory
+        ]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public static function getRecentSubmissions($limit = 10) {
         $pdo = getDBConnection();
         $stmt = $pdo->prepare("SELECT * FROM exam_submissions ORDER BY id DESC LIMIT " . intval($limit));

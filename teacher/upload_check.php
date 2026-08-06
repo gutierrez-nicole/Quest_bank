@@ -4,12 +4,21 @@ require_once __DIR__ . '/../app/services/OcrService.php';
 require_once __DIR__ . '/../app/services/AnswerSheetParser.php';
 require_once __DIR__ . '/../app/services/ExamScoringService.php';
 require_once __DIR__ . '/../app/services/FileValidationService.php';
+require_once __DIR__ . '/../app/services/ExamService.php';
 
 AuthService::enforceRole('teacher');
 $pdo = getDBConnection();
+$teacher_id = getCurrentUserId();
+
+if (isset($_GET['action']) && $_GET['action'] === 'get_eligible_students') {
+    header('Content-Type: application/json');
+    $exam_id = intval($_GET['exam_id'] ?? 0);
+    $students = ExamService::getEligibleStudentsForExam($pdo, $exam_id, $teacher_id);
+    echo json_encode(['success' => true, 'students' => $students]);
+    exit;
+}
 
 try {
-    $teacher_id = getCurrentUserId();
     $stmt = $pdo->prepare("SELECT fullname, username, email FROM users WHERE id = ?");
     $stmt->execute([$teacher_id]);
     $teacher = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -18,8 +27,10 @@ try {
     $stmtExams->execute([$teacher_id, $teacher_id]);
     $available_exams = $stmtExams->fetchAll(PDO::FETCH_ASSOC);
 
-    $stmtStudents = $pdo->query("SELECT id, fullname, email FROM users WHERE role = 'student' ORDER BY fullname ASC");
-    $available_students = $stmtStudents->fetchAll(PDO::FETCH_ASSOC);
+    $eligible_students_map = [];
+    foreach ($available_exams as $ex) {
+        $eligible_students_map[$ex['id']] = ExamService::getEligibleStudentsForExam($pdo, $ex['id'], $teacher_id);
+    }
 
 } catch (PDOException $e) {
     die("Database error: " . $e->getMessage());
@@ -35,92 +46,89 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
     $exam_id = intval($_POST['exam_id'] ?? 0);
     $student_id = intval($_POST['student_id'] ?? 0);
 
+    $stmtCheck = $pdo->prepare("SELECT * FROM exams WHERE id = ? AND (teacher_id = ? OR created_by = ?)");
+    $stmtCheck->execute([$exam_id, $teacher_id, $teacher_id]);
+    $examObj = $stmtCheck->fetch(PDO::FETCH_ASSOC);
+
+    $eligibleStudents = ExamService::getEligibleStudentsForExam($pdo, $exam_id, $teacher_id);
+    $eligibleIds = array_map('intval', array_column($eligibleStudents, 'id'));
+
     if (empty($exam_id) || empty($student_id)) {
         $error_msg = "Please select a valid Exam and Enrolled Student.";
+    } elseif (!$examObj) {
+        $error_msg = "Unauthorized: Selected exam does not belong to your account.";
+    } elseif (!in_array($student_id, $eligibleIds, true)) {
+        $error_msg = "Unauthorized: Selected student is not eligible for this exam.";
     } elseif (!isset($_FILES['exam_file']) || $_FILES['exam_file']['error'] !== UPLOAD_ERR_OK) {
         $error_msg = "Please attach a valid answer sheet file or camera capture (JPG, PNG, PDF).";
     } else {
-        $stmtCheck = $pdo->prepare("SELECT * FROM exams WHERE id = ? AND (teacher_id = ? OR created_by = ?)");
-        $stmtCheck->execute([$exam_id, $teacher_id, $teacher_id]);
-        $examObj = $stmtCheck->fetch(PDO::FETCH_ASSOC);
+        $file_name = $_FILES['exam_file']['name'];
+        $file_tmp = $_FILES['exam_file']['tmp_name'];
 
-        $stmtCheckStudent = $pdo->prepare("SELECT id FROM users WHERE id = ? AND role = 'student'");
-        $stmtCheckStudent->execute([$student_id]);
-        $studentExists = $stmtCheckStudent->fetchColumn();
-
-        if (!$examObj) {
-            $error_msg = "Unauthorized: Selected exam does not belong to your account.";
-        } elseif (!$studentExists) {
-            $error_msg = "Unauthorized: Selected student does not exist or is not an enrolled student.";
+        $validation = FileValidationService::validateFile($file_tmp, $file_name, 10485760);
+        if (!$validation['success']) {
+            $error_msg = "Security Validation Failed: " . $validation['error'];
         } else {
-            $file_name = $_FILES['exam_file']['name'];
-            $file_tmp = $_FILES['exam_file']['tmp_name'];
+            $file_ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
 
-            $validation = FileValidationService::validateFile($file_tmp, $file_name, 10485760);
-            if (!$validation['success']) {
-                $error_msg = "Security Validation Failed: " . $validation['error'];
-            } else {
-                $file_ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
-
-                if (in_array($file_ext, ['jpg', 'jpeg', 'png'], true)) {
-                    $imgInfo = @getimagesize($file_tmp);
-                    if (!$imgInfo || $imgInfo[0] < 10 || $imgInfo[1] < 10) {
-                        $error_msg = "Security Validation Failed: Invalid or corrupted image file format.";
-                    }
+            if (in_array($file_ext, ['jpg', 'jpeg', 'png'], true)) {
+                $imgInfo = @getimagesize($file_tmp);
+                if (!$imgInfo || $imgInfo[0] < 10 || $imgInfo[1] < 10) {
+                    $error_msg = "Security Validation Failed: Invalid or corrupted image file format.";
                 }
+            }
 
-                if (empty($error_msg)) {
-                    $upload_dir = __DIR__ . '/../uploads/ocr_sheets/';
-                    if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
-                    $target_file = $upload_dir . uniqid('ocr_') . '.' . $file_ext;
+            if (empty($error_msg)) {
+                $upload_dir = __DIR__ . '/../uploads/ocr_sheets/';
+                if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
+                $target_file = $upload_dir . uniqid('ocr_') . '.' . $file_ext;
 
-                    if (move_uploaded_file($file_tmp, $target_file)) {
-                        $ocrRes = OcrService::processAnswerSheet($target_file, $file_ext);
-                        $ocrText = $ocrRes['text'] ?? '';
+                if (move_uploaded_file($file_tmp, $target_file)) {
+                    $ocrRes = OcrService::processAnswerSheet($target_file, $file_ext);
+                    $ocrText = $ocrRes['text'] ?? '';
 
-                        $qStmt = $pdo->prepare("SELECT * FROM exam_questions WHERE exam_id = ? ORDER BY id ASC");
-                        $qStmt->execute([$exam_id]);
-                        $examQuestions = $qStmt->fetchAll(PDO::FETCH_ASSOC);
+                    $qStmt = $pdo->prepare("SELECT * FROM exam_questions WHERE exam_id = ? ORDER BY id ASC");
+                    $qStmt->execute([$exam_id]);
+                    $examQuestions = $qStmt->fetchAll(PDO::FETCH_ASSOC);
 
-                        $parsedOcr = AnswerSheetParser::parseAnswerSheet($ocrText, $examQuestions);
-                        $submittedAnswers = $parsedOcr['answers'];
+                    $parsedOcr = AnswerSheetParser::parseAnswerSheet($ocrText, $examQuestions);
+                    $submittedAnswers = $parsedOcr['answers'];
 
-                        if (!empty($_POST['corrected_ocr_text'])) {
-                            $correctedText = trim(sanitizeInput($_POST['corrected_ocr_text']));
-                            $parsedCorr = AnswerSheetParser::parseAnswerSheet($correctedText, $examQuestions);
-                            $submittedAnswers = $parsedCorr['answers'];
-                        }
-
-                        try {
-                            $fileMeta = [
-                                'ocr_text' => $ocrText,
-                                'ocr_confidence' => $ocrRes['confidence'],
-                                'ocr_status' => $ocrRes['status'],
-                                'suggested_manual_review' => ($ocrRes['confidence'] < 75.0 || $parsedOcr['requires_review']) ? 1 : 0,
-                                'page_count' => $ocrRes['page_count'],
-                                'file_path' => 'uploads/ocr_sheets/' . basename($target_file),
-                                'original_filename' => $file_name
-                            ];
-
-                            $evalRes = ExamScoringService::evaluateAndSaveSubmission(
-                                $exam_id,
-                                $student_id,
-                                $submittedAnswers,
-                                $teacher_id,
-                                'scanned',
-                                $fileMeta
-                            );
-
-                            logActivity("Processed OCR grading for submission #{$evalRes['submission_id']} (Exam #{$exam_id}).", $teacher_id);
-                            $success_msg = "Answer sheet processed & scored server-side! Submission #{$evalRes['submission_id']} saved as Pending Review.";
-                            $evaluation_summary = $evalRes;
-
-                        } catch (Exception $e) {
-                            $error_msg = "Scoring Error: " . $e->getMessage();
-                        }
-                    } else {
-                        $error_msg = "Failed to store uploaded file on server.";
+                    if (!empty($_POST['corrected_ocr_text'])) {
+                        $correctedText = trim(sanitizeInput($_POST['corrected_ocr_text']));
+                        $parsedCorr = AnswerSheetParser::parseAnswerSheet($correctedText, $examQuestions);
+                        $submittedAnswers = $parsedCorr['answers'];
                     }
+
+                    try {
+                        $fileMeta = [
+                            'ocr_text' => $ocrText,
+                            'ocr_confidence' => $ocrRes['confidence'],
+                            'ocr_status' => $ocrRes['status'],
+                            'suggested_manual_review' => ($ocrRes['confidence'] < 75.0 || $parsedOcr['requires_review']) ? 1 : 0,
+                            'page_count' => $ocrRes['page_count'],
+                            'file_path' => 'uploads/ocr_sheets/' . basename($target_file),
+                            'original_filename' => $file_name
+                        ];
+
+                        $evalRes = ExamScoringService::evaluateAndSaveSubmission(
+                            $exam_id,
+                            $student_id,
+                            $submittedAnswers,
+                            $teacher_id,
+                            'scanned',
+                            $fileMeta
+                        );
+
+                        logActivity("Processed OCR grading for submission #{$evalRes['submission_id']} (Exam #{$exam_id}).", $teacher_id);
+                        $success_msg = "Answer sheet processed & scored server-side! Submission #{$evalRes['submission_id']} saved as Pending Review.";
+                        $evaluation_summary = $evalRes;
+
+                    } catch (Exception $e) {
+                        $error_msg = "Scoring Error: " . $e->getMessage();
+                    }
+                } else {
+                    $error_msg = "Failed to store uploaded file on server.";
                 }
             }
         }
@@ -195,7 +203,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label class="block text-xs font-bold text-stone-700 mb-1">Select Stored Exam</label>
-                            <select name="exam_id" id="examSelect" required class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500">
+                            <select name="exam_id" id="examSelect" required onchange="onExamChanged()" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500">
                                 <option value="">-- Choose Exam --</option>
                                 <?php foreach ($available_exams as $ex): ?>
                                     <option value="<?php echo $ex['id']; ?>">
@@ -207,14 +215,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
 
                         <div>
                             <label class="block text-xs font-bold text-stone-700 mb-1">Select Enrolled Student</label>
-                            <select name="student_id" id="studentSelect" required class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500">
-                                <option value="">-- Choose Student --</option>
-                                <?php foreach ($available_students as $st): ?>
-                                    <option value="<?php echo $st['id']; ?>">
-                                        <?php echo htmlspecialchars($st['fullname']); ?> (<?php echo htmlspecialchars($st['email']); ?>)
-                                    </option>
-                                <?php endforeach; ?>
+                            <select name="student_id" id="studentSelect" required disabled class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500 disabled:opacity-50 disabled:bg-stone-100">
+                                <option value="">-- Choose Exam First --</option>
                             </select>
+                            <p id="studentNotice" class="text-[11px] font-semibold text-amber-700 hidden mt-1 flex items-center gap-1">
+                                <i class="fa-solid fa-circle-info"></i> No eligible students found for this exam.
+                            </p>
                         </div>
                     </div>
 
@@ -394,13 +400,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
 
     <!-- Camera Scanner Interactive JS -->
     <script>
+        const ELIGIBLE_STUDENTS_MAP = <?php echo json_encode($eligible_students_map, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
+
         let mediaStream = null;
         let currentFacingMode = 'environment';
         let rawCapturedCanvas = null;
         let activeCanvas = null;
         let currentRotation = 0;
 
+        let capturedCameraBlob = null;
+        let capturedCameraFilename = null;
+
+        function onExamChanged() {
+            const examSelect = document.getElementById('examSelect');
+            const studentSelect = document.getElementById('studentSelect');
+            const studentNotice = document.getElementById('studentNotice');
+            const examId = parseInt(examSelect.value, 10);
+
+            studentSelect.innerHTML = '';
+            studentNotice.classList.add('hidden');
+
+            if (!examId) {
+                studentSelect.disabled = true;
+                studentSelect.innerHTML = '<option value="">-- Choose Exam First --</option>';
+                return;
+            }
+
+            const students = ELIGIBLE_STUDENTS_MAP[examId] || [];
+            if (students.length === 0) {
+                studentSelect.disabled = true;
+                studentSelect.innerHTML = '<option value="">-- No Eligible Students Found --</option>';
+                studentNotice.classList.remove('hidden');
+            } else {
+                studentSelect.disabled = false;
+                studentSelect.innerHTML = '<option value="">-- Choose Student --</option>';
+                students.forEach(st => {
+                    const opt = document.createElement('option');
+                    opt.value = st.id;
+                    opt.textContent = `${st.fullname} (${st.email})`;
+                    studentSelect.appendChild(opt);
+                });
+            }
+        }
+
         async function openCameraScanner() {
+            const examSelect = document.getElementById('examSelect');
+            const studentSelect = document.getElementById('studentSelect');
+
+            if (!examSelect.value) {
+                alert("Please select a Stored Exam first before launching the camera scanner.");
+                examSelect.focus();
+                return;
+            }
+
+            if (!studentSelect.value || studentSelect.disabled) {
+                alert("Please select an Enrolled Student first before launching the camera scanner.");
+                studentSelect.focus();
+                return;
+            }
+
             const modal = document.getElementById('cameraModal');
             const errorBanner = document.getElementById('cameraErrorBanner');
 
@@ -411,12 +469,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
             resetCapturedState();
 
             if (!window.isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-                showCameraError("Camera access requires an HTTPS connection or localhost origin. Please use HTTPS or upload a file instead.");
+                showCameraError("Camera access requires HTTPS. Use the image-upload option or open the secured site.");
                 return;
             }
 
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                showCameraError("Camera permission was denied. You may upload an image instead.");
+                showCameraError("Camera API is not supported on this browser. You may upload an image file instead.");
                 return;
             }
 
@@ -446,13 +504,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
                     mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
                 } catch (err) {
                     console.error("Camera access error:", err);
-                    let msg = "Camera permission was denied. You may upload an image instead.";
-                    if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+                    let msg = "Camera initialization error. You may upload an image file instead.";
+                    if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                        msg = "Camera permission was denied. You may upload an image instead.";
+                    } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
                         msg = "No camera hardware device found. You may upload an image file instead.";
                     } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
                         msg = "Camera is already in use by another application. Please release the camera or upload an image file instead.";
-                    } else if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-                        msg = "Camera permission was denied. You may upload an image instead.";
+                    } else if (err.name === 'TypeError' || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                        msg = "Camera API is not supported on this browser. You may upload an image file instead.";
                     }
                     showCameraError(msg);
                     return;
@@ -625,18 +685,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
                     return;
                 }
 
-                const fileName = `camera_scan_${Date.now()}.jpg`;
-                const file = new File([blob], fileName, { type: 'image/jpeg' });
+                capturedCameraBlob = blob;
+                capturedCameraFilename = `camera_scan_${Date.now()}.jpg`;
 
                 const fileInput = document.getElementById('examFileInput');
+                if (fileInput) fileInput.value = '';
+
                 if (fileInput && window.DataTransfer) {
-                    const dt = new DataTransfer();
-                    dt.items.add(file);
-                    fileInput.files = dt.files;
-                    
-                    onFileSelected({ target: fileInput });
+                    try {
+                        const dt = new DataTransfer();
+                        const file = new File([blob], capturedCameraFilename, { type: 'image/jpeg' });
+                        dt.items.add(file);
+                        fileInput.files = dt.files;
+                    } catch(e) {}
                 }
 
+                updateFileStatusDisplay(capturedCameraFilename, blob.size, true);
                 closeCameraScanner();
             }, 'image/jpeg', 0.88);
         }
@@ -650,28 +714,79 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
 
         function onFileSelected(event) {
             const input = event.target;
+            if (input.files && input.files[0]) {
+                capturedCameraBlob = null;
+                capturedCameraFilename = null;
+                updateFileStatusDisplay(input.files[0].name, input.files[0].size, false);
+            } else if (!capturedCameraBlob) {
+                updateFileStatusDisplay("No answer sheet selected yet", 0, false);
+            }
+        }
+
+        function updateFileStatusDisplay(name, sizeBytes, isCamera) {
             const nameDisplay = document.getElementById('fileNameDisplay');
             const sizeDisplay = document.getElementById('fileSizeDisplay');
             const fileIcon = document.getElementById('fileIcon');
 
-            if (input.files && input.files[0]) {
-                const file = input.files[0];
-                nameDisplay.textContent = file.name;
-                
-                const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
-                sizeDisplay.textContent = `${sizeMB} MB`;
-
-                if (file.name.startsWith('camera_scan_')) {
-                    fileIcon.className = "fa-solid fa-camera text-orange-600 text-base flex-shrink-0";
-                } else {
-                    fileIcon.className = "fa-solid fa-file-image text-orange-500 text-base flex-shrink-0";
-                }
+            nameDisplay.textContent = name;
+            if (sizeBytes > 0) {
+                sizeDisplay.textContent = `${(sizeBytes / (1024 * 1024)).toFixed(2)} MB`;
             } else {
-                nameDisplay.textContent = "No answer sheet selected yet";
-                sizeDisplay.textContent = "";
+                sizeDisplay.textContent = '';
+            }
+
+            if (isCamera) {
+                fileIcon.className = "fa-solid fa-camera text-orange-600 text-base flex-shrink-0";
+            } else {
                 fileIcon.className = "fa-solid fa-file-image text-orange-500 text-base flex-shrink-0";
             }
         }
+
+        document.getElementById('ocrUploadForm').addEventListener('submit', async function(e) {
+            if (!capturedCameraBlob) {
+                return;
+            }
+
+            e.preventDefault();
+
+            const form = this;
+            const examSelect = document.getElementById('examSelect');
+            const studentSelect = document.getElementById('studentSelect');
+
+            if (!examSelect.value || !studentSelect.value) {
+                alert("Please select a valid Exam and Enrolled Student.");
+                return;
+            }
+
+            const submitBtn = form.querySelector('button[type="submit"]');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Submitting & Processing OCR...';
+
+            const formData = new FormData(form);
+            formData.delete('exam_file');
+            formData.append('exam_file', capturedCameraBlob, capturedCameraFilename);
+            formData.append('process_ocr_grading', '1');
+
+            try {
+                const response = await fetch('upload_check.php', {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                });
+
+                const html = await response.text();
+                document.open();
+                document.write(html);
+                document.close();
+            } catch (err) {
+                console.error("Camera upload submission error:", err);
+                alert("Network or camera upload error occurred. Please try again.");
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fa-solid fa-microchip mr-2"></i> Process & Grade Server-Side';
+            }
+        });
     </script>
 </body>
 </html>

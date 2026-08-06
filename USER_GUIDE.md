@@ -42,9 +42,10 @@ Upon logging in, students are presented with their personal academic dashboard:
 5. Review the draft exam, adjust item points if needed, and save to your active exam repository.
 
 ### 4. OCR Answer Sheet Evaluator & Camera Scanner (`teacher/upload_check.php`)
-1. Select the target **Stored Exam** and **Enrolled Student**.
-2. Choose your input method:
-   - **Scan Using Camera:** Click **Scan Using Camera** to launch live device camera preview.
+1. Select the target **Stored Exam**. The student dropdown dynamically populates with **Exam-Specific Eligible Students** enrolled in the exam's section, schedule, or program.
+2. Select an **Enrolled Student** (required before opening the camera scanner).
+3. Choose your input method:
+   - **Scan Using Camera:** Click **Scan Using Camera** to launch live device camera preview (mobile Safari/iOS & desktop supported via direct Blob FormData submission).
      - Position student answer sheet inside document framing box.
      - Ensure adequate lighting and avoid heavy shadows.
      - Click **Capture Answer Sheet** to take photo.
@@ -52,8 +53,8 @@ Upon logging in, students are presented with their personal academic dashboard:
      - Adjust image if needed: **Rotate Left/Right**, **Crop Boundary**, or **Reset**.
      - Click **Use Photo & Attach** to confirm capture.
    - **Upload Image or PDF:** Click **Upload Image or PDF** to select a `.jpg`, `.png`, or `.pdf` file from your device storage.
-3. Click **Process & Grade Server-Side**.
-4. The system parses student answers via `OcrService`, evaluates answers against the answer key, computes awarded points, and saves the result as **Pending Review**.
+4. Click **Process & Grade Server-Side**.
+5. The system parses student answers via `OcrService`, evaluates answers against the answer key, computes awarded points, and saves the result as **Pending Review**.
 
 ### 5. Review & Score Overrides (`teacher/submissions.php`)
 1. Open any submission in **Pending Review** status.
