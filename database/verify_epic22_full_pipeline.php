@@ -13,6 +13,14 @@ require_once __DIR__ . '/../app/bootstrap.php';
 
 $runner = new TestRunner('QuestBank Epic 2.2 Full Pipeline Verification');
 
+// Controlled failure hooks for meta-verification
+if (getenv('FORCE_ASSERT_FAIL') === '1') {
+    $runner->assertTrue("Forced Assertion Failure Test", false, "FORCE_ASSERT_FAIL=1");
+}
+if (getenv('FORCE_RUNTIME_EXCEPTION') === '1') {
+    try { throw new RuntimeException('FORCE_RUNTIME_EXCEPTION=1'); } catch (Throwable $e) { $runner->recordException($e); $runner->finish(); }
+}
+
 function createPipelineLesson($pdo, $teacherId, $title, $subject, $period, $status = 'completed', $text = 'Sample lesson content', $yearLevel = '4th Year', $program = 'BSCE', $semester = '1st Semester', $schoolYear = '2025-2026') {
     $stmt = $pdo->prepare("
         INSERT INTO lesson_materials (teacher_id, title, subject, file_name, file_path, file_type, file_size, academic_period, processing_status, lesson_text, word_count, year_level, program, semester, school_year)

@@ -1,19 +1,30 @@
 <?php
 /**
- * QUESTBANK — EPIC 2.2 PREFLIGHT CONSOLIDATION & META-VERIFICATION
+ * QUESTBANK — EPIC 2.2 PREFLIGHT CONSOLIDATION & META-VERIFICATION [DEPRECATED]
  *
- * Tests all retained authoritative verifiers under multiple failure conditions:
- * 1. Normal successful environment (exit 0)
- * 2. Forced assertion failure via FORCE_ASSERT_FAIL=1 (exit 1)
- * 3. Missing dependency simulation (exit 1)
- * 4. Obsolete scripts removal check
- * 5. Exception-leak detection: no script prints EXCEPTION with exit 0
+ * STATUS: DEPRECATED / ARCHIVED
+ * REPLACEMENT: verify_epic22_test_runner_contract.php
+ *
+ * REASON: Superseded by the standardized TestRunner contract & protocol meta-verification suite
+ * (verify_epic22_test_runner_contract.php) which validates non-blocking timeouts, process signals,
+ * and structured QUESTBANK_TEST_RESULT JSON markers.
+ *
+ * DO NOT execute as part of active Epic 2.2 certification.
  */
+
 
 require_once __DIR__ . '/../tests/helpers/test_runner.php';
 requireCorePreflight();
 
 $runner = new TestRunner('QuestBank Epic 2.2 Preflight Consolidation & Meta-Verification');
+
+// Controlled failure hooks for meta-verification
+if (getenv('FORCE_ASSERT_FAIL') === '1') {
+    $runner->assertTrue("Forced Assertion Failure Test", false, "FORCE_ASSERT_FAIL=1");
+}
+if (getenv('FORCE_RUNTIME_EXCEPTION') === '1') {
+    try { throw new RuntimeException('FORCE_RUNTIME_EXCEPTION=1'); } catch (Throwable $e) { $runner->recordException($e); $runner->finish(); }
+}
 
 $authoritativeScripts = [
     'verify_epic22_dependency_preflight.php',

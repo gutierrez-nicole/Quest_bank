@@ -11,6 +11,9 @@ $runner = new TestRunner('QuestBank Epic 2.2 CLI Test Exit-Code Repair Verificat
 if (getenv('FORCE_ASSERT_FAIL') === '1') {
     $runner->assertTrue("Forced Assertion Failure Test", false, "FORCE_ASSERT_FAIL=1");
 }
+if (getenv('FORCE_RUNTIME_EXCEPTION') === '1') {
+    try { throw new RuntimeException('FORCE_RUNTIME_EXCEPTION=1'); } catch (Throwable $e) { $runner->recordException($e); $runner->finish(); }
+}
 
 function runPhpSubprocess($code, $envVars = []) {
     $env = array_merge($_ENV, getenv(), $envVars);

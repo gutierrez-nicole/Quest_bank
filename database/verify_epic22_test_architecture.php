@@ -10,6 +10,14 @@ require_once __DIR__ . '/../app/bootstrap.php';
 
 $runner = new TestRunner('Epic 2.2 Test-Mode Architecture Verification');
 
+// Controlled failure hooks for meta-verification
+if (getenv('FORCE_ASSERT_FAIL') === '1') {
+    $runner->assertTrue("Forced Assertion Failure Test", false, "FORCE_ASSERT_FAIL=1");
+}
+if (getenv('FORCE_RUNTIME_EXCEPTION') === '1') {
+    try { throw new RuntimeException('FORCE_RUNTIME_EXCEPTION=1'); } catch (Throwable $e) { $runner->recordException($e); $runner->finish(); }
+}
+
 try {
     $runner->setSetupCompleted(true, "Architecture test environment initialized");
 

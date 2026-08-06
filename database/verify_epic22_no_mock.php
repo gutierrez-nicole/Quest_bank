@@ -7,6 +7,14 @@ require_once __DIR__ . '/../app/bootstrap.php';
 
 $runner = new TestRunner('QuestBank Epic 2.2 No Mock AI Fallback Verification');
 
+// Controlled failure hooks for meta-verification
+if (getenv('FORCE_ASSERT_FAIL') === '1') {
+    $runner->assertTrue("Forced Assertion Failure Test", false, "FORCE_ASSERT_FAIL=1");
+}
+if (getenv('FORCE_RUNTIME_EXCEPTION') === '1') {
+    try { throw new RuntimeException('FORCE_RUNTIME_EXCEPTION=1'); } catch (Throwable $e) { $runner->recordException($e); $runner->finish(); }
+}
+
 $sampleLessonText = "Soil mechanics is a branch of soil physics and applied mechanics that describes the behavior of soils. It differs from fluid mechanics and solid mechanics in that soils consist of a heterogeneous mixture of fluids (usually air and water) and particles (usually clay, silt, sand, and gravel).";
 
 try {

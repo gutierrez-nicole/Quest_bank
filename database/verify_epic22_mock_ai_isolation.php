@@ -14,6 +14,14 @@ require_once __DIR__ . '/../app/services/GroqService.php';
 
 $runner = new TestRunner('Epic 2.2 Critical Mock-AI Isolation Verification');
 
+// Controlled failure hooks for meta-verification
+if (getenv('FORCE_ASSERT_FAIL') === '1') {
+    $runner->assertTrue("Forced Assertion Failure Test", false, "FORCE_ASSERT_FAIL=1");
+}
+if (getenv('FORCE_RUNTIME_EXCEPTION') === '1') {
+    try { throw new RuntimeException('FORCE_RUNTIME_EXCEPTION=1'); } catch (Throwable $e) { $runner->recordException($e); $runner->finish(); }
+}
+
 function setEnvVars($env, $bootstrapActive) {
     putenv("APP_ENV={$env}");
     putenv("TEST_BOOTSTRAP_ACTIVE={$bootstrapActive}");

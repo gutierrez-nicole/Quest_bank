@@ -22,6 +22,14 @@ require_once __DIR__ . '/../app/services/GroqService.php';
 
 $runner = new TestRunner('QuestBank Epic 2.2 Deterministic Mock Scenario Verification');
 
+// Controlled failure hooks for meta-verification
+if (getenv('FORCE_ASSERT_FAIL') === '1') {
+    $runner->assertTrue("Forced Assertion Failure Test", false, "FORCE_ASSERT_FAIL=1");
+}
+if (getenv('FORCE_RUNTIME_EXCEPTION') === '1') {
+    try { throw new RuntimeException('FORCE_RUNTIME_EXCEPTION=1'); } catch (Throwable $e) { $runner->recordException($e); $runner->finish(); }
+}
+
 try {
     $pdo = getDBConnection();
     $runner->setSetupCompleted($pdo !== null, "Database connection established");
