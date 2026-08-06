@@ -137,7 +137,7 @@ class ExamSchedulingService {
             NotificationService::sendNotification($stId, 'exam_scheduled', $notifMsg);
         }
 
-        logActivity("Scheduled Exam #{$examId} ('{$exam['title']}') for Section {$section} on {$examDate} {$startTime}-{$endTime}", $teacherId);
+        logActivity("Scheduled Exam #{$examId} ('{$exam['title']}') for Section {$section} on {$examDate} {$startTime}-{$endTime}; Exam Owner ID: {$examOwnerId}", $actorId);
 
         return $scheduleId;
     }

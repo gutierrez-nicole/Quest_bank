@@ -255,6 +255,19 @@ try {
     $hasCanonicalLoginLink = strpos($mFile, '/index.php') !== false || strpos($mFile, 'index.php') !== false;
     $runner->assertTrue("TEST 11: maintenance.php links to canonical login route index.php", $hasCanonicalLoginLink, "Canonical login route verified in maintenance.php");
 
+    // ── TEST 12: Comprehensive Maintenance Mode Behavior ──
+    SystemSettingsService::setSetting('maintenance_mode', 'on');
+    $mModeOn = SystemSettingsService::getSetting('maintenance_mode');
+    $runner->assertTrue("TEST 12a: System setting maintenance_mode toggled ON", $mModeOn === 'on', "Maintenance: {$mModeOn}");
+
+    $idxContent = file_get_contents(__DIR__ . '/../index.php');
+    $hasRoleEnforce = strpos($idxContent, "action_register") !== false && strpos($idxContent, "\$role = 'student'") !== false;
+    $runner->assertTrue("TEST 12b: Public registration forces role to student server-side", $hasRoleEnforce, "Public role restriction verified");
+
+    SystemSettingsService::setSetting('maintenance_mode', 'off');
+    $mModeOff = SystemSettingsService::getSetting('maintenance_mode');
+    $runner->assertTrue("TEST 12c: System setting maintenance_mode restored to OFF", $mModeOff === 'off', "Maintenance: {$mModeOff}");
+
 } catch (Throwable $e) {
     $runner->recordException($e);
 } finally {

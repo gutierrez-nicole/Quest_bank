@@ -86,10 +86,10 @@ $teachers = $pdo->query("SELECT id, fullname FROM users WHERE role = 'teacher' A
                         <input type="hidden" name="action" value="create_schedule">
                         <div class="mb-3">
                             <label class="form-label">Select Exam</label>
-                            <select name="exam_id" id="exam_select" class="form-select" required onchange="updateTeacherId()">
+                            <select name="exam_id" id="exam_select" class="form-select" required>
                                 <option value="">-- Select Exam --</option>
                                 <?php foreach ($exams as $ex): ?>
-                                    <option value="<?= $ex['id'] ?>" data-teacher="<?= $ex['teacher_id'] ?>"><?= htmlspecialchars($ex['title']) ?> (<?= htmlspecialchars($ex['teacher_name']) ?>)</option>
+                                    <option value="<?= $ex['id'] ?>"><?= htmlspecialchars($ex['title']) ?> (<?= htmlspecialchars($ex['teacher_name']) ?>)</option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
@@ -197,13 +197,6 @@ $teachers = $pdo->query("SELECT id, fullname FROM users WHERE role = 'teacher' A
         </div>
     </div>
 </div>
-<script>
-function updateTeacherId() {
-    var select = document.getElementById('exam_select');
-    var selectedOption = select.options[select.selectedIndex];
-    document.getElementById('teacher_id').value = selectedOption.getAttribute('data-teacher') || '';
-}
-</script>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
