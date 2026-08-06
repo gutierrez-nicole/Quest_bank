@@ -9,7 +9,7 @@ function test_auth_smoke($pdo) {
     // 1. Verify demo user accounts exist and passwords verify correctly
     $users = [
         'admin@questbank.edu.ph' => 'admin',
-        'russel@questbank.edu.ph' => 'teacher',
+        'russel@gmail.com' => 'admin',
         'smith@questbank.edu.ph' => 'teacher',
         'lasjo@gmail.com' => 'teacher',
         'nikol@gmail.com' => 'student',

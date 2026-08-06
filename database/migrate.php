@@ -601,7 +601,7 @@ $defaultPassHash = password_hash('Password123!', PASSWORD_DEFAULT);
 
 $stmtUsr = $pdo->prepare("
     INSERT INTO users (id, username, fullname, email, password, role, force_password_reset) 
-    VALUES (10, 'Russel', 'Russel Gregorio', 'russel@questbank.edu.ph', ?, 'teacher', 1) 
+    VALUES (10, 'Russel', 'Russel Gregorio', 'russel@gmail.com', ?, 'admin', 1) 
     ON DUPLICATE KEY UPDATE id = id
 ");
 $stmtUsr->execute([$defaultPassHash]);

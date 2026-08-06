@@ -96,7 +96,7 @@ try {
     // 1. Demo Users (IDs match migration defaults)
     $demoUsers = [
         [1, 'admin', 'System Administrator', 'admin@questbank.edu.ph', $passHash, 'admin', 1, 1],
-        [10, 'Russel', 'Russel Gregorio', 'russel@questbank.edu.ph', $passHash, 'teacher', 1, 1],
+        [10, 'Russel', 'Russel Gregorio', 'russel@gmail.com', $passHash, 'admin', 1, 1],
         [11, 'Nicole', 'Ashley Nicole Gutierrez', 'nikol@gmail.com', $passHash, 'student', 1, 1],
         [12, 'prof_smith', 'Professor Smith', 'smith@questbank.edu.ph', $passHash, 'teacher', 1, 1],
         [13, 'lasjo', 'Jolas Lasjo', 'lasjo@gmail.com', $passHash, 'teacher', 1, 1],
