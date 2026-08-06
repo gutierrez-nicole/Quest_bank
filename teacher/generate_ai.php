@@ -309,8 +309,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
             try {
                 $stmtBatch = $pdo->prepare("
                     INSERT INTO ai_generation_batches 
-                    (generation_batch_id, teacher_id, selected_lesson_ids, selected_lesson_titles, selected_periods, selected_subject, semester, school_year, year_level, program, total_selected_words, estimated_tokens, ai_model, generation_duration, requested_question_count, generated_question_count, failed_question_count, warnings, batch_status, failed_chunk_count, affected_lesson_ids, failure_messages, chunk_generation_results, questions_per_lesson, questions_per_period, uncovered_lesson_ids, uncovered_periods, refill_attempt_count, refill_warnings, simulated_scenario, failed_chunk_index, refill_target_chunk_index, refill_target_lesson_ids, refill_target_periods, refill_generated_count, initial_questions_per_lesson, initial_questions_per_period, initial_uncovered_lesson_ids, initial_uncovered_periods, affected_periods, failed_chunk_indexes, failed_chunks, period_weighting_mode, requested_period_distribution, actual_period_distribution, requested_question_blueprint, actual_question_distribution, requested_difficulty_distribution, actual_difficulty_distribution, duplicate_count, replacement_attempt_count, duplicate_warnings)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (generation_batch_id, teacher_id, selected_lesson_ids, selected_lesson_titles, selected_periods, selected_subject, semester, school_year, year_level, program, total_selected_words, estimated_tokens, ai_model, generation_duration, requested_question_count, generated_question_count, failed_question_count, warnings, batch_status, failed_chunk_count, affected_lesson_ids, failure_messages, chunk_generation_results, questions_per_lesson, questions_per_period, uncovered_lesson_ids, uncovered_periods, refill_attempt_count, refill_warnings, simulated_scenario, failed_chunk_index, refill_target_chunk_index, refill_target_lesson_ids, refill_target_periods, refill_generated_count, initial_questions_per_lesson, initial_questions_per_period, initial_uncovered_lesson_ids, initial_uncovered_periods, affected_periods, failed_chunk_indexes, failed_chunks, period_weighting_mode, requested_period_distribution, actual_period_distribution, requested_question_blueprint, actual_question_distribution, requested_difficulty_distribution, actual_difficulty_distribution, duplicate_count, replacement_attempt_count, replacement_success_count, unresolved_duplicate_count, duplicate_warnings)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ");
                 $batchInsertedSuccess = $stmtBatch->execute([
                     $generation_batch_id,
@@ -364,6 +364,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
                     json_encode($result['metadata']['actual_difficulty_distribution'] ?? []),
                     intval($result['metadata']['duplicate_count'] ?? 0),
                     intval($result['metadata']['replacement_attempt_count'] ?? 0),
+                    intval($result['metadata']['replacement_success_count'] ?? 0),
+                    intval($result['metadata']['unresolved_duplicate_count'] ?? 0),
                     json_encode($result['metadata']['duplicate_warnings'] ?? [])
                 ]);
             } catch (Throwable $e) {
@@ -1126,6 +1128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                 <label class="text-xs font-bold text-stone-700">Difficulty Distribution Mode</label>
                                 <select name="difficulty_mode" id="difficulty_mode" onchange="toggleDifficultyControls()" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500">
                                     <option value="single" <?php echo (($_POST['difficulty_mode'] ?? 'single') === 'single') ? 'selected' : ''; ?>>Single Uniform Difficulty</option>
+                                    <option value="percentage" <?php echo (($_POST['difficulty_mode'] ?? '') === 'percentage') ? 'selected' : ''; ?>>Percentage Distribution (%)</option>
                                     <option value="fixed" <?php echo (($_POST['difficulty_mode'] ?? '') === 'fixed') ? 'selected' : ''; ?>>Custom Difficulty Distribution</option>
                                 </select>
                             </div>
@@ -1177,7 +1180,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                 <option value="fixed" <?php echo (($_POST['period_weighting_mode'] ?? '') === 'fixed') ? 'selected' : ''; ?>>Fixed Question Count</option>
                             </select>
 
-                            <div id="period_weights_inputs" class="grid grid-cols-3 gap-2 pt-2">
+                            <div id="period_weights_inputs" class="grid grid-cols-4 gap-2 pt-2">
+                                <div>
+                                    <label class="text-[10px] font-bold text-stone-500">General</label>
+                                    <input type="number" name="period_weights[general]" value="<?php echo htmlspecialchars($_POST['period_weights']['general'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
+                                </div>
                                 <div>
                                     <label class="text-[10px] font-bold text-stone-500">Prelim</label>
                                     <input type="number" name="period_weights[prelim]" value="<?php echo htmlspecialchars($_POST['period_weights']['prelim'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
@@ -1196,7 +1203,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                         <!-- Priority 2: Multi-Type Exam Blueprint -->
                         <div class="space-y-2 bg-stone-50 border border-stone-200 p-3 rounded-xl">
                             <label class="text-xs font-bold text-stone-700 block">Multi-Type Question Blueprint (Count Allocation)</label>
-                            <div class="grid grid-cols-3 gap-2">
+                            <div class="grid grid-cols-3 sm:grid-cols-4 gap-2">
                                 <div>
                                     <label class="text-[10px] font-bold text-stone-500">Multiple Choice</label>
                                     <input type="number" name="blueprint[multiple_choice]" value="<?php echo htmlspecialchars($_POST['blueprint']['multiple_choice'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
@@ -1208,6 +1215,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                 <div>
                                     <label class="text-[10px] font-bold text-stone-500">Identification</label>
                                     <input type="number" name="blueprint[identification]" value="<?php echo htmlspecialchars($_POST['blueprint']['identification'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-bold text-stone-500">Fill in the Blank</label>
+                                    <input type="number" name="blueprint[fill_blank]" value="<?php echo htmlspecialchars($_POST['blueprint']['fill_blank'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-bold text-stone-500">Matching Type</label>
+                                    <input type="number" name="blueprint[matching]" value="<?php echo htmlspecialchars($_POST['blueprint']['matching'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-bold text-stone-500">Problem Solving</label>
+                                    <input type="number" name="blueprint[problem_solving]" value="<?php echo htmlspecialchars($_POST['blueprint']['problem_solving'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-bold text-stone-500">Math Formula</label>
+                                    <input type="number" name="blueprint[math_formula]" value="<?php echo htmlspecialchars($_POST['blueprint']['math_formula'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
                                 </div>
                             </div>
                         </div>
@@ -1424,7 +1447,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                 <div class="bg-stone-800/60 p-2 rounded-xl border border-stone-700/50">
                                     <span class="text-[9px] font-bold text-stone-400 block uppercase">Deduplication</span>
                                     <span class="font-extrabold text-rose-300" data-testid="audit-dedup">
-                                        <?php echo intval($ai_meta_output['duplicate_count'] ?? 0); ?> Rejected / <?php echo intval($ai_meta_output['replacement_attempt_count'] ?? 0); ?> Replaced
+                                        <?php echo intval($ai_meta_output['duplicate_count'] ?? 0); ?> Rejected / <?php echo intval($ai_meta_output['replacement_attempt_count'] ?? 0); ?> Attempts / <?php echo intval($ai_meta_output['replacement_success_count'] ?? 0); ?> Replaced / <?php echo intval($ai_meta_output['unresolved_duplicate_count'] ?? 0); ?> Unresolved
                                     </span>
                                 </div>
                             </div>
@@ -1652,6 +1675,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
             document.getElementById('loading_overlay').classList.remove('hidden');
             document.getElementById('loading_overlay').classList.add('flex');
         }
+        function toggleDifficultyControls() {
+            var mode = document.getElementById('difficulty_mode').value;
+            var block = document.getElementById('custom_difficulty_block');
+            if (mode === 'single') {
+                block.style.display = 'none';
+            } else {
+                block.style.display = '';
+            }
+            // Update labels based on mode
+            var labels = block.querySelectorAll('label.text-\\[10px\\]');
+            var labelTexts = mode === 'percentage' ? ['Easy %', 'Medium %', 'Hard %'] : ['Easy Count', 'Medium Count', 'Hard Count'];
+            labels.forEach(function(lbl, idx) { if (labelTexts[idx]) lbl.textContent = labelTexts[idx]; });
+        }
+        function togglePeriodWeightControls() {
+            var mode = document.getElementById('period_weighting_mode').value;
+            var block = document.getElementById('period_weights_inputs');
+            if (mode === 'equal') {
+                block.style.display = 'none';
+            } else {
+                block.style.display = '';
+            }
+            // Update labels
+            var labels = block.querySelectorAll('label.text-\\[10px\\]');
+            var suffix = mode === 'percentage' ? ' %' : ' Count';
+            labels.forEach(function(lbl) {
+                var base = lbl.textContent.replace(/ [%]$/, '').replace(/ Count$/, '').trim();
+                lbl.textContent = base + suffix;
+            });
+        }
+        // Init on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            toggleDifficultyControls();
+            togglePeriodWeightControls();
+        });
     </script>
 </body>
 </html>

@@ -363,7 +363,7 @@ class GroqService {
 
         if ($mode === 'percentage') {
             $totalPct = array_sum($cleanWeights);
-            if (abs($totalPct - 100.0) > 0.5 && $totalPct > 0) {
+            if (abs($totalPct - 100.0) > 0.5 || $totalPct <= 0) {
                 throw new InvalidArgumentException("Period percentage distribution must total exactly 100% (got {$totalPct}%).");
             }
             $remainderList = [];
@@ -458,17 +458,22 @@ class GroqService {
             $fallbackDifficulty = 'medium';
         }
 
-        if ($mode === 'percentage' && !empty($distribution)) {
+        if ($mode === 'percentage') {
+            if (empty($distribution)) {
+                throw new InvalidArgumentException("Difficulty percentage distribution cannot be empty.");
+            }
             $clean = [];
             $sumPct = 0;
             foreach ($distribution as $d => $val) {
                 $dClean = strtolower(trim($d));
-                if (in_array($dClean, $supportedDiffs, true) && is_numeric($val) && $val >= 0) {
-                    $clean[$dClean] = floatval($val);
-                    $sumPct += floatval($val);
+                if (!in_array($dClean, $supportedDiffs, true)) continue;
+                if (!is_numeric($val) || floatval($val) < 0) {
+                    throw new InvalidArgumentException("Difficulty percentage value for '{$d}' must be a non-negative number.");
                 }
+                $clean[$dClean] = floatval($val);
+                $sumPct += floatval($val);
             }
-            if (abs($sumPct - 100.0) > 0.5 && $sumPct > 0) {
+            if (abs($sumPct - 100.0) > 0.5 || $sumPct <= 0) {
                 throw new InvalidArgumentException("Difficulty percentage distribution must total exactly 100% (got {$sumPct}%).");
             }
             $targetCounts = [];
@@ -1017,6 +1022,7 @@ class GroqService {
                     ];
 
                     $refillRes = self::sendRequest($refillPayload, $apiKey);
+                    $replacementAttemptCount++;
                     $acceptedThisRefill = 0;
 
                     if (isset($refillRes['data']['choices'][0]['message']['content'])) {
@@ -1045,7 +1051,6 @@ class GroqService {
                                 }
                                 if ($isDup) {
                                     $duplicateCount++;
-                                    $replacementAttemptCount++;
                                     continue;
                                 }
                                 $seenHashes[$normText] = true;
@@ -1108,6 +1113,7 @@ class GroqService {
                                     'target_chunk_lesson_ids' => $targetChunkLessonIds
                                 ];
                                 $acceptedThisRefill++;
+                                $replacementSuccessCount++;
                                 $refillGeneratedCount++;
                                 $chunkGenerationResults[$targetChunkIdx]['final_accepted_count']++;
                             }
@@ -1127,6 +1133,7 @@ class GroqService {
             $validQuestions = array_slice($validQuestions, 0, $numQuestions);
             $finalGeneratedCount = count($validQuestions);
             $shortfallCount = max(0, $numQuestions - $finalGeneratedCount);
+            $unresolvedDuplicateCount = max(0, $duplicateCount - $replacementSuccessCount);
 
             preg_match_all('/Lesson ID:\s*(\d+)/i', $lessonText, $allLMatches);
             $allSelectedLessonIds = !empty($allLMatches[1]) ? array_values(array_unique(array_map('intval', $allLMatches[1]))) : [];
@@ -1173,7 +1180,31 @@ class GroqService {
                 if ($cnt === 0) $uncoveredPeriods[] = $per;
             }
 
-            $batchStatus = ($shortfallCount > 0 || !empty($uncoveredLessonIds) || !empty($uncoveredPeriods)) ? 'incomplete' : 'completed';
+            $periodMismatch = false;
+            foreach ($periodWeightInfo['target_counts'] as $per => $targetCnt) {
+                if (($questionsPerPeriod[$per] ?? 0) !== $targetCnt) {
+                    $periodMismatch = true;
+                    break;
+                }
+            }
+
+            $blueprintMismatch = false;
+            foreach ($blueprintInfo['target_counts'] as $type => $targetCnt) {
+                if (($actualQuestionDistribution[$type] ?? 0) !== $targetCnt) {
+                    $blueprintMismatch = true;
+                    break;
+                }
+            }
+
+            $difficultyMismatch = false;
+            foreach ($difficultyInfo['target_counts'] as $diff => $targetCnt) {
+                if (($actualDifficultyDistribution[$diff] ?? 0) !== $targetCnt) {
+                    $difficultyMismatch = true;
+                    break;
+                }
+            }
+
+            $batchStatus = ($shortfallCount > 0 || !empty($uncoveredLessonIds) || !empty($uncoveredPeriods) || $periodMismatch || $blueprintMismatch) ? 'incomplete' : 'completed';
 
             if (!empty($uncoveredLessonIds)) {
                 $generationWarnings[] = "Selected lesson(s) with zero question coverage: " . implode(', ', $uncoveredLessonIds);
@@ -1183,6 +1214,15 @@ class GroqService {
             }
             if ($shortfallCount > 0) {
                 $generationWarnings[] = "Generation shortfall: Requested {$numQuestions} questions, but only {$finalGeneratedCount} unique valid items could be generated.";
+            }
+            if ($periodMismatch) {
+                $generationWarnings[] = "Period distribution mismatch: Requested allocations not fully satisfied.";
+            }
+            if ($blueprintMismatch) {
+                $generationWarnings[] = "Question blueprint mismatch: Requested question type allocations not fully satisfied.";
+            }
+            if ($difficultyMismatch) {
+                $generationWarnings[] = "Difficulty distribution mismatch: Guidance levels differed from generated difficulty distribution.";
             }
 
             $executionTime = round((microtime(true) - $startTime) * 1000, 2);
@@ -1247,6 +1287,8 @@ class GroqService {
                     'actual_difficulty_distribution' => $actualDifficultyDistribution,
                     'duplicate_count' => $duplicateCount,
                     'replacement_attempt_count' => $replacementAttemptCount,
+                    'replacement_success_count' => $replacementSuccessCount,
+                    'unresolved_duplicate_count' => $unresolvedDuplicateCount,
                     'duplicate_warnings' => $duplicateWarnings
                 ]
             ];

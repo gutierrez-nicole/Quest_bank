@@ -447,7 +447,10 @@ addColumn($pdo, 'ai_generation_batches', 'requested_difficulty_distribution', "L
 addColumn($pdo, 'ai_generation_batches', 'actual_difficulty_distribution', "LONGTEXT DEFAULT NULL");
 addColumn($pdo, 'ai_generation_batches', 'duplicate_count', "INT(11) DEFAULT 0");
 addColumn($pdo, 'ai_generation_batches', 'replacement_attempt_count', "INT(11) DEFAULT 0");
+addColumn($pdo, 'ai_generation_batches', 'replacement_success_count', "INT(11) DEFAULT 0");
+addColumn($pdo, 'ai_generation_batches', 'unresolved_duplicate_count', "INT(11) DEFAULT 0");
 addColumn($pdo, 'ai_generation_batches', 'duplicate_warnings', "LONGTEXT DEFAULT NULL");
+
 
 
 $defaultPassHash = password_hash('Password123!', PASSWORD_DEFAULT);
