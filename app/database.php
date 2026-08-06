@@ -36,3 +36,5 @@ function getDBConnection() {
 
     return $pdo;
 }
+
+$pdo = getDBConnection();
