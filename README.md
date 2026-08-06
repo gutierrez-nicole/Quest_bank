@@ -129,20 +129,20 @@ Access the application at `http://localhost:8000`.
 
 ---
 
-## 🧪 Testing & Automated E2E QA
+## 🧪 Testing & Regression Smoke Suite
 
-For detailed instructions on running automated tests, starting the safe test server, configuring environment variables, and verifying mock security rules, see [TESTING.md](TESTING.md).
+QuestBank includes a lightweight, zero-dependency PHP maintainer smoke test suite for validating core system functionality:
 
 ```bash
-# Safe Test Server Startup:
-npm run test:server
-
-# Automated Playwright E2E Suite:
-npm run test
-
-# Test-Mode Architecture Verification Script:
-php database/verify_epic22_test_architecture.php
+# Run Maintainer Smoke Test Suite:
+php tests/run_smoke_tests.php
 ```
+
+The smoke suite validates:
+- **Auth & Authorization:** Multi-role demo accounts, password hashing, and forced reset flags.
+- **Exam Scoring Engine:** Server-side answer evaluation and point calculations.
+- **Results Privacy:** Publication workflow boundaries and student data isolation.
+- **Database Migrations:** Migration execution safety and password preservation.
 
 ---
 

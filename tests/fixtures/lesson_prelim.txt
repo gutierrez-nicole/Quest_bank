@@ -1,4 +1,0 @@
-Structural Analysis Prelim Module
-FIXTURE_PRELIM_BEAM_MOMENT_CAPACITY
-This lesson covers preliminary beam moment capacity, shear stress analysis, and determinate truss calculations.
-Key equations: SSD = 0.278*V*t + V^2/(254*f), moment equilibrium, pin and roller reactions.

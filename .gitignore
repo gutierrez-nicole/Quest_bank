@@ -7,6 +7,14 @@
 vendor/
 node_modules/
 
+# Binary & archive release artifacts
+*.zip
+*.tar
+*.tar.gz
+*.sha256
+release-output/
+dist/
+
 # Test & trace artifacts
 playwright-report/
 test-results/
@@ -27,6 +35,7 @@ storage/tmp/*
 # Upload directories (keep placeholders & protection)
 teacher/uploads/*
 !teacher/uploads/.gitkeep
+!teacher/uploads/.htaccess
 
 uploads/*
 !uploads/.gitkeep

@@ -1,4 +1,0 @@
-Civil Engineering Fundamentals
-FIXTURE_GENERAL_CIVIL_ENG_FUNDAMENTALS
-This lesson covers fundamental civil engineering mechanics, vector statics, and material properties.
-Key concepts: stress, strain, elastic modulus, shear force, bending moment diagrams.
