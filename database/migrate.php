@@ -600,32 +600,32 @@ echo "  [=] Table audit_logs verified with nullable actor columns\n";
 $defaultPassHash = password_hash('Password123!', PASSWORD_DEFAULT);
 
 $stmtUsr = $pdo->prepare("
-    INSERT INTO users (id, username, fullname, email, password, role) 
-    VALUES (10, 'Russel', 'Russel Gregorio', 'russel@questbank.edu.ph', ?, 'teacher') 
-    ON DUPLICATE KEY UPDATE password = ?, fullname = 'Russel Gregorio', email = 'russel@questbank.edu.ph', role = 'teacher'
+    INSERT INTO users (id, username, fullname, email, password, role, force_password_reset) 
+    VALUES (10, 'Russel', 'Russel Gregorio', 'russel@questbank.edu.ph', ?, 'teacher', 1) 
+    ON DUPLICATE KEY UPDATE id = id
 ");
-$stmtUsr->execute([$defaultPassHash, $defaultPassHash]);
+$stmtUsr->execute([$defaultPassHash]);
 
 $stmtUsr = $pdo->prepare("
-    INSERT INTO users (id, username, fullname, email, password, role) 
-    VALUES (11, 'Nicole', 'Ashley Nicole Gutierrez', 'nikol@gmail.com', ?, 'student') 
-    ON DUPLICATE KEY UPDATE password = ?, fullname = 'Ashley Nicole Gutierrez', email = 'nikol@gmail.com'
+    INSERT INTO users (id, username, fullname, email, password, role, force_password_reset) 
+    VALUES (11, 'Nicole', 'Ashley Nicole Gutierrez', 'nikol@gmail.com', ?, 'student', 1) 
+    ON DUPLICATE KEY UPDATE id = id
 ");
-$stmtUsr->execute([$defaultPassHash, $defaultPassHash]);
+$stmtUsr->execute([$defaultPassHash]);
 
 $stmtSd = $pdo->prepare("
     INSERT INTO student_details (user_id, student_number, course, year_level, section) 
     VALUES (11, '23-2149184', 'BSCE', 4, 'A') 
-    ON DUPLICATE KEY UPDATE course = 'BSCE', year_level = 4, section = 'A'
+    ON DUPLICATE KEY UPDATE id = id
 ");
 $stmtSd->execute();
 
 $stmtUsr = $pdo->prepare("
-    INSERT INTO users (id, username, fullname, email, password, role) 
-    VALUES (12, 'lasjo', 'jolas', 'lasjo@gmail.com', ?, 'teacher') 
-    ON DUPLICATE KEY UPDATE password = ?, fullname = 'jolas', email = 'lasjo@gmail.com'
+    INSERT INTO users (id, username, fullname, email, password, role, force_password_reset) 
+    VALUES (12, 'lasjo', 'jolas', 'lasjo@gmail.com', ?, 'teacher', 1) 
+    ON DUPLICATE KEY UPDATE id = id
 ");
-$stmtUsr->execute([$defaultPassHash, $defaultPassHash]);
+$stmtUsr->execute([$defaultPassHash]);
 
 echo "\n--- Priority 5 Operational Schema ---\n";
 addColumn($pdo, 'users', 'force_password_reset', "TINYINT(1) NOT NULL DEFAULT 0");

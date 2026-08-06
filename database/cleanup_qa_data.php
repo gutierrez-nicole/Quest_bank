@@ -328,6 +328,13 @@ try {
         $stmtQ->execute($qd);
     }
 
+    $stmtExamQual = $pdo->prepare("
+        INSERT INTO exams (id, teacher_id, created_by, title, subject, specialization, difficulty, time_limit, total_items, passing_percentage, status, exam_category, is_demo, created_at)
+        VALUES (11, 12, 12, 'Civil Engineering Comprehensive Qualifying Exam', 'Structural Engineering', 'Structural Engineering', 'hard', 120, 3, 75.00, 'active', 'qualifying', 1, NOW())
+        ON DUPLICATE KEY UPDATE title = VALUES(title), exam_category = 'qualifying', is_demo = 1
+    ");
+    $stmtExamQual->execute();
+
     $stmtSubPublished = $pdo->prepare("
         INSERT INTO exam_submissions (id, exam_id, student_id, teacher_id, student_name, exam_title, upload_type, correct_count, wrong_count, total_score, total_possible_score, total_items, percentage, status, review_status, is_demo, created_at, published_at)
         VALUES (500, 10, 11, 12, 'Ashley Nicole Gutierrez', 'Civil Engineering Board Exam Review - Structural Design & Construction', 'online', 3, 0, 3.00, 3.00, 3, 100.00, 'Pass', 'published', 1, NOW(), NOW())
@@ -369,6 +376,17 @@ try {
         ");
         $stmtAnsP->execute($ap);
     }
+
+    $stmtSubFinalized = $pdo->prepare("
+        INSERT INTO exam_submissions (id, exam_id, student_id, teacher_id, student_name, exam_title, upload_type, correct_count, wrong_count, total_score, total_possible_score, total_items, percentage, status, review_status, is_demo, created_at)
+        VALUES (502, 11, 26, 12, 'P4 Test Student', 'Civil Engineering Comprehensive Qualifying Exam', 'online', 3, 0, 3.00, 3.00, 3, 100.00, 'Pass', 'finalized', 1, NOW())
+        ON DUPLICATE KEY UPDATE review_status = 'finalized', is_demo = 1
+    ");
+    $stmtSubFinalized->execute();
+
+    // Clean old activity logs & audit logs to maintain minimal clean state
+    $pdo->exec("DELETE FROM activity_logs WHERE id < (SELECT id FROM (SELECT id FROM activity_logs ORDER BY id DESC LIMIT 20) AS t ORDER BY id ASC LIMIT 1)");
+    $pdo->exec("DELETE FROM audit_logs WHERE id < (SELECT id FROM (SELECT id FROM audit_logs ORDER BY id DESC LIMIT 20) AS t ORDER BY id ASC LIMIT 1)");
 
     $pdo->commit();
     echo "  [✓] Successfully seeded approved professional demo dataset\n";

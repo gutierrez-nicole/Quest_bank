@@ -44,10 +44,13 @@ class BackupService {
         $filename = $prefix . date('Y-m-d_His') . '_' . bin2hex(random_bytes(3)) . '.sql';
         $filePath = $backupDir . '/' . $filename;
 
+        $verInfo = @include __DIR__ . '/../config/version.php';
+        $displayVer = is_array($verInfo) ? ($verInfo['display_version'] ?? 'v2.2-RC1') : 'v2.2-RC1';
+
         $sqlHeader = "-- QuestBank Database Dump & Backup\n";
         $sqlHeader .= "-- Generated: " . date('Y-m-d H:i:s') . "\n";
         $sqlHeader .= "-- Database: {$dbName}\n";
-        $sqlHeader .= "-- Application Version: 2.2-PROD\n\n";
+        $sqlHeader .= "-- Application Version: {$displayVer}\n\n";
         $sqlHeader .= "SET FOREIGN_KEY_CHECKS=0;\n";
         $sqlHeader .= "SET SQL_MODE = \"NO_AUTO_VALUE_ON_ZERO\";\n";
         $sqlHeader .= "START TRANSACTION;\n\n";
@@ -138,7 +141,7 @@ class BackupService {
                 'size_formatted' => self::formatBytes($size),
                 'sha256' => hash_file('sha256', $file),
                 'table_count' => $tableCount,
-                'version' => '2.2-PROD',
+                'version' => is_array($verInfo ?? null) ? ($verInfo['display_version'] ?? 'v2.2-RC1') : 'v2.2-RC1',
                 'is_safety' => (strpos($name, 'qb_safety_backup_') === 0),
                 'created_at' => date('Y-m-d H:i:s', $mtime),
                 'timestamp' => $mtime

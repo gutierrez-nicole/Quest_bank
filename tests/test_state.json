@@ -1,0 +1,10 @@
+{
+  "runId": "RUN_1785987963843",
+  "teacherId": 10,
+  "lessons": {
+    "general": 3173,
+    "prelim": 3174,
+    "midterm": 3175,
+    "finals": 3176
+  }
+}

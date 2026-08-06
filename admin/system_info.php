@@ -9,8 +9,11 @@ $mysqlVer = $pdo->query("SELECT VERSION()")->fetchColumn();
 $activeSy = AcademicStructureService::getActiveSchoolYear();
 $activeSem = AcademicStructureService::getActiveSemester();
 
-$gitHash = @exec('git rev-parse --short HEAD 2>/dev/null') ?: '2.2-PROD-RELEASE';
-$buildDate = date('Y-m-d H:i:s', filemtime(__DIR__ . '/../app/bootstrap.php'));
+$verInfo = @include __DIR__ . '/../app/config/version.php';
+$displayVer = is_array($verInfo) ? ($verInfo['display_version'] ?? 'v2.2-RC1') : 'v2.2-RC1';
+
+$gitHash = @exec('git rev-parse --short HEAD 2>/dev/null') ?: $displayVer;
+$buildDate = is_array($verInfo) ? ($verInfo['build_date'] ?? date('Y-m-d H:i:s')) : date('Y-m-d H:i:s');
 
 $modules = [
     ['name' => 'Priority 1: Core AI Question Generation', 'status' => 'Active & Certified', 'icon' => 'fa-robot', 'badge' => 'bg-success'],
@@ -47,7 +50,7 @@ $modules = [
                     <table class="table table-sm borderless mb-0">
                         <tbody>
                             <tr><th>Application Name:</th><td>QuestBank Capstone Portal</td></tr>
-                            <tr><th>System Version:</th><td><span class="badge bg-primary">v2.2-PROD</span></td></tr>
+                            <tr><th>System Version:</th><td><span class="badge bg-primary"><?= htmlspecialchars($displayVer) ?></span></td></tr>
                             <tr><th>Build Date:</th><td><?= $buildDate ?></td></tr>
                             <tr><th>Repository Commit:</th><td><code><?= htmlspecialchars($gitHash) ?></code></td></tr>
                             <tr><th>PHP Version:</th><td>v<?= PHP_VERSION ?></td></tr>

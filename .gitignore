@@ -3,41 +3,40 @@
 .env.*
 !.env.example
 
-# Production upload directories (preserve directory placeholders)
-teacher/uploads/*
-!teacher/uploads/.gitkeep
-uploads/*
-!uploads/.gitkeep
-!uploads/.htaccess
-
-# Database backups
-database/backups/
-*.sql.gz
-
 # Dependency & Vendor directories
 node_modules/
 vendor/
 
-# System & IDE files
+# Test & trace artifacts
+playwright-report/
+test-results/
+coverage/
+*.trace
+*.webm
+
+# Database backups (keep placeholders & protection)
+database/backups/*.sql
+!database/backups/.htaccess
+!database/backups/.gitkeep
+
+# Temporary storage (keep placeholders & protection)
+storage/tmp/*
+!storage/tmp/.htaccess
+!storage/tmp/.gitkeep
+
+# Upload directories (keep placeholders & protection)
+teacher/uploads/*
+!teacher/uploads/.gitkeep
+
+uploads/*
+!uploads/.gitkeep
+!uploads/.htaccess
+
+# System, IDE & Log files
+logs/
+*.log
+*.zip
 .DS_Store
 Thumbs.db
-.vscode/
 .idea/
-*.swp
-*.swo
-
-# Log files & caches
-*.log
-app.log
-.cache/
-
-# Test & trace artifacts
-test-results/
-playwright-report/
-.last-run.json
-tests/test_state.json
-
-
-# Local archive releases
-*.zip
-*.tar.gz
+.vscode/

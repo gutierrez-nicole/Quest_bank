@@ -16,8 +16,9 @@ require_once __DIR__ . '/services/ExamScoringService.php';
 require_once __DIR__ . '/services/LessonExtractionService.php';
 require_once __DIR__ . '/services/OcrService.php';
 require_once __DIR__ . '/services/ResultWorkflowService.php';
-require_once __DIR__ . '/services/SystemSettingsService.php';
-require_once __DIR__ . '/testing_bootstrap.php';
+if (file_exists(__DIR__ . '/testing_bootstrap.php')) {
+    require_once __DIR__ . '/testing_bootstrap.php';
+}
 
 // Enforce Maintenance Mode for Web Requests
 if (PHP_SAPI !== 'cli') {

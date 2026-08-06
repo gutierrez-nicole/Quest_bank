@@ -156,10 +156,12 @@ class SystemHealthService {
         ];
 
         // 11. Application Version Configured
+        $verInfo = @include __DIR__ . '/../config/version.php';
+        $displayVersion = is_array($verInfo) ? ($verInfo['display_version'] ?? 'v2.2-RC1') : 'v2.2-RC1';
         $diagnostics['application_version'] = [
             'status' => 'PASS',
             'label' => 'Application Version Configured',
-            'details' => 'QuestBank Portal Version: v2.2-PROD'
+            'details' => "QuestBank Portal Version: {$displayVersion}"
         ];
 
         return $diagnostics;
