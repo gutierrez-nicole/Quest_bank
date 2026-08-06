@@ -29,11 +29,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
 $diagnostics = SystemHealthService::getHealthDiagnostics();
 $storage = StorageManagementService::getStorageOverview();
-$checklist = SystemHealthService::getDeploymentChecklist();
-
-$pageGenTime = round((microtime(true) - $startTime) * 1000, 2);
-$memUsage = round(memory_get_usage() / 1024 / 1024, 2);
-$peakMemUsage = round(memory_get_peak_usage() / 1024 / 1024, 2);
+$checklistData = SystemHealthService::getDeploymentChecklist();
+$checklist = $checklistData['items'];
+$overallStatus = $checklistData['overall_status'];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -149,7 +147,12 @@ $peakMemUsage = round(memory_get_peak_usage() / 1024 / 1024, 2);
     <div class="row">
         <div class="col-md-12">
             <div class="card shadow-sm">
-                <div class="card-header bg-primary text-white"><h5 class="card-title mb-0"><i class="fas fa-clipboard-check me-2"></i>Final Deployment Readiness Checklist</h5></div>
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0"><i class="fas fa-clipboard-check me-2"></i>Final Deployment Readiness Checklist</h5>
+                    <span class="badge bg-<?= $overallStatus === 'PASS' ? 'success' : ($overallStatus === 'WARNING' ? 'warning' : 'danger') ?> fs-6">
+                        OVERALL STATUS: <?= $overallStatus ?>
+                    </span>
+                </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
                         <table class="table table-hover align-middle mb-0">

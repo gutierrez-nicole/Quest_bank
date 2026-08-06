@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../database.php';
 require_once __DIR__ . '/AuditLogService.php';
+require_once __DIR__ . '/SystemSettingsService.php';
 
 class BackupService {
 
@@ -14,12 +15,12 @@ class BackupService {
         return realpath($dir) ?: $dir;
     }
 
-    public static function createBackup($actorId = null) {
+    public static function createBackup($actorId = null, $prefix = 'qb_backup_') {
         $pdo = getDBConnection();
         $backupDir = self::getBackupDir();
         
         $dbName = $pdo->query("SELECT DATABASE()")->fetchColumn();
-        $filename = 'qb_backup_' . date('Y-m-d_His') . '_' . bin2hex(random_bytes(3)) . '.sql';
+        $filename = $prefix . date('Y-m-d_His') . '_' . bin2hex(random_bytes(3)) . '.sql';
         $filePath = $backupDir . '/' . $filename;
 
         $sqlHeader = "-- QuestBank Database Dump & Backup\n";
@@ -34,7 +35,6 @@ class BackupService {
         $sqlContent = $sqlHeader;
 
         foreach ($tables as $table) {
-            // Skip views or temporary tables
             $createTable = $pdo->query("SHOW CREATE TABLE `{$table}`")->fetch(PDO::FETCH_NUM);
             if (!isset($createTable[1])) continue;
 
@@ -44,7 +44,6 @@ class BackupService {
             $sqlContent .= "DROP TABLE IF EXISTS `{$table}`;\n";
             $sqlContent .= $createTable[1] . ";\n\n";
 
-            // Export table data
             $rows = $pdo->query("SELECT * FROM `{$table}`")->fetchAll(PDO::FETCH_ASSOC);
             if (!empty($rows)) {
                 $sqlContent .= "-- Dumping data for `{$table}`\n\n";
@@ -79,8 +78,10 @@ class BackupService {
             throw new Exception("Failed to write backup file to disk.");
         }
 
+        $sha256 = hash_file('sha256', $filePath);
+
         if ($actorId) {
-            AuditLogService::logAction($actorId, "Created Database Backup", "File: {$filename}, Size: " . self::formatBytes(filesize($filePath)));
+            AuditLogService::logAction($actorId, "Created Database Backup", "File: {$filename}, SHA-256: {$sha256}, Size: " . self::formatBytes(filesize($filePath)));
         }
 
         return [
@@ -88,13 +89,17 @@ class BackupService {
             'file_path' => $filePath,
             'size' => filesize($filePath),
             'size_formatted' => self::formatBytes(filesize($filePath)),
+            'sha256' => $sha256,
             'created_at' => date('Y-m-d H:i:s')
         ];
     }
 
     public static function listBackups() {
         $backupDir = self::getBackupDir();
-        $files = glob($backupDir . '/qb_backup_*.sql');
+        $files = array_merge(
+            glob($backupDir . '/qb_backup_*.sql'),
+            glob($backupDir . '/qb_safety_backup_*.sql')
+        );
         $backups = [];
 
         foreach ($files as $file) {
@@ -102,11 +107,18 @@ class BackupService {
             $size = filesize($file);
             $mtime = filemtime($file);
 
+            $head = file_get_contents($file, false, null, 0, 512);
+            $tableCount = substr_count(file_get_contents($file), "CREATE TABLE");
+
             $backups[] = [
                 'filename' => $name,
                 'file_path' => $file,
                 'size' => $size,
                 'size_formatted' => self::formatBytes($size),
+                'sha256' => hash_file('sha256', $file),
+                'table_count' => $tableCount,
+                'version' => '2.2-PROD',
+                'is_safety' => (strpos($name, 'qb_safety_backup_') === 0),
                 'created_at' => date('Y-m-d H:i:s', $mtime),
                 'timestamp' => $mtime
             ];
@@ -119,19 +131,22 @@ class BackupService {
         return $backups;
     }
 
-    public static function restoreBackup($filename, $actorId) {
+    public static function restoreBackup($filename, $actorId, $confirmationPhrase = 'RESTORE') {
         $backupDir = self::getBackupDir();
         $safeName = basename($filename);
         $filePath = $backupDir . '/' . $safeName;
+
+        if ($confirmationPhrase !== 'RESTORE') {
+            throw new InvalidArgumentException("Restore confirmation failed. Please type the explicit phrase 'RESTORE'.");
+        }
 
         if (!file_exists($filePath) || !is_readable($filePath)) {
             throw new InvalidArgumentException("Backup file '{$safeName}' not found or unreadable.");
         }
 
-        // Validate file integrity (must contain QuestBank header and valid SQL structure)
         $headerChunk = file_get_contents($filePath, false, null, 0, 1024);
         if (strpos($headerChunk, "-- QuestBank Database Dump") === false && strpos($headerChunk, "CREATE TABLE") === false) {
-            throw new InvalidArgumentException("Backup file integrity validation failed: Not a recognized QuestBank SQL backup.");
+            throw new InvalidArgumentException("Backup file integrity validation failed: File is not a recognized QuestBank SQL backup.");
         }
 
         $sql = file_get_contents($filePath);
@@ -139,18 +154,43 @@ class BackupService {
             throw new InvalidArgumentException("Backup file is empty.");
         }
 
+        $sourceSha256 = hash_file('sha256', $filePath);
+
+        // 1. Create a fresh Safety Backup of current DB before attempting restore
+        $safetyBackup = self::createBackup($actorId, 'qb_safety_backup_');
+        $safetyName = $safetyBackup['filename'];
+
+        // 2. Prevent concurrent restore executions using a lock file
+        $lockFile = sys_get_temp_dir() . '/qb_restore.lock';
+        if (file_exists($lockFile) && (time() - filemtime($lockFile)) < 300) {
+            throw new Exception("Restore in progress by another request. Please wait.");
+        }
+        touch($lockFile);
+
+        // 3. Put system into temporary maintenance mode
+        $prevMMode = SystemSettingsService::getSetting('maintenance_mode', 'off');
+        SystemSettingsService::setSetting('maintenance_mode', 'on');
+
         $pdo = getDBConnection();
         $pdo->exec("SET FOREIGN_KEY_CHECKS=0");
 
         try {
             $pdo->exec($sql);
-            $pdo->exec("SET FOREIGN_KEY_CHECKS=1");
 
-            AuditLogService::logAction($actorId, "Restored Database Backup", "Restored from file: {$safeName}");
-            return true;
+            SystemSettingsService::setSetting('maintenance_mode', $prevMMode);
+            AuditLogService::logAction($actorId, "Restored Database Backup", "Source File: {$safeName}, SHA-256: {$sourceSha256}, Safety Backup: {$safetyName}");
+            return [
+                'status' => 'success',
+                'source_file' => $safeName,
+                'source_sha256' => $sourceSha256,
+                'safety_backup' => $safetyName
+            ];
         } catch (Exception $e) {
+            AuditLogService::logAction($actorId, "Database Restore Failed", "Source File: {$safeName}, Error: " . $e->getMessage() . ", Safety Backup Available: {$safetyName}");
+            throw new Exception("Database restore failed: " . $e->getMessage() . ". Your data before restore was preserved in safety backup: '{$safetyName}'. You can restore from '{$safetyName}' to recover.");
+        } finally {
             $pdo->exec("SET FOREIGN_KEY_CHECKS=1");
-            throw new Exception("Database restore failed: " . $e->getMessage());
+            @unlink($lockFile);
         }
     }
 

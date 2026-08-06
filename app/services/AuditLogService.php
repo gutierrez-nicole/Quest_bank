@@ -6,15 +6,16 @@ class AuditLogService {
 
     public static function logAction($userId, $action, $details = '') {
         $pdo = getDBConnection();
-        $userId = intval($userId);
-        if ($userId <= 0) {
-            $userId = (int)$pdo->query("SELECT id FROM users LIMIT 1")->fetchColumn() ?: null;
-        } else {
+        $actorId = intval($userId);
+
+        if ($actorId > 0) {
             $stmtU = $pdo->prepare("SELECT id FROM users WHERE id = ?");
-            $stmtU->execute([$userId]);
+            $stmtU->execute([$actorId]);
             if (!$stmtU->fetchColumn()) {
-                $userId = (int)$pdo->query("SELECT id FROM users LIMIT 1")->fetchColumn() ?: null;
+                $actorId = null; // Do not substitute another real user
             }
+        } else {
+            $actorId = null; // System / CLI action
         }
 
         $action = trim($action);
@@ -25,7 +26,7 @@ class AuditLogService {
             INSERT INTO audit_logs (user_id, actor_id, action, details, entity_type, entity_id, ip_address, created_at)
             VALUES (?, ?, ?, ?, 'system', 0, ?, NOW())
         ");
-        return $stmt->execute([$userId, $userId, $action, $details, $ip]);
+        return $stmt->execute([$actorId, $actorId, $action, $details, $ip]);
     }
 
     public static function getLogs($filters = [], $limit = 100) {
@@ -45,7 +46,9 @@ class AuditLogService {
         }
 
         $stmt = $pdo->prepare("
-            SELECT a.*, COALESCE(a.details, a.reason) as details, COALESCE(u.fullname, u2.fullname) as actor_name, COALESCE(u.role, u2.role) as actor_role
+            SELECT a.*, COALESCE(a.details, a.reason) as details, 
+                   COALESCE(u.fullname, u2.fullname, 'System') as actor_name, 
+                   COALESCE(u.role, u2.role, 'system') as actor_role
             FROM audit_logs a
             LEFT JOIN users u ON a.user_id = u.id
             LEFT JOIN users u2 ON a.actor_id = u2.id

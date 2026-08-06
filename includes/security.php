@@ -35,11 +35,21 @@ function verifyCSRFToken($token = null) {
     return hash_equals($_SESSION['csrf_token'], $token);
 }
 
+function renderErrorPage(int $statusCode, string $safeMessage = ''): never {
+    http_response_code($statusCode);
+    $errorFile = __DIR__ . "/../errors/{$statusCode}.php";
+    if (file_exists($errorFile)) {
+        require $errorFile;
+    } else {
+        echo "<div style='font-family:sans-serif;text-align:center;padding:50px;'><h2>{$statusCode} Error</h2><p>" . htmlspecialchars($safeMessage ?: 'An error occurred.') . "</p></div>";
+    }
+    exit();
+}
+
 function validateCSRFToken() {
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!verifyCSRFToken()) {
-            http_response_code(403);
-            die("<div style='font-family:sans-serif;text-align:center;padding:50px;'><h2>403 Forbidden - Security Error</h2><p>Invalid or expired CSRF token. Please go back, refresh the page, and try again.</p></div>");
+            renderErrorPage(403, "Invalid or expired CSRF token.");
         }
     }
 }

@@ -19,8 +19,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $msgType = 'success';
         } elseif ($action === 'restore_backup') {
             $filename = $_POST['filename'] ?? '';
-            BackupService::restoreBackup($filename, $adminId);
-            $msg = "Database successfully restored from backup '{$filename}'.";
+            $phrase = $_POST['confirm_phrase'] ?? '';
+            $res = BackupService::restoreBackup($filename, $adminId, $phrase);
+            $msg = "Database successfully restored from backup '{$filename}'. Fresh safety backup '{$res['safety_backup']}' was generated before restore.";
             $msgType = 'success';
         } elseif ($action === 'delete_backup') {
             $filename = $_POST['filename'] ?? '';
@@ -140,20 +141,26 @@ $backups = BackupService::listBackups();
                                                 </div>
                                                 <div class="modal-body">
                                                     <p>Are you sure you want to restore the database from this backup file?</p>
-                                                    <div class="alert alert-light border small">
-                                                        <div><strong>Filename:</strong> <code><?= htmlspecialchars($b['filename']) ?></code></div>
+                                                    <div class="alert alert-light border small font-monospace">
+                                                        <div><strong>Filename:</strong> <?= htmlspecialchars($b['filename']) ?></div>
                                                         <div><strong>Created:</strong> <?= $b['created_at'] ?></div>
                                                         <div><strong>Size:</strong> <?= $b['size_formatted'] ?></div>
+                                                        <div><strong>SHA-256:</strong> <?= $b['sha256'] ?></div>
+                                                        <div><strong>Tables:</strong> <?= $b['table_count'] ?> tables</div>
                                                     </div>
-                                                    <p class="text-danger small mb-0"><strong>Warning:</strong> Restoring will overwrite existing database records with the backup snapshot.</p>
-                                                </div>
-                                                <div class="modal-footer">
-                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                    <p class="text-danger small mb-2"><strong>Warning:</strong> A safety backup will be created automatically before restoring.</p>
                                                     <form method="POST">
                                                         <?= csrfInputField() ?>
                                                         <input type="hidden" name="action" value="restore_backup">
                                                         <input type="hidden" name="filename" value="<?= htmlspecialchars($b['filename']) ?>">
-                                                        <button type="submit" class="btn btn-warning font-weight-bold">Confirm & Execute Restore</button>
+                                                        <div class="mb-3">
+                                                            <label class="form-label small fw-bold">Type "RESTORE" to confirm:</label>
+                                                            <input type="text" name="confirm_phrase" class="form-control form-control-sm" placeholder="RESTORE" required>
+                                                        </div>
+                                                        <div class="d-flex justify-content-end gap-2">
+                                                            <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                                                            <button type="submit" class="btn btn-warning btn-sm font-weight-bold">Confirm & Execute Restore</button>
+                                                        </div>
                                                     </form>
                                                 </div>
                                             </div>

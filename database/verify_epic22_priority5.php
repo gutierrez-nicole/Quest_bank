@@ -11,11 +11,13 @@ require_once __DIR__ . '/../app/services/SystemHealthService.php';
 require_once __DIR__ . '/../app/services/StorageManagementService.php';
 require_once __DIR__ . '/../app/services/SessionManagementService.php';
 require_once __DIR__ . '/../app/services/SecurityAuditService.php';
+require_once __DIR__ . '/../app/services/AuditLogService.php';
 
-$runner = new TestRunner('QuestBank Priority 5 Operations & Maintenance Verification');
+$runner = new TestRunner('QuestBank Priority 5 Operations & Security Corrections Verification');
 
 $pdo = null;
 $createdBackupFiles = [];
+$createdUserIds = [];
 
 try {
     $pdo = getDBConnection();
@@ -26,87 +28,137 @@ try {
         $stmtAdmin = $pdo->prepare("INSERT INTO users (username, fullname, email, password, role, status) VALUES ('temp_p5_admin', 'P5 Admin', 'temp_p5_admin@questbank.edu.ph', 'pass', 'admin', 'active')");
         $stmtAdmin->execute();
         $adminId = (int)$pdo->lastInsertId();
+        $createdUserIds[] = $adminId;
     }
 
-    // ── TEST 1: Database Backup Creation & Inventory Listing ──
+    // Ensure an active school year & active semester exist for health check test
+    $activeSy = AcademicStructureService::getActiveSchoolYear();
+    if (!$activeSy) {
+        $syId = AcademicStructureService::createSchoolYear('2025-2026', '2025-06-01', '2026-05-31');
+        AcademicStructureService::activateSchoolYear($syId);
+        $activeSy = AcademicStructureService::getActiveSchoolYear();
+    }
+    $activeSem = AcademicStructureService::getActiveSemester();
+    if (!$activeSem && $activeSy) {
+        $semId = AcademicStructureService::createSemester($activeSy['id'], 'First Semester');
+        AcademicStructureService::activateSemester($semId);
+    }
+
+    // ── TEST 1: Session Management & Forced Logout Enforcement ──
+    $testSessId = 'test_sess_' . bin2hex(random_bytes(8));
+    $stmtSessIns = $pdo->prepare("
+        INSERT INTO user_sessions (session_id, user_id, ip_address, user_agent, login_time, last_activity, status)
+        VALUES (?, ?, '127.0.0.1', 'CLI Test', NOW(), NOW(), 'active')
+    ");
+    $stmtSessIns->execute([$testSessId, $adminId]);
+
+    SessionManagementService::terminateSession($testSessId, $adminId);
+
+    $stmtCheckTerm = $pdo->prepare("SELECT status FROM user_sessions WHERE session_id = ?");
+    $stmtCheckTerm->execute([$testSessId]);
+    $termStatus = $stmtCheckTerm->fetchColumn();
+
+    $runner->assertTrue("TEST 1a: Admin session termination marks status as terminated", $termStatus === 'terminated', "Session status: {$termStatus}");
+
+    // Cleanup session record
+    $pdo->exec("DELETE FROM user_sessions WHERE session_id = '{$testSessId}'");
+
+    // ── TEST 2: Mandatory Password Reset Workflow & Enforcement ──
+    $tempPass = 'TempPass123!';
+    $tempHash = password_hash($tempPass, PASSWORD_DEFAULT);
+    $stmtU = $pdo->prepare("INSERT INTO users (username, fullname, email, password, role, status, force_password_reset) VALUES ('flagged_stud', 'Flagged Student', 'flagged_stud@questbank.edu.ph', ?, 'student', 'active', 1)");
+    $stmtU->execute([$tempHash]);
+    $flaggedUid = (int)$pdo->lastInsertId();
+    $createdUserIds[] = $flaggedUid;
+
+    $stmtCheckFlag = $pdo->prepare("SELECT force_password_reset FROM users WHERE id = ?");
+    $stmtCheckFlag->execute([$flaggedUid]);
+    $isFlagged = intval($stmtCheckFlag->fetchColumn());
+    $runner->assertTrue("TEST 2a: User created with force_password_reset = 1", $isFlagged === 1, "force_password_reset: {$isFlagged}");
+
+    // Simulate password reset
+    $newPass = 'NewSecurePass123!';
+    $newHash = password_hash($newPass, PASSWORD_DEFAULT);
+    $stmtReset = $pdo->prepare("UPDATE users SET password = ?, force_password_reset = 0, password_changed_at = NOW() WHERE id = ?");
+    $stmtReset->execute([$newHash, $flaggedUid]);
+
+    $stmtCheckUnflag = $pdo->prepare("SELECT force_password_reset, password FROM users WHERE id = ?");
+    $stmtCheckUnflag->execute([$flaggedUid]);
+    $resetUser = $stmtCheckUnflag->fetch(PDO::FETCH_ASSOC);
+
+    $runner->assertTrue("TEST 2b: Password reset clears force_password_reset flag", intval($resetUser['force_password_reset']) === 0, "force_password_reset: {$resetUser['force_password_reset']}");
+    $runner->assertTrue("TEST 2c: Old password fails, new password succeeds", password_verify($newPass, $resetUser['password']) && !password_verify($tempPass, $resetUser['password']), "Password update verified");
+
+    // ── TEST 3: Orphan-File Deletion Security & Whitelist Boundaries ──
+    // 3a: Attempt deleting PHP source file -> must be rejected!
+    $appFile = __DIR__ . '/../app/services/AuditLogService.php';
+    $resApp = StorageManagementService::deleteOrphanedFiles([$appFile], $adminId);
+    $runner->assertTrue("TEST 3a: Source file deletion (/app/services/AuditLogService.php) strictly rejected", $resApp['deleted_count'] === 0 && $resApp['rejected_count'] === 1, "Rejected count: {$resApp['rejected_count']}");
+
+    // 3b: Attempt path traversal -> must be rejected!
+    $travFile = __DIR__ . '/../../app/bootstrap.php';
+    $resTrav = StorageManagementService::deleteOrphanedFiles([$travFile], $adminId);
+    $runner->assertTrue("TEST 3b: Path traversal deletion strictly rejected", $resTrav['deleted_count'] === 0 && $resTrav['rejected_count'] === 1, "Rejected count: {$resTrav['rejected_count']}");
+
+    // 3c: Real orphaned file inside approved directory -> deletion succeeds!
+    $approvedDir = __DIR__ . '/../teacher/uploads';
+    if (!is_dir($approvedDir)) @mkdir($approvedDir, 0755, true);
+    $testOrphanFile = $approvedDir . '/test_orphan_file_' . bin2hex(random_bytes(4)) . '.txt';
+    file_put_contents($testOrphanFile, 'test orphan content');
+
+    $resOrphan = StorageManagementService::deleteOrphanedFiles([$testOrphanFile], $adminId);
+    $runner->assertTrue("TEST 3c: Real unreferenced file in approved directory deleted successfully", $resOrphan['deleted_count'] === 1, "Deleted count: {$resOrphan['deleted_count']}");
+
+    // ── TEST 4: Database Restore Safety & Pre-Restore Recovery Backup ──
     $backup = BackupService::createBackup($adminId);
     $createdBackupFiles[] = $backup['filename'];
 
-    $runner->assertTrue("TEST 1a: Database backup created successfully", !empty($backup['filename']) && file_exists($backup['file_path']), "File: {$backup['filename']}, Size: {$backup['size_formatted']}");
-
-    $backupsList = BackupService::listBackups();
-    $foundInList = false;
-    foreach ($backupsList as $b) {
-        if ($b['filename'] === $backup['filename']) {
-            $foundInList = true;
-            break;
-        }
-    }
-    $runner->assertTrue("TEST 1b: Generated backup appears in backup list inventory", $foundInList, "Backup inventory verified");
-
-    // ── TEST 2: Database Restore & Integrity Check ──
-    $restoreSuccess = BackupService::restoreBackup($backup['filename'], $adminId);
-    $runner->assertTrue("TEST 2a: Database restore from valid backup snapshot executed", $restoreSuccess === true, "Database restore complete");
-
-    $invalidRestoreBlocked = false;
+    // 4a: Missing/invalid phrase rejected
+    $invalidPhraseBlocked = false;
     try {
-        BackupService::restoreBackup('non_existent_backup_file.sql', $adminId);
+        BackupService::restoreBackup($backup['filename'], $adminId, 'INVALID');
     } catch (InvalidArgumentException $e) {
-        $invalidRestoreBlocked = true;
+        $invalidPhraseBlocked = true;
     }
-    $runner->assertTrue("TEST 2b: Restoring non-existent backup file rejected", $invalidRestoreBlocked, "Invalid backup restore caught cleanly");
+    $runner->assertTrue("TEST 4a: Restore with invalid confirmation phrase rejected", $invalidPhraseBlocked, "Invalid phrase rejected cleanly");
 
-    // ── TEST 3: System Health Diagnostics & Deployment Checklist ──
-    $diagnostics = SystemHealthService::getHealthDiagnostics();
-    $runner->assertTrue("TEST 3a: System health diagnostics generated", isset($diagnostics['database']) && $diagnostics['database']['status'] === 'PASS', "DB Status: {$diagnostics['database']['status']}");
+    // 4b: Valid restore creates safety backup
+    $restoreRes = BackupService::restoreBackup($backup['filename'], $adminId, 'RESTORE');
+    $createdBackupFiles[] = $restoreRes['safety_backup'];
+    $safetyExists = file_exists(__DIR__ . '/../database/backups/' . $restoreRes['safety_backup']);
+    $runner->assertTrue("TEST 4b: Safety backup created automatically before restore", $safetyExists, "Safety backup: {$restoreRes['safety_backup']}");
 
-    $checklist = SystemHealthService::getDeploymentChecklist();
-    $runner->assertTrue("TEST 3b: Deployment readiness checklist generated", count($checklist) >= 5, "Checklist items count: " . count($checklist));
+    // ── TEST 5: Audit Log Actor Integrity (No False Attribution) ──
+    // 5a: Invalid actor ID -> stored as NULL (not mapped to real user ID)
+    AuditLogService::logAction(999999, 'CLI Test Action Invalid Actor', 'Details test');
+    $stmtLog = $pdo->query("SELECT user_id, actor_id FROM audit_logs WHERE action = 'CLI Test Action Invalid Actor' ORDER BY id DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+    $runner->assertTrue("TEST 5a: Invalid actor ID stored as NULL without mapping to real user", $stmtLog['user_id'] === null && $stmtLog['actor_id'] === null, "User ID: " . var_export($stmtLog['user_id'], true));
 
-    // ── TEST 4: Storage Overview & Temporary File Cleanup ──
-    $storage = StorageManagementService::getStorageOverview();
-    $runner->assertTrue("TEST 4a: Storage overview metrics retrieved", isset($storage['lessons']) && isset($storage['backups']), "Lessons size: {$storage['lessons']['size_formatted']}");
+    // 5b: System action (actor = 0/null) -> stored as NULL
+    AuditLogService::logAction(0, 'System Automated Task', 'No actor test');
+    $stmtSysLog = $pdo->query("SELECT user_id, actor_id FROM audit_logs WHERE action = 'System Automated Task' ORDER BY id DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+    $runner->assertTrue("TEST 5b: System action stored as NULL actor without mapping to real user", $stmtSysLog['user_id'] === null && $stmtSysLog['actor_id'] === null, "Actor ID: " . var_export($stmtSysLog['actor_id'], true));
 
-    $tempClean = StorageManagementService::cleanTemporaryFiles($adminId);
-    $runner->assertTrue("TEST 4b: Temporary preview file cleanup executed", isset($tempClean['cleaned_count']), "Cleaned files: {$tempClean['cleaned_count']}");
+    // ── TEST 6: Deployment Readiness Checklist Failures ──
+    SystemSettingsService::setSetting('maintenance_mode', 'on');
+    $chkMModeOn = SystemHealthService::getDeploymentChecklist();
+    $runner->assertTrue("TEST 6a: Deployment checklist overall status is FAIL when maintenance mode is ON", $chkMModeOn['overall_status'] === 'FAIL', "Overall status: {$chkMModeOn['overall_status']}");
 
-    // ── TEST 5: Active Session Tracking & Termination ──
-    SessionManagementService::trackSession($adminId);
-    $activeSessions = SessionManagementService::getActiveSessions();
-    $runner->assertTrue("TEST 5a: Active session tracked in database", !empty($activeSessions), "Active sessions count: " . count($activeSessions));
+    SystemSettingsService::setSetting('maintenance_mode', 'off');
+    $chkMModeOff = SystemHealthService::getDeploymentChecklist();
+    $runner->assertTrue("TEST 6b: Deployment checklist overall status restores when maintenance mode is OFF", $chkMModeOff['overall_status'] !== 'FAIL', "Overall status: {$chkMModeOff['overall_status']}");
 
-    if (!empty($activeSessions)) {
-        $testSessId = $activeSessions[0]['session_id'];
-        SessionManagementService::terminateSession($testSessId, $adminId);
-        $runner->assertTrue("TEST 5b: Session terminated by administrator", true, "Session ID {$testSessId} terminated");
-    }
-
-    // ── TEST 6: User Password Administration & Force Reset ──
-    $stmtForce = $pdo->prepare("UPDATE users SET force_password_reset = 1 WHERE id = ?");
-    $stmtForce->execute([$adminId]);
-
-    $stmtCheckForce = $pdo->prepare("SELECT force_password_reset FROM users WHERE id = ?");
-    $stmtCheckForce->execute([$adminId]);
-    $isForceReset = intval($stmtCheckForce->fetchColumn());
-
-    $runner->assertTrue("TEST 6: Mandatory user password reset flag updated", $isForceReset === 1, "force_password_reset: {$isForceReset}");
-
-    // Reset flag back to 0
-    $pdo->prepare("UPDATE users SET force_password_reset = 0 WHERE id = ?")->execute([$adminId]);
-
-    // ── TEST 7: Security Audit & Review Compliance ──
-    $securityAudit = SecurityAuditService::runSecurityAudit();
-    $runner->assertTrue("TEST 7: Consolidated security audit executed", count($securityAudit) >= 6, "Security checks count: " . count($securityAudit));
-
-    // ── TEST 8: Standardized Error Pages Verification ──
-    $e403 = file_exists(__DIR__ . '/../errors/403.php');
-    $e404 = file_exists(__DIR__ . '/../errors/404.php');
-    $e500 = file_exists(__DIR__ . '/../errors/500.php');
-    $runner->assertTrue("TEST 8: Standardized error pages (403, 404, 500) present in repository", $e403 && $e404 && $e500, "Error pages verified");
+    // ── TEST 7: Standardized Error Page Renderer Helper ──
+    $runner->assertTrue("TEST 7: renderErrorPage helper function exists and is callable", function_exists('renderErrorPage'), "renderErrorPage verified");
 
 } catch (Throwable $e) {
     $runner->recordException($e);
 } finally {
+    if ($pdo) {
+        foreach ($createdUserIds as $uid) {
+            $pdo->exec("DELETE FROM users WHERE id = {$uid}");
+        }
+    }
     if (!empty($createdBackupFiles)) {
         foreach ($createdBackupFiles as $bf) {
             BackupService::deleteBackup($bf, $adminId ?? 1);

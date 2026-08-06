@@ -129,31 +129,98 @@ class StorageManagementService {
     }
 
     public static function deleteOrphanedFiles($filePaths, $actorId = null) {
+        $pdo = getDBConnection();
+
+        $approvedRoots = [
+            realpath(__DIR__ . '/../../teacher/uploads'),
+            realpath(__DIR__ . '/../../uploads/submissions'),
+            realpath(sys_get_temp_dir())
+        ];
+        $approvedRoots = array_values(array_filter($approvedRoots));
+
+        $requestedCount = count($filePaths);
         $deletedCount = 0;
+        $rejectedCount = 0;
         $freedBytes = 0;
+        $rejections = [];
 
         foreach ($filePaths as $path) {
+            if (is_link($path)) {
+                $rejectedCount++;
+                $rejections[] = ['file' => $path, 'reason' => 'Symlinks are strictly rejected for security reasons.'];
+                continue;
+            }
+
             $realPath = realpath($path);
-            if ($realPath && is_file($realPath)) {
-                // Security check: ensure path is inside uploads directory
-                $uploadsRoot = realpath(__DIR__ . '/../..');
-                if (strpos($realPath, $uploadsRoot) === 0) {
-                    $freedBytes += filesize($realPath);
-                    if (@unlink($realPath)) {
-                        $deletedCount++;
-                    }
+            if (!$realPath || !file_exists($realPath)) {
+                $rejectedCount++;
+                $rejections[] = ['file' => $path, 'reason' => 'File does not exist or invalid path.'];
+                continue;
+            }
+
+            if (is_dir($realPath)) {
+                $rejectedCount++;
+                $rejections[] = ['file' => $path, 'reason' => 'Directories cannot be deleted.'];
+                continue;
+            }
+
+            $ext = strtolower(pathinfo($realPath, PATHINFO_EXTENSION));
+            $blacklistedExts = ['php', 'sql', 'env', 'json', 'htaccess', 'sh', 'exe', 'bat', 'cmd', 'py', 'pl'];
+            if (in_array($ext, $blacklistedExts, true) || strpos(basename($realPath), '.') === 0) {
+                $rejectedCount++;
+                $rejections[] = ['file' => $path, 'reason' => "Protected system/source file type '.{$ext}' cannot be deleted."];
+                continue;
+            }
+
+            $inApprovedRoot = false;
+            foreach ($approvedRoots as $root) {
+                if ($root && (strpos($realPath, $root . DIRECTORY_SEPARATOR) === 0 || $realPath === $root)) {
+                    $inApprovedRoot = true;
+                    break;
                 }
+            }
+            if (!$inApprovedRoot) {
+                $rejectedCount++;
+                $rejections[] = ['file' => $path, 'reason' => 'File path is outside approved upload directories.'];
+                continue;
+            }
+
+            $base = basename($realPath);
+            $stmtL = $pdo->prepare("SELECT COUNT(*) FROM lesson_materials WHERE stored_filename = ? OR original_filename = ?");
+            $stmtL->execute([$base, $base]);
+            $isLessonRef = ($stmtL->fetchColumn() > 0);
+
+            $stmtS = $pdo->prepare("SELECT COUNT(*) FROM exam_submissions WHERE file_path LIKE ?");
+            $stmtS->execute(['%' . $base]);
+            $isSubRef = ($stmtS->fetchColumn() > 0);
+
+            if ($isLessonRef || $isSubRef) {
+                $rejectedCount++;
+                $rejections[] = ['file' => $path, 'reason' => 'File is referenced in active database records and cannot be deleted.'];
+                continue;
+            }
+
+            $fileSize = filesize($realPath);
+            if (@unlink($realPath)) {
+                $deletedCount++;
+                $freedBytes += $fileSize;
+            } else {
+                $rejectedCount++;
+                $rejections[] = ['file' => $path, 'reason' => 'Permission denied while deleting file from disk.'];
             }
         }
 
         if ($actorId && $deletedCount > 0) {
-            AuditLogService::logAction($actorId, "Deleted Orphaned Files", "Removed {$deletedCount} unreferenced files, freed " . self::formatBytes($freedBytes));
+            AuditLogService::logAction($actorId, "Deleted Orphaned Files", "Requested: {$requestedCount}, Deleted: {$deletedCount}, Rejected: {$rejectedCount}, Freed: " . self::formatBytes($freedBytes));
         }
 
         return [
+            'requested_count' => $requestedCount,
             'deleted_count' => $deletedCount,
+            'rejected_count' => $rejectedCount,
             'freed_bytes' => $freedBytes,
-            'freed_formatted' => self::formatBytes($freedBytes)
+            'freed_formatted' => self::formatBytes($freedBytes),
+            'rejections' => $rejections
         ];
     }
 

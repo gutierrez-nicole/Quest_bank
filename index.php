@@ -12,24 +12,40 @@ try {
     $maintenanceMode = false;
 }
 
+if (isset($_GET['action']) && $_GET['action'] === 'logout') {
+    SessionManagementService::destroyCurrentSession('logged_out');
+    header("Location: index.php");
+    exit();
+}
+
+$error_msg = "";
+$success_msg = "";
+$active_form = "login";
+
+if (isset($_GET['msg']) && $_GET['msg'] === 'session_ended') {
+    $error_msg = "Session ended by administrator. Please log in again.";
+}
+
 if (isset($_SESSION['user_id']) && isset($_SESSION['role'])) {
     if ($maintenanceMode && $_SESSION['role'] !== 'admin') {
-        // Log out non-admin users if maintenance mode was turned on while logged in
-        session_unset();
-        session_destroy();
+        SessionManagementService::destroyCurrentSession('terminated');
         header("Location: index.php");
         exit();
     }
+
+    $userId = $_SESSION['user_id'];
+    $stmtCheckReset = $pdo->prepare("SELECT force_password_reset FROM users WHERE id = ?");
+    $stmtCheckReset->execute([$userId]);
+    if (intval($stmtCheckReset->fetchColumn()) === 1) {
+        header("Location: force_password_reset.php");
+        exit();
+    }
+
     if ($_SESSION['role'] === 'student') header("Location: student/dashboard.php");
     elseif ($_SESSION['role'] === 'teacher') header("Location: teacher/dashboard.php");
     elseif ($_SESSION['role'] === 'admin') header("Location: admin/dashboard.php");
     exit();
 }
-
-$pdo = getDBConnection();
-$error_msg = "";
-$success_msg = "";
-$active_form = "login";
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     validateCSRFToken();
@@ -51,7 +67,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['user_id'] = $user['id'];
                     $_SESSION['username'] = $user['username'];
                     $_SESSION['role'] = $user['role'];
-                    
+                    SessionManagementService::trackSession($user['id']);
+
+                    if (intval($user['force_password_reset']) === 1) {
+                        header("Location: force_password_reset.php");
+                        exit();
+                    }
+
                     if ($user['role'] === 'student') header("Location: student/dashboard.php");
                     elseif ($user['role'] === 'teacher') header("Location: teacher/dashboard.php");
                     elseif ($user['role'] === 'admin') header("Location: admin/dashboard.php");

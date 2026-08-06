@@ -588,9 +588,12 @@ $pdo->exec("
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 ");
 addColumn($pdo, 'audit_logs', 'user_id', "INT(11) DEFAULT NULL");
+addColumn($pdo, 'audit_logs', 'actor_id', "INT(11) DEFAULT NULL");
 addColumn($pdo, 'audit_logs', 'details', "TEXT DEFAULT NULL");
 addColumn($pdo, 'audit_logs', 'ip_address', "VARCHAR(45) DEFAULT NULL");
-echo "  [=] Table audit_logs verified\n";
+$pdo->exec("ALTER TABLE `audit_logs` MODIFY COLUMN `user_id` INT(11) NULL");
+$pdo->exec("ALTER TABLE `audit_logs` MODIFY COLUMN `actor_id` INT(11) NULL");
+echo "  [=] Table audit_logs verified with nullable actor columns\n";
 
 
 

@@ -23,7 +23,60 @@ class SessionManagementService {
                 last_activity = NOW(),
                 status = 'active'
         ");
-        return $stmt->execute([$sessId, $userId, $ip, $ua]);
+        return $stmt->execute([$sessId, intval($userId), $ip, $ua]);
+    }
+
+    public static function validateCurrentSession($userId) {
+        if (session_status() !== PHP_SESSION_ACTIVE) return false;
+
+        $sessId = session_id();
+        if (empty($sessId)) return false;
+
+        $pdo = getDBConnection();
+        $stmt = $pdo->prepare("SELECT user_id, status, last_activity FROM user_sessions WHERE session_id = ?");
+        $stmt->execute([$sessId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$row) {
+            // Track newly established session if missing
+            self::trackSession($userId);
+            return true;
+        }
+
+        if ($row['status'] !== 'active' || intval($row['user_id']) !== intval($userId)) {
+            return false; // Session terminated, logged out, or user mismatch!
+        }
+
+        // Throttled last_activity update (once every 120 seconds)
+        $lastActTime = strtotime($row['last_activity']);
+        if ((time() - $lastActTime) > 120) {
+            $stmtUpd = $pdo->prepare("UPDATE user_sessions SET last_activity = NOW() WHERE session_id = ?");
+            $stmtUpd->execute([$sessId]);
+        }
+
+        return true;
+    }
+
+    public static function destroyCurrentSession($status = 'logged_out') {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            $sessId = session_id();
+            if (!empty($sessId)) {
+                try {
+                    $pdo = getDBConnection();
+                    $stmt = $pdo->prepare("UPDATE user_sessions SET status = ? WHERE session_id = ?");
+                    $stmt->execute([$status, $sessId]);
+                } catch (Exception $e) {}
+            }
+            $_SESSION = [];
+            if (ini_get("session.use_cookies")) {
+                $params = session_get_cookie_params();
+                setcookie(session_name(), '', time() - 42000,
+                    $params["path"], $params["domain"],
+                    $params["secure"], $params["httponly"]
+                );
+            }
+            session_destroy();
+        }
     }
 
     public static function getActiveSessions() {
