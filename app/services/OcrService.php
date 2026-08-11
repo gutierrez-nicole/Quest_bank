@@ -245,8 +245,19 @@ class OcrService {
         }
 
         
-        $tesseractPath = exec('which tesseract 2>/dev/null');
-        if (!empty($tesseractPath) && is_executable($tesseractPath)) {
+        $tesseractPath = '';
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            $winWhere = @exec('where tesseract 2>NUL');
+            if (!empty($winWhere) && file_exists(trim($winWhere))) {
+                $tesseractPath = trim($winWhere);
+            } elseif (file_exists('C:\\Program Files\\Tesseract-OCR\\tesseract.exe')) {
+                $tesseractPath = 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe';
+            }
+        } else {
+            $tesseractPath = @exec('which tesseract 2>/dev/null');
+        }
+
+        if (!empty($tesseractPath) && (is_executable($tesseractPath) || file_exists($tesseractPath))) {
             $tmpOutputBase = tempnam(sys_get_temp_dir(), 'ocr_tsv_');
             $command = sprintf(
                 "%s %s %s --oem 1 -l eng tsv 2>/dev/null",
@@ -276,6 +287,18 @@ class OcrService {
         }
 
         
+        $groqRes = self::processImageWithGroqVision($filePath, $fileExt);
+        if ($groqRes['success'] && !empty(trim($groqRes['text']))) {
+            return [
+                'text' => $groqRes['text'],
+                'confidence' => 88.50,
+                'status' => 'completed',
+                'suggested_manual_review' => false,
+                'error' => null
+            ];
+        }
+
+        
         return [
             'text' => '',
             'confidence' => 0.00,
@@ -283,6 +306,73 @@ class OcrService {
             'suggested_manual_review' => true,
             'error' => 'Unclear scan or OCR engine unavailable for automatic image parsing. Teacher manual review required.'
         ];
+    }
+
+    private static function processImageWithGroqVision($filePath, $fileExt) {
+        $apiKey = defined('GROQ_API_KEY') ? GROQ_API_KEY : getenv('GROQ_API_KEY');
+        if (empty($apiKey) || !file_exists($filePath)) {
+            return ['success' => false, 'text' => ''];
+        }
+
+        try {
+            $imageData = base64_encode(file_get_contents($filePath));
+            $mimeType = ($fileExt === 'png') ? 'image/png' : 'image/jpeg';
+            $endpoint = defined('GROQ_API_ENDPOINT') ? GROQ_API_ENDPOINT : 'https://api.groq.com/openai/v1/chat/completions';
+
+            $payload = [
+                'model' => 'llama-3.2-11b-vision-preview',
+                'messages' => [
+                    [
+                        'role' => 'user',
+                        'content' => [
+                            [
+                                'type' => 'text',
+                                'text' => 'You are an OCR scanner for an examination answer sheet. Extract all question numbers and student answers line by line (e.g. 1. A, 2. B, 3. C). Return raw extracted text.'
+                            ],
+                            [
+                                'type' => 'image_url',
+                                'image_url' => [
+                                    'url' => "data:{$mimeType};base64,{$imageData}"
+                                ]
+                            ]
+                        ]
+                    ]
+                ],
+                'temperature' => 0.1,
+                'max_tokens' => 1024
+            ];
+
+            $ch = curl_init($endpoint);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => json_encode($payload),
+                CURLOPT_HTTPHEADER => [
+                    'Content-Type: application/json',
+                    'Authorization: Bearer ' . $apiKey
+                ],
+                CURLOPT_TIMEOUT => 20,
+                CURLOPT_SSL_VERIFYPEER => false
+            ]);
+
+            $response = curl_exec($ch);
+            $err = curl_error($ch);
+            curl_close($ch);
+
+            if ($err || !$response) {
+                return ['success' => false, 'text' => ''];
+            }
+
+            $json = json_decode($response, true);
+            $extractedText = $json['choices'][0]['message']['content'] ?? '';
+            if (!empty(trim($extractedText))) {
+                return ['success' => true, 'text' => trim($extractedText)];
+            }
+        } catch (Throwable $e) {
+            
+        }
+
+        return ['success' => false, 'text' => ''];
     }
 
     private static function parseTesseractTsv($tsvContent) {

@@ -212,12 +212,9 @@ unset($ex);
                                 </div>
                                 <div>
                                     <label class="text-xs font-bold text-stone-700">Eligible Program</label>
-                                    <select name="qualifying_program" class="w-full bg-white border border-stone-200 rounded-xl px-3 py-1.5 text-xs font-semibold">
-                                        <option value="All Programs">All Programs</option>
-                                        <option value="BSCE">BSCE (Civil Engineering)</option>
-                                        <option value="BSCS">BSCS (Computer Science)</option>
-                                        <option value="BSIT">BSIT (Information Tech)</option>
-                                    </select>
+                                     <select name="qualifying_program" class="w-full bg-white border border-stone-200 rounded-xl px-3 py-1.5 text-xs font-semibold">
+                                         <option value="BSCE" selected>BSCE (Civil Engineering)</option>
+                                     </select>
                                 </div>
                                 <div>
                                     <label class="text-xs font-bold text-stone-700">Requirement Status</label>

@@ -96,7 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_material'])) {
                         
                         $extractRes = LessonExtractionService::extractAndSave($material_id);
                         if ($extractRes['success']) {
-                            $success_msg = "Lesson material uploaded and content extracted successfully! ({$extractRes['word_count']} words, {$extractRes['page_count']} pages)";
+                            $success_msg = "Lesson material uploaded and content extracted successfully! ({$extractRes['word_count']} words, {$extractRes['page_count']} pages) <a href='generate_ai.php?material_id={$material_id}' class='underline font-black text-orange-700 ml-2 inline-flex items-center gap-1'><i class='fa-solid fa-wand-magic-sparkles'></i> Generate AI Exam Now &rarr;</a>";
                         } else {
                             $error_msg = "Lesson uploaded, but text extraction encountered an issue: " . $extractRes['error'];
                         }
@@ -237,15 +237,8 @@ $materials = $stmtMaterials->fetchAll(PDO::FETCH_ASSOC);
                         </div>
                         <div class="space-y-1">
                             <label class="text-xs font-bold text-stone-600">Program</label>
-                            <select name="program" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs outline-none focus:border-orange-500">
-                                <option value="All Programs">All Programs</option>
-                                <option value="BSCE">BSCE</option>
-                                <option value="BSCS">BSCS</option>
-                                <option value="BSIT">BSIT</option>
-                                <option value="BSEE">BSEE</option>
-                                <option value="BSME">BSME</option>
-                                <option value="BSA">BSA</option>
-                                <option value="BSN">BSN</option>
+                            <select name="program" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs outline-none focus:border-orange-500 font-bold">
+                                <option value="BSCE" selected>BSCE (Civil Engineering)</option>
                             </select>
                         </div>
                     </div>
@@ -352,6 +345,11 @@ $materials = $stmtMaterials->fetchAll(PDO::FETCH_ASSOC);
                                         <a href="<?php echo htmlspecialchars($m['file_path']); ?>" download class="text-orange-600 hover:underline flex items-center gap-1">
                                             <i class="fa-solid fa-download"></i> Download
                                         </a>
+                                        <?php if ($status === 'completed'): ?>
+                                            <a href="generate_ai.php?material_id=<?php echo $m['id']; ?>" class="bg-orange-600 hover:bg-orange-700 text-white font-extrabold text-[10px] px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 shadow-sm">
+                                                <i class="fa-solid fa-wand-magic-sparkles"></i> Generate AI Exam
+                                            </a>
+                                        <?php endif; ?>
                                         <?php if ($status === 'failed' || $status === 'pending'): ?>
                                             <form method="POST" action="upload_lessons.php" class="inline">
                                                 <?php echo csrfInputField(); ?>

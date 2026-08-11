@@ -77,16 +77,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_student'])) {
     $student_number = trim($_POST['student_number']);
     $fullname = trim($_POST['fullname']);
     $email = trim($_POST['email']);
+    $student_password = trim($_POST['student_password'] ?? '');
     $section_id = intval($_POST['section_id']);
+
+    if (empty($student_password)) {
+        $student_password = 'Password123!';
+    }
 
     if (!empty($student_number) && !empty($fullname) && $section_id > 0) {
         try {
-            $stmt = $pdo->prepare("INSERT INTO students (teacher_id, section_id, student_number, fullname, email) VALUES (?, ?, ?, ?, ?)");
-            $stmt->execute([$teacher_id, $section_id, $student_number, $fullname, $email]);
-            logActivity("Enrolled student '{$fullname}' ({$student_number}) into section roster.");
-            $success_msg = "Student enrolled successfully!";
+            if (empty($email)) {
+                $cleanNum = preg_replace('/[^a-zA-Z0-9]/', '', $student_number);
+                $email = strtolower($cleanNum) . '@questbank.edu.ph';
+            }
+
+            
+            $secStmt = $pdo->prepare("SELECT section_name, course_name FROM sections WHERE id = ?");
+            $secStmt->execute([$section_id]);
+            $secInfo = $secStmt->fetch(PDO::FETCH_ASSOC);
+            $section_name = $secInfo['section_name'] ?? 'BSCE 4-A';
+            $course_name = $secInfo['course_name'] ?? 'BS Civil Engineering';
+
+            
+            $checkUsr = $pdo->prepare("SELECT id FROM users WHERE username = ? OR email = ?");
+            $checkUsr->execute([$student_number, $email]);
+            $user_id = $checkUsr->fetchColumn();
+
+            if (!$user_id) {
+                $passHash = password_hash($student_password, PASSWORD_DEFAULT);
+                $insUsr = $pdo->prepare("INSERT INTO users (username, fullname, email, password, role, force_password_reset) VALUES (?, ?, ?, ?, 'student', 0)");
+                $insUsr->execute([$student_number, $fullname, $email, $passHash]);
+                $user_id = $pdo->lastInsertId();
+            }
+
+            
+            $insDetails = $pdo->prepare("
+                INSERT INTO student_details (user_id, student_number, course, year_level, section) 
+                VALUES (?, ?, ?, '3rd Year', ?) 
+                ON DUPLICATE KEY UPDATE student_number = VALUES(student_number), section = VALUES(section)
+            ");
+            $insDetails->execute([$user_id, $student_number, 'BSCE', $section_name]);
+
+            
+            $checkRoster = $pdo->prepare("SELECT COUNT(*) FROM students WHERE student_number = ? AND teacher_id = ?");
+            $checkRoster->execute([$student_number, $teacher_id]);
+            if ($checkRoster->fetchColumn() == 0) {
+                $stmt = $pdo->prepare("INSERT INTO students (teacher_id, section_id, student_number, fullname, email) VALUES (?, ?, ?, ?, ?)");
+                $stmt->execute([$teacher_id, $section_id, $student_number, $fullname, $email]);
+            }
+
+            logActivity("Enrolled student '{$fullname}' ({$student_number}) into section '{$section_name}'.");
+            $success_msg = "Student '{$fullname}' enrolled successfully! Login Username: <strong>{$student_number}</strong> | Default Password: <strong>{$student_password}</strong>";
         } catch (PDOException $e) {
-            $error_msg = "Error adding student (Student Number might already exist): " . $e->getMessage();
+            $error_msg = "Error adding student: " . $e->getMessage();
         }
     } else {
         $error_msg = "Please complete all student fields and select a valid section.";
@@ -102,25 +145,35 @@ $stmtPending->execute([$teacher_id]);
 $pending_requests = $stmtPending->fetchAll(PDO::FETCH_ASSOC);
 
 $search_query = trim($_GET['search_student'] ?? '');
+$filter_section_id = intval($_GET['filter_section'] ?? 0);
+$filter_course = trim($_GET['filter_course'] ?? '');
+
+$where_clauses = ["s.teacher_id = ?"];
+$where_params = [$teacher_id];
+
 if (!empty($search_query)) {
-    $stmtStud = $pdo->prepare("
-        SELECT s.*, sec.section_name, sec.course_name 
-        FROM students s 
-        JOIN sections sec ON s.section_id = sec.id 
-        WHERE s.teacher_id = ? AND (s.student_number LIKE ? OR s.fullname LIKE ?)
-        ORDER BY s.id DESC
-    ");
-    $stmtStud->execute([$teacher_id, "%{$search_query}%", "%{$search_query}%"]);
-} else {
-    $stmtStud = $pdo->prepare("
-        SELECT s.*, sec.section_name, sec.course_name 
-        FROM students s 
-        JOIN sections sec ON s.section_id = sec.id 
-        WHERE s.teacher_id = ? 
-        ORDER BY s.id DESC
-    ");
-    $stmtStud->execute([$teacher_id]);
+    $where_clauses[] = "(s.student_number LIKE ? OR s.fullname LIKE ?)";
+    $where_params[] = "%{$search_query}%";
+    $where_params[] = "%{$search_query}%";
 }
+if ($filter_section_id > 0) {
+    $where_clauses[] = "s.section_id = ?";
+    $where_params[] = $filter_section_id;
+}
+if (!empty($filter_course)) {
+    $where_clauses[] = "sec.course_name = ?";
+    $where_params[] = $filter_course;
+}
+
+$whereSql = implode(" AND ", $where_clauses);
+$stmtStud = $pdo->prepare("
+    SELECT s.*, sec.section_name, sec.course_name 
+    FROM students s 
+    JOIN sections sec ON s.section_id = sec.id 
+    WHERE {$whereSql} 
+    ORDER BY s.id DESC
+");
+$stmtStud->execute($where_params);
 $students = $stmtStud->fetchAll(PDO::FETCH_ASSOC);
 
 $at_risk_students = [];
@@ -258,7 +311,7 @@ try {
                             </div>
                             <div class="space-y-1">
                                 <label class="text-xs font-bold text-stone-600">Course / Program</label>
-                                <input type="text" name="course_name" required placeholder="e.g. BS Civil Engineering" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs outline-none focus:border-orange-500">
+                                <input type="text" name="course_name" value="BS Civil Engineering" required class="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs font-bold outline-none focus:border-orange-500">
                             </div>
                             <div class="space-y-1">
                                 <label class="text-xs font-bold text-stone-600">Academic Year</label>
@@ -289,6 +342,11 @@ try {
                                 <input type="email" name="email" placeholder="e.g. nikol@gmail.com" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs outline-none focus:border-orange-500">
                             </div>
                             <div class="space-y-1">
+                                <label class="text-xs font-bold text-stone-600">Initial Account Password</label>
+                                <input type="text" name="student_password" placeholder="Defaults to Password123!" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs font-bold outline-none focus:border-orange-500">
+                                <p class="text-[10px] text-stone-400">Student can log in using their Student Number & password.</p>
+                            </div>
+                            <div class="space-y-1">
                                 <label class="text-xs font-bold text-stone-600">Assign Section</label>
                                 <select name="section_id" required class="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs outline-none focus:border-orange-500">
                                     <option value="">-- Select Section --</option>
@@ -311,12 +369,26 @@ try {
                         <h3 class="text-sm font-bold uppercase tracking-wider text-stone-700"><i class="fa-solid fa-list text-orange-500 mr-1"></i> Enrolled Student Roster</h3>
                         
                         
-                        <form action="manage_students.php" method="GET" class="flex items-center gap-2 w-full sm:w-auto">
-                            <div class="relative w-full sm:w-48">
+                        <form action="manage_students.php" method="GET" class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                            <select name="filter_section" class="bg-stone-50 border border-stone-200 rounded-xl px-2.5 py-1.5 text-xs font-bold outline-none focus:border-orange-500">
+                                <option value="">All Sections</option>
+                                <?php foreach ($sections as $sec): ?>
+                                    <option value="<?php echo $sec['id']; ?>" <?php echo $filter_section_id === intval($sec['id']) ? 'selected' : ''; ?>>
+                                        <?php echo htmlspecialchars($sec['section_name']); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+
+                            <select name="filter_course" class="bg-stone-50 border border-stone-200 rounded-xl px-2.5 py-1.5 text-xs font-bold outline-none focus:border-orange-500">
+                                <option value="">All Courses</option>
+                                <option value="BS Civil Engineering" <?php echo $filter_course === 'BS Civil Engineering' ? 'selected' : ''; ?>>BS Civil Engineering (Main CE)</option>
+                            </select>
+
+                            <div class="relative w-full sm:w-36">
                                 <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-stone-400 text-xs"></i>
-                                <input type="text" name="search_student" value="<?php echo htmlspecialchars($search_query); ?>" placeholder="Search Student #..." class="w-full bg-stone-50 border border-stone-200 rounded-xl pl-8 pr-3 py-1.5 text-xs outline-none focus:border-orange-500">
+                                <input type="text" name="search_student" value="<?php echo htmlspecialchars($search_query); ?>" placeholder="Search..." class="w-full bg-stone-50 border border-stone-200 rounded-xl pl-8 pr-3 py-1.5 text-xs outline-none focus:border-orange-500">
                             </div>
-                            <button type="submit" class="bg-stone-900 text-white text-xs font-bold px-3 py-1.5 rounded-xl hover:bg-orange-600 transition-all">Search</button>
+                            <button type="submit" class="bg-stone-900 text-white text-xs font-bold px-3 py-1.5 rounded-xl hover:bg-orange-600 transition-all">Filter</button>
                         </form>
                     </div>
 

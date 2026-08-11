@@ -10,6 +10,8 @@ $error_msg = "";
 $generated_questions = null;
 $ai_meta_output = null;
 
+$preselected_material_id = intval($_GET['material_id'] ?? $_GET['lesson_id'] ?? 0);
+
 $stmtMaterials = $pdo->prepare("
     SELECT id, title, subject, lesson_text, word_count, page_count,
            COALESCE(academic_period, 'general') AS academic_period,
@@ -1066,6 +1068,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                                                            data-testid="lesson-checkbox-<?php echo $cl['id']; ?>"
                                                                            data-period="<?php echo $periodKey; ?>"
                                                                            <?php echo $canSelect ? '' : 'disabled'; ?>
+                                                                           <?php echo ($canSelect && (intval($cl['id']) === ($preselected_material_id ?? 0) || in_array($cl['id'], $selected_lesson_ids ?? []))) ? 'checked' : ''; ?>
                                                                            class="lesson-checkbox accent-orange-600 rounded mt-0.5">
                                                                     <span data-testid="lesson-title-<?php echo $cl['id']; ?>" class="truncate leading-tight <?php echo $canSelect ? '' : 'text-stone-400 line-through'; ?>">
                                                                         <?php echo htmlspecialchars($cl['title']); ?>

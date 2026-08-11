@@ -1,13 +1,19 @@
 <?php
 require_once __DIR__ . '/../app/bootstrap.php';
+require_once __DIR__ . '/../app/services/NotificationService.php';
 
 AuthService::enforceRole('teacher');
 $pdo = getDBConnection();
 
 $request_msg = "";
+$notifications = [];
+$unread_notif_count = 0;
 
 try {
     $teacher_id = getCurrentUserId();
+
+    $notifications = NotificationService::getUserNotifications($teacher_id, 15);
+    $unread_notif_count = NotificationService::getUnreadCount($teacher_id);
 
     
     $stmt = $pdo->prepare("SELECT fullname, username, email FROM users WHERE id = ?");
@@ -283,6 +289,47 @@ try {
             </div>
             
             <div class="flex items-center gap-4">
+                <div class="relative">
+                    <button onclick="toggleTeacherNotifs()" class="w-10 h-10 rounded-xl border border-stone-200 flex items-center justify-center text-stone-600 hover:bg-stone-100 transition-all relative">
+                        <i class="fa-solid fa-bell"></i>
+                        <?php if ($unread_notif_count > 0): ?>
+                            <span class="absolute -top-1 -right-1 bg-orange-600 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white animate-pulse">
+                                <?php echo $unread_notif_count > 9 ? '9+' : $unread_notif_count; ?>
+                            </span>
+                        <?php endif; ?>
+                    </button>
+
+                    <div id="teacher_notif_dropdown" class="hidden absolute right-0 mt-2 w-80 sm:w-96 bg-white border border-stone-200 rounded-2xl shadow-2xl z-50 overflow-hidden animate-fadeIn">
+                        <div class="p-4 bg-stone-50 border-b border-stone-100 flex items-center justify-between">
+                            <h4 class="font-extrabold text-stone-800 text-xs flex items-center gap-2">
+                                <i class="fa-solid fa-bell text-orange-600"></i> System Notifications
+                            </h4>
+                            <span class="text-[10px] font-bold text-stone-400"><?php echo count($notifications); ?> Recent</span>
+                        </div>
+                        <div class="max-h-80 overflow-y-auto divide-y divide-stone-100 custom-scrollbar">
+                            <?php if (!empty($notifications)): ?>
+                                <?php foreach ($notifications as $n): ?>
+                                    <div class="p-3.5 hover:bg-stone-50 transition-colors flex items-start gap-3 <?php echo !$n['is_read'] ? 'bg-orange-50/40' : ''; ?>">
+                                        <div class="p-2 rounded-lg bg-orange-100 text-orange-600 text-xs flex-shrink-0 mt-0.5">
+                                            <i class="fa-solid fa-circle-info"></i>
+                                        </div>
+                                        <div class="min-w-0 flex-1">
+                                            <p class="text-xs text-stone-800 font-bold leading-snug"><?php echo htmlspecialchars($n['message']); ?></p>
+                                            <p class="text-[10px] text-stone-400 font-semibold mt-1"><?php echo date('M d, Y • h:i A', strtotime($n['created_at'])); ?></p>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <div class="p-8 text-center text-stone-400 space-y-1">
+                                    <i class="fa-solid fa-bell-slash text-2xl text-stone-300"></i>
+                                    <p class="text-xs font-bold text-stone-600">No Notifications Yet</p>
+                                    <p class="text-[10px]">Updates about student requests and exam events will appear here.</p>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="flex items-center gap-3 pl-2 border-l border-stone-200">
                     <div class="w-9 h-9 rounded-xl bg-orange-100 text-orange-700 font-bold flex items-center justify-center shadow-inner">
                         <?php echo strtoupper(substr($teacher['fullname'] ?? 'Prof', 0, 2)); ?>
@@ -536,6 +583,12 @@ try {
                 }
             }
         });
+        function toggleTeacherNotifs() {
+            const dropdown = document.getElementById('teacher_notif_dropdown');
+            if (dropdown) {
+                dropdown.classList.toggle('hidden');
+            }
+        }
     </script>
 </body>
 </html>
