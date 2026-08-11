@@ -88,10 +88,22 @@ addColumn($pdo, 'exams', 'qualifying_unlock_date', "DATETIME DEFAULT NULL");
 addColumn($pdo, 'exams', 'qualifying_deadline', "DATETIME DEFAULT NULL");
 
 echo "\n--- exam_submissions ---\n";
-$pdo->exec("ALTER TABLE `exam_submissions` MODIFY COLUMN `upload_type` VARCHAR(30) NOT NULL DEFAULT 'scanned'");
-$pdo->exec("ALTER TABLE `exam_submissions` MODIFY COLUMN `review_status` VARCHAR(30) NOT NULL DEFAULT 'pending_review'");
-$pdo->exec("ALTER TABLE `exam_submissions` MODIFY COLUMN `status` VARCHAR(20) NOT NULL DEFAULT 'Fail'");
-echo "  [*] Updated exam_submissions.upload_type, review_status, and status column types\n";
+if (columnExists($pdo, 'exam_submissions', 'upload_type')) {
+    $pdo->exec("ALTER TABLE `exam_submissions` MODIFY COLUMN `upload_type` VARCHAR(30) NOT NULL DEFAULT 'scanned'");
+} else {
+    addColumn($pdo, 'exam_submissions', 'upload_type', "VARCHAR(30) NOT NULL DEFAULT 'scanned'");
+}
+if (columnExists($pdo, 'exam_submissions', 'review_status')) {
+    $pdo->exec("ALTER TABLE `exam_submissions` MODIFY COLUMN `review_status` VARCHAR(30) NOT NULL DEFAULT 'pending_review'");
+} else {
+    addColumn($pdo, 'exam_submissions', 'review_status', "VARCHAR(30) NOT NULL DEFAULT 'pending_review'");
+}
+if (columnExists($pdo, 'exam_submissions', 'status')) {
+    $pdo->exec("ALTER TABLE `exam_submissions` MODIFY COLUMN `status` VARCHAR(20) NOT NULL DEFAULT 'Fail'");
+} else {
+    addColumn($pdo, 'exam_submissions', 'status', "VARCHAR(20) NOT NULL DEFAULT 'Fail'");
+}
+echo "  [*] Verified exam_submissions.upload_type, review_status, and status column types\n";
 addColumn($pdo, 'exam_submissions', 'exam_id', "INT(11) DEFAULT NULL");
 addColumn($pdo, 'exam_submissions', 'student_id', "INT(11) DEFAULT NULL");
 addColumn($pdo, 'exam_submissions', 'total_possible_score', "INT(11) DEFAULT 0");
@@ -591,8 +603,12 @@ addColumn($pdo, 'audit_logs', 'user_id', "INT(11) DEFAULT NULL");
 addColumn($pdo, 'audit_logs', 'actor_id', "INT(11) DEFAULT NULL");
 addColumn($pdo, 'audit_logs', 'details', "TEXT DEFAULT NULL");
 addColumn($pdo, 'audit_logs', 'ip_address', "VARCHAR(45) DEFAULT NULL");
-$pdo->exec("ALTER TABLE `audit_logs` MODIFY COLUMN `user_id` INT(11) NULL");
-$pdo->exec("ALTER TABLE `audit_logs` MODIFY COLUMN `actor_id` INT(11) NULL");
+if (columnExists($pdo, 'audit_logs', 'user_id')) {
+    $pdo->exec("ALTER TABLE `audit_logs` MODIFY COLUMN `user_id` INT(11) NULL");
+}
+if (columnExists($pdo, 'audit_logs', 'actor_id')) {
+    $pdo->exec("ALTER TABLE `audit_logs` MODIFY COLUMN `actor_id` INT(11) NULL");
+}
 echo "  [=] Table audit_logs verified with nullable actor columns\n";
 
 
