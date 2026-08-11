@@ -91,6 +91,33 @@ Access the application at `http://localhost:8000`.
 
 ---
 
+## 🔄 Updating Local Environment After `git pull`
+
+Whenever team members pull the latest updates from the repository (`git pull origin main`), execute these commands to sync local databases and verify your setup:
+
+1. **Pull Latest Code:**
+   ```bash
+   git pull origin main
+   ```
+2. **Apply Database Migrations (Mandatory & Idempotent):**
+   ```bash
+   php database/migrate.php
+   ```
+3. **Re-seed Clean Demo Accounts & Test Dataset (Optional):**
+   ```bash
+   php database/cleanup_qa_data.php --execute --confirm-production
+   ```
+4. **Verify System Health with Maintainer Smoke Suite (Optional):**
+   ```bash
+   php tests/run_smoke_tests.php
+   ```
+5. **Start Dev Server:**
+   ```bash
+   php -S localhost:8000
+   ```
+
+---
+
 ## 🔑 Login & Initial Setup Process
 
 1. **Initial Credentials:** Upon running `database/migrate.php`, administrative and default accounts are populated in the database.

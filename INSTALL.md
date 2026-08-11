@@ -84,6 +84,29 @@ Access QuestBank at: [http://localhost:8000](http://localhost:8000)
 
 ---
 
+## 🔄 Updating Local Environment After `git pull`
+
+Whenever team members pull updates from `git pull origin main`:
+
+1. **Pull Latest Code:**
+   ```bash
+   git pull origin main
+   ```
+2. **Apply Database Migrations (Mandatory):**
+   ```bash
+   php database/migrate.php
+   ```
+3. **Re-seed Baseline Demo Dataset (Optional):**
+   ```bash
+   php database/cleanup_qa_data.php --execute --confirm-production
+   ```
+4. **Run Smoke Suite Verification (Optional):**
+   ```bash
+   php tests/run_smoke_tests.php
+   ```
+
+---
+
 ## 🔑 Default Accounts & Access
 
 | Role | Username / Email | Default Password |
