@@ -193,9 +193,14 @@ $materials = $stmtMaterials->fetchAll(PDO::FETCH_ASSOC);
                         <input type="text" name="title" required placeholder="e.g. CI/CD Pipeline Fundamentals" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs outline-none focus:border-orange-500">
                     </div>
 
+                    <?php
+                        $stmtT = $pdo->prepare("SELECT handled_subject FROM users WHERE id = ?");
+                        $stmtT->execute([$teacher_id]);
+                        $teacher_handled_subject = $stmtT->fetchColumn() ?: 'CE 412 - Structural Theory & Design';
+                    ?>
                     <div class="space-y-1">
                         <label class="text-xs font-bold text-stone-600">Subject / Category</label>
-                        <input type="text" name="subject" required placeholder="e.g. DevOps Principles" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs outline-none focus:border-orange-500">
+                        <input type="text" name="subject" value="<?php echo htmlspecialchars($teacher_handled_subject); ?>" required placeholder="e.g. CE 412 - Structural Theory" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs font-bold outline-none focus:border-orange-500">
                     </div>
 
                     <div class="space-y-1">

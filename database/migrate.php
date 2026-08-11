@@ -532,6 +532,42 @@ $pdo->exec("
 echo "  [=] Table departments verified\n";
 
 $pdo->exec("
+    CREATE TABLE IF NOT EXISTS `subjects` (
+      `id` INT(11) AUTO_INCREMENT PRIMARY KEY,
+      `subject_code` VARCHAR(50) DEFAULT NULL,
+      `subject_title` VARCHAR(150) DEFAULT NULL,
+      `description` TEXT DEFAULT NULL,
+      `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+");
+
+addColumn($pdo, 'subjects', 'subject_code', "VARCHAR(50) DEFAULT NULL");
+addColumn($pdo, 'subjects', 'subject_title', "VARCHAR(150) DEFAULT NULL");
+addColumn($pdo, 'subjects', 'description', "TEXT DEFAULT NULL");
+
+$pdo->exec("UPDATE `subjects` SET `subject_code` = `code` WHERE (`subject_code` IS NULL OR `subject_code` = '') AND `code` IS NOT NULL");
+$pdo->exec("UPDATE `subjects` SET `subject_title` = `title` WHERE (`subject_title` IS NULL OR `subject_title` = '') AND `title` IS NOT NULL");
+
+if (columnExists($pdo, 'subjects', 'code')) {
+    $pdo->exec("ALTER TABLE `subjects` MODIFY COLUMN `code` VARCHAR(50) DEFAULT NULL");
+}
+if (columnExists($pdo, 'subjects', 'title')) {
+    $pdo->exec("ALTER TABLE `subjects` MODIFY COLUMN `title` VARCHAR(150) DEFAULT NULL");
+}
+
+$pdo->exec("
+    INSERT INTO `subjects` (`id`, `subject_code`, `code`, `subject_title`, `title`, `description`) VALUES
+    (1, 'CE 311', 'CE 311', 'Fluid Mechanics & Hydraulics', 'Fluid Mechanics & Hydraulics', 'Behavior of fluids at rest and in motion'),
+    (2, 'CE 412', 'CE 412', 'Structural Theory & Design', 'Structural Theory & Design', 'Analysis of statically determinate and indeterminate structures'),
+    (3, 'CE 421', 'CE 421', 'Geotechnical Engineering & Soil Mechanics', 'Geotechnical Engineering & Soil Mechanics', 'Physical and engineering properties of soils'),
+    (4, 'CE 501', 'CE 501', 'Highway & Transportation Engineering', 'Highway & Transportation Engineering', 'Highway planning, geometric design, and traffic flow'),
+    (5, 'CE 502', 'CE 502', 'Construction Engineering & Management', 'Construction Engineering & Management', 'Construction methods, cost estimating, and project control')
+    ON DUPLICATE KEY UPDATE `subject_title` = VALUES(`subject_title`);
+");
+echo "  [=] Table subjects verified\n";
+addColumn($pdo, 'users', 'handled_subject', "VARCHAR(150) DEFAULT NULL");
+
+$pdo->exec("
     CREATE TABLE IF NOT EXISTS `exam_schedules` (
       `id` INT(11) AUTO_INCREMENT PRIMARY KEY,
       `exam_id` INT(11) NOT NULL,

@@ -147,6 +147,11 @@ unset($ex);
                             <h3 class="text-sm font-bold uppercase tracking-wider text-stone-700"><i class="fa-solid fa-sliders text-orange-500 mr-1"></i> Exam Parameters</h3>
                         </div>
 
+                        <?php
+                            $stmtT = $pdo->prepare("SELECT handled_subject FROM users WHERE id = ?");
+                            $stmtT->execute([getCurrentUserId()]);
+                            $teacher_handled_subject = $stmtT->fetchColumn() ?: 'CE 412 - Structural Theory & Design';
+                        ?>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div class="space-y-1">
                                 <label class="text-xs font-bold text-stone-600">Exam Title</label>
@@ -154,7 +159,7 @@ unset($ex);
                             </div>
                             <div class="space-y-1">
                                 <label class="text-xs font-bold text-stone-600">Subject</label>
-                                <input type="text" name="subject" required placeholder="e.g. Structural Theory 1" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs outline-none focus:border-orange-500">
+                                <input type="text" name="subject" value="<?php echo htmlspecialchars($teacher_handled_subject); ?>" required placeholder="e.g. CE 412 - Structural Theory" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs font-bold outline-none focus:border-orange-500">
                             </div>
                         </div>
 

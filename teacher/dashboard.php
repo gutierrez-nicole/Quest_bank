@@ -16,9 +16,10 @@ try {
     $unread_notif_count = NotificationService::getUnreadCount($teacher_id);
 
     
-    $stmt = $pdo->prepare("SELECT fullname, username, email FROM users WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT fullname, username, email, handled_subject FROM users WHERE id = ?");
     $stmt->execute([$teacher_id]);
     $teacher = $stmt->fetch();
+    $handled_subject = !empty($teacher['handled_subject']) ? $teacher['handled_subject'] : 'CE 412 - Structural Theory & Design';
 
     
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['handle_request'])) {
@@ -336,7 +337,9 @@ try {
                     </div>
                     <div class="hidden sm:block text-left">
                         <p class="text-xs font-bold text-stone-800 leading-tight"><?php echo htmlspecialchars($teacher['fullname'] ?? 'Teacher'); ?></p>
-                        <p class="text-[10px] text-stone-400 font-medium">Faculty Professor</p>
+                        <p class="text-[10px] text-orange-700 font-extrabold flex items-center gap-1 mt-0.5">
+                            <i class="fa-solid fa-book-open text-orange-600"></i> Handled: <?php echo htmlspecialchars($handled_subject); ?>
+                        </p>
                     </div>
                 </div>
             </div>

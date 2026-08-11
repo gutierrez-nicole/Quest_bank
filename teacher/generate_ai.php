@@ -10,6 +10,10 @@ $error_msg = "";
 $generated_questions = null;
 $ai_meta_output = null;
 
+$stmtT = $pdo->prepare("SELECT handled_subject FROM users WHERE id = ?");
+$stmtT->execute([$teacher_id]);
+$teacher_handled_subject = $stmtT->fetchColumn() ?: 'CE 412 - Structural Theory & Design';
+
 $preselected_material_id = intval($_GET['material_id'] ?? $_GET['lesson_id'] ?? 0);
 
 $stmtMaterials = $pdo->prepare("
@@ -909,7 +913,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                             <label class="text-xs font-bold text-stone-700">Subject Name</label>
                             <div class="relative">
                                 <i class="fa-solid fa-book absolute left-3.5 top-3 text-stone-400 text-xs"></i>
-                                <input type="text" name="subject" required value="<?php echo htmlspecialchars($_POST['subject'] ?? ''); ?>" placeholder="e.g. Structural Theory" class="w-full bg-stone-50 border border-stone-200 rounded-xl pl-9 pr-4 py-2.5 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500 focus:bg-white transition-all">
+                                <input type="text" name="subject" required value="<?php echo htmlspecialchars($_POST['subject'] ?? $teacher_handled_subject); ?>" placeholder="e.g. CE 412 - Structural Theory" class="w-full bg-stone-50 border border-stone-200 rounded-xl pl-9 pr-4 py-2.5 text-xs font-bold text-stone-800 outline-none focus:border-orange-500 focus:bg-white transition-all">
                             </div>
                         </div>
 
