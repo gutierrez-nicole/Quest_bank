@@ -613,6 +613,10 @@ echo "  [=] Table audit_logs verified with nullable actor columns\n";
 
 
 
+echo "\n--- Priority 5 Operational Schema ---\n";
+addColumn($pdo, 'users', 'force_password_reset', "TINYINT(1) NOT NULL DEFAULT 0");
+addColumn($pdo, 'users', 'password_changed_at', "DATETIME DEFAULT NULL");
+
 $defaultPassHash = password_hash('Password123!', PASSWORD_DEFAULT);
 
 $stmtUsr = $pdo->prepare("
@@ -649,10 +653,6 @@ $stmtUsr = $pdo->prepare("
     ON DUPLICATE KEY UPDATE id = id
 ");
 $stmtUsr->execute([$defaultPassHash]);
-
-echo "\n--- Priority 5 Operational Schema ---\n";
-addColumn($pdo, 'users', 'force_password_reset', "TINYINT(1) NOT NULL DEFAULT 0");
-addColumn($pdo, 'users', 'password_changed_at', "DATETIME DEFAULT NULL");
 
 $pdo->exec("
     CREATE TABLE IF NOT EXISTS `user_sessions` (
