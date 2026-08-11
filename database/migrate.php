@@ -515,6 +515,23 @@ $pdo->exec("
 echo "  [=] Table academic_calendar verified\n";
 
 $pdo->exec("
+    CREATE TABLE IF NOT EXISTS `departments` (
+      `id` INT(11) AUTO_INCREMENT PRIMARY KEY,
+      `dept_code` VARCHAR(50) NOT NULL,
+      `dept_name` VARCHAR(255) NOT NULL,
+      `programs` TEXT DEFAULT NULL,
+      `faculty_head` VARCHAR(255) DEFAULT NULL,
+      `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+");
+$pdo->exec("
+    INSERT INTO `departments` (`id`, `dept_code`, `dept_name`, `programs`, `faculty_head`) 
+    VALUES (1, 'COE', 'College of Engineering', 'BSCE', 'Prof. Russel Gregorio') 
+    ON DUPLICATE KEY UPDATE `dept_code` = VALUES(`dept_code`), `dept_name` = VALUES(`dept_name`)
+");
+echo "  [=] Table departments verified\n";
+
+$pdo->exec("
     CREATE TABLE IF NOT EXISTS `exam_schedules` (
       `id` INT(11) AUTO_INCREMENT PRIMARY KEY,
       `exam_id` INT(11) NOT NULL,
