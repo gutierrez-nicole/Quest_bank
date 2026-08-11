@@ -838,7 +838,7 @@ CREATE TABLE `used_confirmation_tokens` (
   `token_hash` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   `teacher_id` int NOT NULL,
   `used_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `expires_at` timestamp NOT NULL,
+  `expires_at` datetime NOT NULL,
   PRIMARY KEY (`token_hash`),
   KEY `teacher_id` (`teacher_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;

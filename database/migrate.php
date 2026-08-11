@@ -375,7 +375,7 @@ if (!tableExists($pdo, 'used_confirmation_tokens')) {
             `token_hash` VARCHAR(64) NOT NULL,
             `teacher_id` INT(11) NOT NULL,
             `used_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            `expires_at` TIMESTAMP NOT NULL,
+            `expires_at` DATETIME NOT NULL,
             PRIMARY KEY (`token_hash`),
             KEY `teacher_id` (`teacher_id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
