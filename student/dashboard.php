@@ -725,6 +725,13 @@ try {
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 10px; }
         .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #3f3f46; }
     </style>
+    <script>
+        if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    </script>
 </head>
 <body class="bg-[#f3f4f6] dark:bg-[#09090b] text-stone-800 dark:text-stone-100 min-h-screen flex transition-colors duration-300">
 
@@ -750,13 +757,45 @@ try {
                 </button>
 
                 
-                <button onclick="switchTab('notifications')" class="w-10 h-10 rounded-xl border border-stone-200 dark:border-stone-800 flex items-center justify-center text-stone-500 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition-all relative">
-                    <i class="fa-solid fa-bell text-sm"></i>
-                    <?php if (!empty($notifications)): ?>
-                        <span class="absolute top-2.5 right-2.5 w-2 h-2 bg-orange-500 rounded-full animate-ping"></span>
-                        <span class="absolute top-2.5 right-2.5 w-2 h-2 bg-orange-500 rounded-full"></span>
-                    <?php endif; ?>
-                </button>
+                <div class="relative">
+                    <button onclick="toggleStudentNotifDropdown()" class="w-10 h-10 rounded-xl border border-stone-200 dark:border-stone-800 flex items-center justify-center text-stone-500 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition-all relative">
+                        <i class="fa-solid fa-bell text-sm"></i>
+                        <?php if (!empty($notifications) || $unread_notif_count > 0): ?>
+                            <span class="absolute -top-1 -right-1 bg-orange-600 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center border border-white dark:border-stone-900 animate-pulse">
+                                <?php echo ($unread_notif_count ?? count($notifications)) > 9 ? '9+' : ($unread_notif_count ?? count($notifications)); ?>
+                            </span>
+                        <?php endif; ?>
+                    </button>
+
+                    <div id="student_notif_dropdown" class="hidden absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl shadow-2xl z-50 overflow-hidden animate-fadeIn">
+                        <div class="p-4 bg-stone-50 dark:bg-stone-800/50 border-b border-stone-100 dark:border-stone-800 flex items-center justify-between">
+                            <h4 class="font-extrabold text-stone-800 dark:text-stone-100 text-xs flex items-center gap-2">
+                                <i class="fa-solid fa-bell text-orange-500"></i> Notifications
+                            </h4>
+                            <button onclick="switchTab('notifications'); toggleStudentNotifDropdown();" class="text-[10px] font-bold text-orange-600 dark:text-orange-400 hover:underline">View All &rarr;</button>
+                        </div>
+                        <div class="max-h-80 overflow-y-auto divide-y divide-stone-100 dark:divide-stone-800 custom-scrollbar">
+                            <?php if (!empty($notifications)): ?>
+                                <?php foreach (array_slice($notifications, 0, 5) as $notif): ?>
+                                    <div class="p-3.5 hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-colors flex items-start gap-3">
+                                        <div class="p-2 rounded-lg bg-orange-100 dark:bg-orange-950/80 text-orange-600 text-xs flex-shrink-0 mt-0.5">
+                                            <i class="fa-solid fa-circle-info"></i>
+                                        </div>
+                                        <div class="min-w-0 flex-1">
+                                            <p class="text-xs text-stone-800 dark:text-stone-200 font-bold leading-snug"><?php echo htmlspecialchars($notif['message'] ?? $notif['type'] ?? 'Notification'); ?></p>
+                                            <p class="text-[10px] text-stone-400 font-semibold mt-1"><?php echo date('M d, Y • h:i A', strtotime($notif['created_at'])); ?></p>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <div class="p-6 text-center text-stone-400 space-y-1">
+                                    <i class="fa-solid fa-bell-slash text-2xl text-stone-300 dark:text-stone-700"></i>
+                                    <p class="text-xs font-bold text-stone-600 dark:text-stone-300">No New Notifications</p>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
                 
                 
                 <div class="flex items-center gap-3 pl-3 border-l border-stone-200 dark:border-stone-800">
@@ -795,7 +834,17 @@ try {
                         </div>
                         <div class="bg-stone-50 dark:bg-stone-800/50 border border-stone-200/60 dark:border-stone-800 rounded-xl px-4 py-2.5">
                             <p class="text-[10px] font-bold uppercase text-stone-400">Year Level</p>
-                            <p class="text-xs font-extrabold text-stone-800 dark:text-stone-100 mt-0.5"><?php echo htmlspecialchars($student['year_level']); ?>rd Year</p>
+                            <p class="text-xs font-extrabold text-stone-800 dark:text-stone-100 mt-0.5">
+                                <?php 
+                                    $yl = trim($student['year_level'] ?? '3');
+                                    if (is_numeric($yl)) {
+                                        $sfx = ($yl == '1') ? 'st' : (($yl == '2') ? 'nd' : (($yl == '3') ? 'rd' : 'th'));
+                                        echo $yl . $sfx . ' Year';
+                                    } else {
+                                        echo htmlspecialchars($yl);
+                                    }
+                                ?>
+                            </p>
                         </div>
                         <div class="bg-stone-50 dark:bg-stone-800/50 border border-stone-200/60 dark:border-stone-800 rounded-xl px-4 py-2.5 col-span-2 sm:col-span-1">
                             <p class="text-[10px] font-bold uppercase text-stone-400">Section</p>
@@ -1465,9 +1514,17 @@ try {
             }
         }
 
-        // 2. Dark Mode Toggle
+        // 2. Dark Mode Toggle & Persistent LocalStorage
         function toggleDarkMode() {
-            document.documentElement.classList.toggle('dark');
+            const isDark = document.documentElement.classList.toggle('dark');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+        }
+
+        function toggleStudentNotifDropdown() {
+            const dropdown = document.getElementById('student_notif_dropdown');
+            if (dropdown) {
+                dropdown.classList.toggle('hidden');
+            }
         }
 
         // 3. Online Exam Session Trigger & Security Scripts
@@ -1740,13 +1797,6 @@ try {
                     switchTab('exam-results');
                 }
             }, 1000);
-        }
-
-        let activeExamId = 0;
-        function startExamSession(examId) {
-            activeExamId = examId;
-            switchTab('take-exam');
-            startTimer(60 * 45);
         }
 
         function openSubmitModal() { 
