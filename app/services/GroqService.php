@@ -201,7 +201,8 @@ class GroqService {
         }
 
         // Production Credential & Error Enforcement (NO production mock fallbacks!)
-        $key = ($apiKey !== null && $apiKey !== '') ? $apiKey : GROQ_API_KEY;
+        $rawKey = ($apiKey !== null && $apiKey !== '') ? $apiKey : GROQ_API_KEY;
+        $key = trim(trim((string)$rawKey), "\"' \t\n\r\0\x0B");
         if (empty($key) || $key === 'YOUR_GROQ_API_KEY_HERE' || $key === 'MISSING_KEY') {
             return [
                 'success' => false,
@@ -228,15 +229,25 @@ class GroqService {
             ];
         }
 
+        $jsonPayload = json_encode($payload, JSON_INVALID_UTF8_SUBSTITUTE | JSON_UNESCAPED_UNICODE);
+        if ($jsonPayload === false) {
+            array_walk_recursive($payload, function(&$item) {
+                if (is_string($item)) {
+                    $item = mb_convert_encoding($item, 'UTF-8', 'UTF-8');
+                }
+            });
+            $jsonPayload = json_encode($payload, JSON_INVALID_UTF8_SUBSTITUTE | JSON_UNESCAPED_UNICODE);
+        }
+
         $ch = curl_init(GROQ_API_ENDPOINT);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 25);
         curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonPayload);
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
             'Authorization: Bearer ' . $key,
             'Content-Type: application/json',
-            'User-Agent: QuestBank/1.0 (Macintosh; PHP)'
+            'User-Agent: QuestBank/1.0 (PHP)'
         ]);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
@@ -286,11 +297,16 @@ class GroqService {
         }
 
         if ($httpCode === 401 || $httpCode === 403) {
+            $errDetail = '';
+            if (!empty($response)) {
+                $decErr = json_decode($response, true);
+                $errDetail = $decErr['error']['message'] ?? '';
+            }
             return [
                 'success' => false,
                 'error_code' => 'INVALID_API_KEY',
                 'user_message' => 'Groq API rejected credentials. Authentication failed.',
-                'technical_message' => "HTTP {$httpCode} Unauthorized.",
+                'technical_message' => !empty($errDetail) ? "HTTP {$httpCode} Unauthorized: {$errDetail}" : "HTTP {$httpCode} Unauthorized.",
                 'retryable' => false,
                 'provider_status' => $httpCode,
                 'request_id' => null,
@@ -299,15 +315,20 @@ class GroqService {
         }
 
         if ($httpCode >= 400) {
+            $errDetail = '';
+            if (!empty($response)) {
+                $decErr = json_decode($response, true);
+                $errDetail = $decErr['error']['message'] ?? ($decErr['message'] ?? '');
+            }
             return [
                 'success' => false,
                 'error_code' => 'PROVIDER_ERROR',
                 'user_message' => 'Groq AI service encountered an operational error (HTTP ' . $httpCode . ').',
-                'technical_message' => "HTTP {$httpCode} status returned from Groq.",
+                'technical_message' => !empty($errDetail) ? "HTTP {$httpCode}: {$errDetail}" : "HTTP {$httpCode} status returned from Groq.",
                 'retryable' => true,
                 'provider_status' => $httpCode,
                 'request_id' => null,
-                'error' => 'Groq AI service error (HTTP ' . $httpCode . ').'
+                'error' => !empty($errDetail) ? "Groq Error: {$errDetail}" : "Groq AI service error (HTTP {$httpCode})."
             ];
         }
 

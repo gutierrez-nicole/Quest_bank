@@ -342,11 +342,13 @@ class OcrService {
                 'max_tokens' => 1024
             ];
 
+            $apiKey = trim(trim((string)$apiKey), "\"' \t\n\r\0\x0B");
+            $jsonPayload = json_encode($payload, JSON_INVALID_UTF8_SUBSTITUTE | JSON_UNESCAPED_UNICODE);
             $ch = curl_init($endpoint);
             curl_setopt_array($ch, [
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_POST => true,
-                CURLOPT_POSTFIELDS => json_encode($payload),
+                CURLOPT_POSTFIELDS => $jsonPayload,
                 CURLOPT_HTTPHEADER => [
                     'Content-Type: application/json',
                     'Authorization: Bearer ' . $apiKey
