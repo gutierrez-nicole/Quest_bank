@@ -41,8 +41,8 @@ define('DB_CHARSET', 'utf8mb4');
 
 define('GROQ_API_KEY', getenv('GROQ_API_KEY') ?: '');
 define('GROQ_API_ENDPOINT', 'https://api.groq.com/openai/v1/chat/completions');
-define('GROQ_DEFAULT_MODEL', 'llama-3.3-70b-versatile');
-define('GROQ_FAST_MODEL', 'llama-3.1-8b-instant');
+define('GROQ_DEFAULT_MODEL', getenv('GROQ_DEFAULT_MODEL') ?: 'openai/gpt-oss-120b');
+define('GROQ_FAST_MODEL', getenv('GROQ_FAST_MODEL') ?: 'openai/gpt-oss-20b');
 
 define('AI_MAX_CONTEXT_TOKENS', 32000);
 define('AI_SAFE_INPUT_TOKENS', 24000);
