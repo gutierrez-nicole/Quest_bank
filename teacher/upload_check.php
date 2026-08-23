@@ -244,6 +244,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
                                 <span class="text-xs font-semibold text-stone-700 truncate" id="fileNameDisplay">No answer sheet selected yet</span>
                             </div>
                             <input type="file" name="exam_file" id="examFileInput" required accept=".jpg,.jpeg,.png,.pdf" onchange="onFileSelected(event)" class="hidden">
+                            <input type="file" id="mobileDirectCameraInput" accept="image/*" capture="environment" onchange="onDirectCameraCapture(event)" class="hidden">
                             <span class="text-[10px] font-bold text-stone-400 uppercase flex-shrink-0" id="fileSizeDisplay"></span>
                         </div>
                     </div>
@@ -331,13 +332,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
                     <img id="capturedImagePreview" data-testid="captured-image-preview" class="w-full h-full object-contain" alt="Captured Answer Sheet Preview">
                 </div>
 
-                <!-- Error & Permission Banner -->
-                <div id="cameraErrorBanner" data-testid="camera-error-message" class="hidden absolute inset-4 bg-rose-900/95 border border-rose-500 text-rose-100 p-5 rounded-2xl flex flex-col items-center justify-center text-center space-y-3">
-                    <i class="fa-solid fa-triangle-exclamation text-3xl text-rose-300"></i>
-                    <p id="cameraErrorText" class="text-xs font-bold leading-relaxed max-w-md">Camera permission was denied. You may upload an image instead.</p>
-                    <button type="button" onclick="closeCameraScanner()" class="bg-white text-rose-900 font-bold text-xs py-2 px-4 rounded-xl hover:bg-stone-100 transition-all">
-                        Close Scanner
-                    </button>
+                <!-- Error & Permission Banner with Direct Mobile Camera Fallback -->
+                <div id="cameraErrorBanner" data-testid="camera-error-message" class="hidden absolute inset-4 bg-stone-900/95 border border-stone-700 text-stone-100 p-5 rounded-2xl flex flex-col items-center justify-center text-center space-y-4 shadow-2xl">
+                    <div class="w-12 h-12 rounded-2xl bg-orange-500/20 text-orange-400 flex items-center justify-center text-2xl">
+                        <i class="fa-solid fa-camera"></i>
+                    </div>
+                    <div class="space-y-1 max-w-md">
+                        <h5 class="text-sm font-extrabold text-white">Direct Phone Camera Capture</h5>
+                        <p id="cameraErrorText" class="text-xs text-stone-300 leading-relaxed">Live browser stream requires HTTPS over network IP. You can take a photo directly using your phone's native camera below.</p>
+                    </div>
+                    <div class="flex flex-col sm:flex-row items-center gap-2.5 w-full max-w-xs">
+                        <button type="button" onclick="launchNativeCameraCapture()" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-extrabold text-xs py-3 px-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-camera"></i> Open Phone Camera
+                        </button>
+                        <button type="button" onclick="closeCameraScanner()" class="w-full bg-stone-800 hover:bg-stone-700 text-stone-300 font-bold text-xs py-3 px-4 rounded-xl transition-all">
+                            Close Scanner
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -468,17 +479,71 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
 
             resetCapturedState();
 
-            if (!window.isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-                showCameraError("Camera access requires HTTPS. Use the image-upload option or open the secured site.");
-                return;
+            // If accessing over network HTTP on mobile/cellphone, launch native camera directly or show direct capture banner
+            const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            const isUnsecureNetworkContext = !window.isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1';
+
+            if (isMobileDevice || isUnsecureNetworkContext) {
+                // Check if navigator.mediaDevices.getUserMedia exists; if blocked by HTTP, provide seamless native phone camera
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || isUnsecureNetworkContext) {
+                    showCameraError("Live browser stream requires HTTPS over network IP. Tap below to capture directly with your phone's native camera.");
+                    // Auto-trigger native camera capture on mobile for 1-tap experience
+                    if (isMobileDevice) {
+                        launchNativeCameraCapture();
+                    }
+                    return;
+                }
             }
 
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                showCameraError("Camera API is not supported on this browser. You may upload an image file instead.");
+                showCameraError("Live Camera API is not supported on this browser. You can take a photo with your phone camera directly below.");
                 return;
             }
 
             startCameraStream();
+        }
+
+        function launchNativeCameraCapture() {
+            const mobileInput = document.getElementById('mobileDirectCameraInput');
+            if (mobileInput) {
+                mobileInput.value = '';
+                mobileInput.click();
+            }
+        }
+
+        function onDirectCameraCapture(event) {
+            const input = event.target;
+            if (!input.files || !input.files[0]) return;
+
+            const file = input.files[0];
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                const img = new Image();
+                img.onload = function() {
+                    rawCapturedCanvas = document.createElement('canvas');
+                    rawCapturedCanvas.width = img.width;
+                    rawCapturedCanvas.height = img.height;
+                    const ctx = rawCapturedCanvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+
+                    activeCanvas = document.createElement('canvas');
+                    activeCanvas.width = img.width;
+                    activeCanvas.height = img.height;
+                    activeCanvas.getContext('2d').drawImage(rawCapturedCanvas, 0, 0);
+
+                    currentRotation = 0;
+                    currentFilter = 'none';
+
+                    // Hide error banner and show preview in modal for review & enhancements
+                    const errorBanner = document.getElementById('cameraErrorBanner');
+                    if (errorBanner) errorBanner.classList.add('hidden');
+                    
+                    updatePreviewDisplay();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
         }
 
         async function startCameraStream() {
