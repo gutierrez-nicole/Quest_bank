@@ -178,10 +178,10 @@ class ExamService {
                 OR sd.section COLLATE utf8mb4_general_ci IN (SELECT s.section_name COLLATE utf8mb4_general_ci FROM sections s JOIN exam_assignments ea ON ea.section_id = s.id WHERE ea.exam_id = ?)
                 OR sd.section COLLATE utf8mb4_general_ci IN (SELECT s.section_code COLLATE utf8mb4_general_ci FROM sections s JOIN exam_assignments ea ON ea.section_id = s.id WHERE ea.exam_id = ?)
                 OR sd.section COLLATE utf8mb4_general_ci IN (SELECT section COLLATE utf8mb4_general_ci FROM exam_schedules WHERE exam_id = ?)
-                OR (? IS NOT NULL AND ? != '' AND LOWER(sd.section COLLATE utf8mb4_general_ci) = LOWER(? COLLATE utf8mb4_general_ci))
+                OR (? IS NOT NULL AND ? != '' AND LOWER(sd.section) = LOWER(?))
                 OR (? = 'qualifying' AND 
-                    (? = 'All Programs' OR LOWER(sd.course COLLATE utf8mb4_general_ci) = LOWER(? COLLATE utf8mb4_general_ci)) AND 
-                    (? = 'All Year Levels' OR LOWER(sd.year_level COLLATE utf8mb4_general_ci) = LOWER(? COLLATE utf8mb4_general_ci))
+                    (? = 'All Programs' OR LOWER(sd.course) = LOWER(?)) AND 
+                    (? = 'All Year Levels' OR LOWER(sd.year_level) = LOWER(?))
                 )
                 OR (
                     NOT EXISTS (SELECT 1 FROM exam_assignments WHERE exam_id = ?) AND
