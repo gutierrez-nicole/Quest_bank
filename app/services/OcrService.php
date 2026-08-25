@@ -7,6 +7,100 @@ class OcrService {
 
     const OCR_REVIEW_THRESHOLD = 75.0;
 
+    /**
+     * Process multiple answer sheet pages (e.g. multi-page test papers).
+     *
+     * @param array $fileEntries Array of ['path' => string, 'ext' => string, 'filename' => string]
+     * @return array Unified OCR extraction result
+     */
+    public static function processMultipleAnswerSheets(array $fileEntries) {
+        if (empty($fileEntries)) {
+            return [
+                'success' => false,
+                'status' => 'failed',
+                'extraction_mode' => 'image_ocr',
+                'text' => '',
+                'ocr_text' => '',
+                'confidence' => 0.00,
+                'suggested_manual_review' => true,
+                'error' => 'No files provided for OCR processing.',
+                'ocr_error' => 'No files provided for OCR processing.',
+                'page_count' => 0,
+                'pages' => [],
+                'execution_time_ms' => 0.00
+            ];
+        }
+
+        if (count($fileEntries) === 1) {
+            return self::processAnswerSheet($fileEntries[0]['path'], $fileEntries[0]['ext'] ?? 'png');
+        }
+
+        $startTime = microtime(true);
+        $combinedText = '';
+        $totalConfidence = 0.00;
+        $validConfidenceCount = 0;
+        $allPagesData = [];
+        $totalPages = 0;
+        $anyReviewRequired = false;
+        $errors = [];
+
+        foreach ($fileEntries as $idx => $entry) {
+            $pageNum = $idx + 1;
+            $path = $entry['path'] ?? '';
+            $ext = $entry['ext'] ?? 'png';
+
+            $pageRes = self::processAnswerSheet($path, $ext);
+
+            if ($pageRes['success'] && !empty(trim($pageRes['text']))) {
+                $combinedText .= "--- Page {$pageNum} ---\n" . trim($pageRes['text']) . "\n\n";
+            } elseif (!empty($pageRes['error'])) {
+                $errors[] = "Page {$pageNum}: " . $pageRes['error'];
+            }
+
+            if ($pageRes['confidence'] !== null && $pageRes['confidence'] > 0) {
+                $totalConfidence += $pageRes['confidence'];
+                $validConfidenceCount++;
+            }
+
+            if (!empty($pageRes['suggested_manual_review'])) {
+                $anyReviewRequired = true;
+            }
+
+            $totalPages += max(1, intval($pageRes['page_count'] ?? 1));
+            $allPagesData[] = [
+                'page' => $pageNum,
+                'path' => $path,
+                'confidence' => $pageRes['confidence'] ?? 0.00,
+                'status' => $pageRes['status'] ?? 'completed'
+            ];
+        }
+
+        $avgConfidence = ($validConfidenceCount > 0) ? round($totalConfidence / $validConfidenceCount, 2) : 0.00;
+        $cleanCombinedText = self::cleanOcrText($combinedText);
+        $executionTime = round((microtime(true) - $startTime) * 1000, 2);
+
+        $status = 'completed';
+        if (empty(trim($cleanCombinedText)) || $anyReviewRequired || ($avgConfidence < self::OCR_REVIEW_THRESHOLD)) {
+            $status = 'manual_review_required';
+            $anyReviewRequired = true;
+        }
+
+        return [
+            'success' => !empty(trim($cleanCombinedText)),
+            'status' => $status,
+            'extraction_mode' => 'multi_page_ocr',
+            'text' => $cleanCombinedText,
+            'ocr_text' => $cleanCombinedText,
+            'confidence' => $avgConfidence,
+            'page_count' => $totalPages,
+            'pages' => $allPagesData,
+            'suggested_manual_review' => $anyReviewRequired,
+            'error' => !empty($errors) ? implode("; ", $errors) : null,
+            'ocr_error' => !empty($errors) ? implode("; ", $errors) : null,
+            'execution_time_ms' => $executionTime
+        ];
+    }
+
     public static function processAnswerSheet($filePath, $fileExt = 'png') {
         $startTime = microtime(true);
         $fileExt = strtolower($fileExt);

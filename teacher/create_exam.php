@@ -7,6 +7,26 @@ $pdo = getDBConnection();
 $success_msg = "";
 $error_msg = "";
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_exam'])) {
+    validateCSRFToken();
+    $delete_exam_id = intval($_POST['delete_exam_id'] ?? 0);
+    if ($delete_exam_id > 0) {
+        $stmtCheck = $pdo->prepare("SELECT id, title FROM exams WHERE id = ? AND teacher_id = ?");
+        $stmtCheck->execute([$delete_exam_id, $_SESSION['user_id']]);
+        $examToDelete = $stmtCheck->fetch(PDO::FETCH_ASSOC);
+        if ($examToDelete) {
+            $stmtDel = $pdo->prepare("DELETE FROM exams WHERE id = ? AND teacher_id = ?");
+            $stmtDel->execute([$delete_exam_id, $_SESSION['user_id']]);
+            logActivity("Deleted exam '{$examToDelete['title']}' (ID: {$delete_exam_id}) from question bank.");
+            $success_msg = "Exam '{$examToDelete['title']}' deleted successfully.";
+        } else {
+            $error_msg = "Unauthorized: Exam not found or does not belong to your account.";
+        }
+    } else {
+        $error_msg = "Invalid exam ID for deletion.";
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_exam'])) {
     validateCSRFToken();
     $title = trim($_POST['title']);
@@ -266,24 +286,31 @@ unset($ex);
                     <?php if (!empty($existing_exams)): ?>
                         <div class="space-y-3 max-h-[650px] overflow-y-auto pr-1 custom-scrollbar">
                             <?php foreach ($existing_exams as $ex): ?>
-                                <div onclick="openExamPreviewModal(<?php echo htmlspecialchars(json_encode($ex), ENT_QUOTES, 'UTF-8'); ?>)" data-testid="saved-exam-item" data-exam-title="<?php echo htmlspecialchars($ex['title']); ?>" class="p-3.5 border border-stone-200 rounded-xl bg-stone-50/50 hover:border-orange-500 hover:bg-orange-50/30 hover:shadow-md cursor-pointer transition-all space-y-1.5 group">
-                                    <div class="flex items-center justify-between">
-                                        <h4 class="font-extrabold text-xs text-stone-800 group-hover:text-orange-600 transition-colors flex items-center gap-1.5">
-                                            <i class="fa-solid fa-folder-open text-orange-500"></i>
-                                            <?php echo htmlspecialchars($ex['title']); ?>
-                                        </h4>
-                                        <span class="text-[9px] bg-orange-100 text-orange-700 font-extrabold px-2.5 py-0.5 rounded-full shadow-2xs">
-                                            <?php echo $ex['total_items']; ?> Items
-                                        </span>
+                                <div class="p-3.5 border border-stone-200 rounded-xl bg-stone-50/50 hover:border-orange-500 hover:bg-orange-50/30 hover:shadow-md transition-all space-y-1.5 group relative">
+                                    <div onclick="openExamPreviewModal(<?php echo htmlspecialchars(json_encode($ex), ENT_QUOTES, 'UTF-8'); ?>)" data-testid="saved-exam-item" data-exam-title="<?php echo htmlspecialchars($ex['title']); ?>" class="cursor-pointer">
+                                        <div class="flex items-center justify-between">
+                                            <h4 class="font-extrabold text-xs text-stone-800 group-hover:text-orange-600 transition-colors flex items-center gap-1.5">
+                                                <i class="fa-solid fa-folder-open text-orange-500"></i>
+                                                <?php echo htmlspecialchars($ex['title']); ?>
+                                            </h4>
+                                            <span class="text-[9px] bg-orange-100 text-orange-700 font-extrabold px-2.5 py-0.5 rounded-full shadow-2xs">
+                                                <?php echo $ex['total_items']; ?> Items
+                                            </span>
+                                        </div>
+                                        <p class="text-[10px] text-stone-400 font-semibold mt-1.5"><?php echo htmlspecialchars($ex['subject']); ?></p>
                                     </div>
-                                    <p class="text-[10px] text-stone-400 font-semibold"><?php echo htmlspecialchars($ex['subject']); ?></p>
                                     <div class="flex items-center justify-between pt-1 border-t border-stone-100/80 mt-2">
                                         <span class="inline-block text-[9px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
                                             <i class="fa-solid fa-compass-drafting mr-1"></i><?php echo htmlspecialchars($ex['specialization'] ?? 'Structural Engineering'); ?>
                                         </span>
-                                        <span class="text-[10px] text-orange-600 font-bold group-hover:translate-x-0.5 transition-transform flex items-center gap-1">
-                                            View Items <i class="fa-solid fa-arrow-right text-[9px]"></i>
-                                        </span>
+                                        <div class="flex items-center gap-2">
+                                            <button type="button" onclick="event.stopPropagation(); deleteExam(<?php echo $ex['id']; ?>, '<?php echo htmlspecialchars(addslashes($ex['title']), ENT_QUOTES, 'UTF-8'); ?>')" class="text-[10px] text-rose-400 hover:text-rose-600 font-bold transition-colors flex items-center gap-1 opacity-0 group-hover:opacity-100" title="Delete Exam" aria-label="Delete <?php echo htmlspecialchars($ex['title']); ?>">
+                                                <i class="fa-solid fa-trash-can text-[9px]"></i> Delete
+                                            </button>
+                                            <span onclick="openExamPreviewModal(<?php echo htmlspecialchars(json_encode($ex), ENT_QUOTES, 'UTF-8'); ?>)" class="text-[10px] text-orange-600 font-bold group-hover:translate-x-0.5 transition-transform flex items-center gap-1 cursor-pointer">
+                                                View Items <i class="fa-solid fa-arrow-right text-[9px]"></i>
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
                             <?php endforeach; ?>
@@ -317,7 +344,9 @@ unset($ex);
             </div>
 
             <div class="flex justify-between items-center pt-4 border-t border-stone-100">
-                <span class="text-xs text-stone-400 font-semibold"><i class="fa-solid fa-shield-halved text-emerald-500 mr-1"></i> QuestBank AI Verified Answer Keys</span>
+                <button id="modal_delete_btn" type="button" onclick="" class="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5">
+                    <i class="fa-solid fa-trash-can text-xs"></i> Delete Exam
+                </button>
                 <button onclick="closeExamPreviewModal()" class="px-5 py-2.5 bg-stone-900 hover:bg-orange-600 text-white font-bold text-xs rounded-xl shadow-sm transition-all">
                     Close Preview
                 </button>
@@ -325,6 +354,13 @@ unset($ex);
 
         </div>
     </div>
+
+    <!-- Hidden form for deleting an exam from Saved Question Bank -->
+    <form id="deleteExamForm" method="POST" action="create_exam.php" class="hidden">
+        <?php echo csrfInputField(); ?>
+        <input type="hidden" name="delete_exam" value="1">
+        <input type="hidden" name="delete_exam_id" id="delete_exam_id" value="">
+    </form>
 
     <script>
         let questionCount = 0;
@@ -345,29 +381,25 @@ unset($ex);
             const container = document.getElementById('questions_container');
             
             const qBlock = document.createElement('div');
-            qBlock.className = 'p-4 border border-stone-200 rounded-xl bg-stone-50/50 space-y-3 relative';
             qBlock.id = `q_block_${questionCount}`;
-
+            qBlock.className = "p-4 border border-stone-200 rounded-xl bg-stone-50/50 space-y-3 relative group";
+            
             qBlock.innerHTML = `
                 <div class="flex items-center justify-between">
-                    <span class="text-xs font-bold text-orange-600">Item #${questionCount}</span>
-                    <button type="button" onclick="removeQuestion(${questionCount})" class="text-stone-400 hover:text-red-500 text-xs"><i class="fa-solid fa-trash"></i></button>
+                    <span class="text-xs font-black uppercase tracking-wider text-orange-600">Question Item #${questionCount}</span>
+                    <button type="button" onclick="removeQuestion(${questionCount})" class="text-stone-400 hover:text-rose-500 text-xs font-bold transition-colors">
+                        <i class="fa-solid fa-trash-can mr-1"></i> Remove
+                    </button>
                 </div>
-                <div class="space-y-1">
-                    <label class="text-[10px] font-bold uppercase text-stone-500">Question Text</label>
-                    <textarea name="questions[${questionCount}][text]" required rows="2" placeholder="Enter question..." class="w-full bg-white border border-stone-200 rounded-lg p-2 text-xs outline-none focus:border-orange-500 resize-none"></textarea>
+                <div>
+                    <input type="text" name="questions[${questionCount}][text]" required placeholder="Enter Question Prompt / Description..." class="w-full bg-white border border-stone-200 rounded-lg p-2 text-xs outline-none focus:border-orange-500 font-medium">
                 </div>
-                <div class="grid grid-cols-2 gap-2 text-xs">
+                <div class="grid grid-cols-2 gap-3">
                     <div class="space-y-1">
                         <label class="text-[10px] font-bold uppercase text-stone-500">Question Type</label>
-                        <select name="questions[${questionCount}][type]" class="w-full bg-white border rounded p-1.5 outline-none">
+                        <select name="questions[${questionCount}][type]" class="w-full bg-white border border-stone-200 rounded p-1.5 text-xs outline-none">
                             <option value="multiple_choice">Multiple Choice</option>
-                            <option value="true_false">True / False</option>
                             <option value="identification">Identification</option>
-                            <option value="fill_blank">Fill in the Blank</option>
-                            <option value="matching">Matching Type</option>
-                            <option value="problem_solving">Problem Solving</option>
-                            <option value="math_formula">Math Formula</option>
                         </select>
                     </div>
                     <div class="space-y-1">
@@ -398,6 +430,13 @@ unset($ex);
             document.getElementById('modal_exam_badge').innerText = exam.specialization || 'Civil Engineering';
             document.getElementById('modal_exam_title').innerText = exam.title;
             document.getElementById('modal_exam_subtitle').innerText = `${exam.subject} | ${exam.total_items || 5} Questions | ${exam.time_limit || 60} mins`;
+
+            const delBtn = document.getElementById('modal_delete_btn');
+            if (delBtn) {
+                delBtn.onclick = function() {
+                    deleteExam(exam.id, exam.title);
+                };
+            }
 
             const listContainer = document.getElementById('modal_questions_list');
             listContainer.innerHTML = '';
@@ -462,6 +501,13 @@ unset($ex);
         function closeExamPreviewModal() {
             document.getElementById('qb_preview_modal').classList.add('hidden');
             document.getElementById('qb_preview_modal').classList.remove('flex');
+        }
+
+        function deleteExam(id, title) {
+            if (confirm(`Are you sure you want to delete '${title}' from your Saved Question Bank? This will remove the exam and its question items.`)) {
+                document.getElementById('delete_exam_id').value = id;
+                document.getElementById('deleteExamForm').submit();
+            }
         }
     </script>
 </body>
