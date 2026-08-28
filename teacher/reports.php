@@ -445,6 +445,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['publish_entire_exam']
                     </div>
                 </div>
 
+                <div class="space-y-2 pt-2 border-t border-stone-200">
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs font-black uppercase tracking-wider text-stone-700 flex items-center gap-1.5">
+                            <i class="fa-solid fa-list-check text-orange-500"></i> Student Answer Breakdown & Remarks
+                        </label>
+                        <span id="modal_score_badge" class="text-[10px] font-extrabold bg-stone-100 text-stone-700 px-2 py-0.5 rounded-md border border-stone-200"></span>
+                    </div>
+                    <div id="modal_answers_breakdown" class="space-y-2 max-h-56 overflow-y-auto pr-1 custom-scrollbar">
+                        <!-- Rendered dynamically by openReviewModal -->
+                    </div>
+                </div>
+
                 <div class="space-y-1">
                     <label class="text-xs font-bold text-stone-700">Teacher Remarks / Grade Notes</label>
                     <textarea name="teacher_remarks" id="modal_teacher_remarks" rows="2" placeholder="Add feedback remarks for the student..." class="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-xs outline-none focus:border-orange-500 resize-none font-medium text-stone-800"></textarea>
@@ -482,15 +494,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['publish_entire_exam']
                     <div class="grid grid-cols-3 gap-2">
                         <div>
                             <label class="block text-[10px] font-bold text-stone-600">Question ID</label>
-                            <input type="number" name="question_id" required placeholder="e.g. 1" data-testid="item-question-id" class="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 font-bold text-stone-800">
+                            <input type="number" name="question_id" id="override_question_id" required placeholder="e.g. 1" data-testid="item-question-id" class="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 font-bold text-stone-800">
                         </div>
                         <div>
                             <label class="block text-[10px] font-bold text-stone-600">New Points</label>
-                            <input type="number" step="0.5" name="new_points" required placeholder="1.0" data-testid="item-points-input" class="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 font-bold text-stone-800">
+                            <input type="number" step="0.5" name="new_points" id="override_new_points" required placeholder="1.0" data-testid="item-points-input" class="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 font-bold text-stone-800">
                         </div>
                         <div>
                             <label class="block text-[10px] font-bold text-stone-600">Student Answer (Optional)</label>
-                            <input type="text" name="new_answer" placeholder="e.g. a" class="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-stone-800">
+                            <input type="text" name="new_answer" id="override_new_answer" placeholder="e.g. a" class="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-stone-800">
                         </div>
                     </div>
                     <div>
@@ -519,8 +531,79 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['publish_entire_exam']
             document.getElementById('modal_teacher_remarks').value = sub.teacher_remarks || '';
             document.getElementById('modal_review_status').value = sub.review_status || 'pending_review';
 
+            const scoreBadge = document.getElementById('modal_score_badge');
+            if (scoreBadge) {
+                scoreBadge.innerText = `Score: ${sub.total_score || sub.correct_count} / ${sub.total_possible_score || sub.total_items} (${sub.percentage}%)`;
+            }
+
+            // Render detailed Student Answers Breakdown & Remarks
+            const answersContainer = document.getElementById('modal_answers_breakdown');
+            answersContainer.innerHTML = '';
+
+            let evalResults = [];
+            if (sub.evaluation_result) {
+                try {
+                    evalResults = (typeof sub.evaluation_result === 'string') 
+                        ? JSON.parse(sub.evaluation_result) 
+                        : sub.evaluation_result;
+                } catch(e) {
+                    evalResults = [];
+                }
+            }
+
+            if (Array.isArray(evalResults) && evalResults.length > 0) {
+                evalResults.forEach((item, idx) => {
+                    const row = document.createElement('div');
+                    const isCorrect = item.evaluation_status === 'correct' || (item.awarded_points > 0 && item.awarded_points >= item.maximum_points);
+                    const isReview = item.requires_review || item.evaluation_status === 'requires_review';
+                    
+                    let remarkBadge = '';
+                    if (isCorrect) {
+                        remarkBadge = `<span class="bg-emerald-100 text-emerald-800 font-extrabold px-2 py-0.5 rounded-full text-[10px] flex items-center gap-1 border border-emerald-200"><i class="fa-solid fa-circle-check text-emerald-600"></i> Correct (+${item.awarded_points || 1} pt)</span>`;
+                    } else if (isReview) {
+                        remarkBadge = `<span class="bg-amber-100 text-amber-800 font-extrabold px-2 py-0.5 rounded-full text-[10px] flex items-center gap-1 border border-amber-200"><i class="fa-solid fa-triangle-exclamation text-amber-600"></i> Review Needed (${item.awarded_points || 0}/${item.maximum_points || 1} pt)</span>`;
+                    } else {
+                        remarkBadge = `<span class="bg-rose-100 text-rose-800 font-extrabold px-2 py-0.5 rounded-full text-[10px] flex items-center gap-1 border border-rose-200"><i class="fa-solid fa-circle-xmark text-rose-600"></i> Incorrect (0/${item.maximum_points || 1} pt)</span>`;
+                    }
+
+                    row.className = `p-2.5 rounded-xl border ${isCorrect ? 'bg-emerald-50/50 border-emerald-200' : 'bg-stone-50 border-stone-200'} text-xs space-y-1.5`;
+                    row.innerHTML = `
+                        <div class="flex items-center justify-between">
+                            <span class="font-extrabold text-stone-800 text-[11px]">Item #${idx + 1} (QID: ${item.question_id || idx + 1})</span>
+                            <div class="flex items-center gap-2">
+                                ${remarkBadge}
+                                <button type="button" onclick="selectItemForOverride(${item.question_id || (idx + 1)}, '${item.student_answer || ''}', ${item.maximum_points || 1})" class="text-[10px] text-orange-600 hover:text-orange-800 font-bold underline cursor-pointer">
+                                    Override
+                                </button>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 text-[11px]">
+                            <div class="p-1.5 rounded bg-white border border-stone-200 font-medium text-stone-700 truncate">
+                                <span class="text-stone-400 font-bold mr-1">Student Answer:</span>
+                                <strong class="${isCorrect ? 'text-emerald-700 font-black' : 'text-rose-700 font-black'}">${item.student_answer ? item.student_answer : '(No answer recorded)'}</strong>
+                            </div>
+                            <div class="p-1.5 rounded bg-white border border-stone-200 font-medium text-stone-700 truncate">
+                                <span class="text-stone-400 font-bold mr-1">Correct Key:</span>
+                                <strong class="text-emerald-800 font-black">${item.stored_correct_answer || item.correct_answer || 'N/A'}</strong>
+                            </div>
+                        </div>
+                        ${item.evaluation_reason ? `<p class="text-[10px] text-stone-500 font-medium italic">${item.evaluation_reason}</p>` : ''}
+                    `;
+                    answersContainer.appendChild(row);
+                });
+            } else {
+                answersContainer.innerHTML = '<p class="text-xs text-stone-400 italic text-center py-3">No item-level answer records available for this submission.</p>';
+            }
+
             document.getElementById('review_modal').classList.remove('hidden');
             document.getElementById('review_modal').classList.add('flex');
+        }
+
+        function selectItemForOverride(qId, stdAns, maxPts) {
+            document.getElementById('override_question_id').value = qId;
+            document.getElementById('override_new_points').value = maxPts;
+            document.getElementById('override_new_answer').value = stdAns;
+            document.getElementById('override_question_id').focus();
         }
 
         function closeReviewModal() {

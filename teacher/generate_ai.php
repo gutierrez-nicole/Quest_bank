@@ -655,7 +655,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                     $pdo->commit();
                                     $sourceLabel = $save_generation_source_type === 'cross_period_lessons' ? ", Cross-Period" : "";
                                     logActivity("Saved AI-generated exam '{$title}' ({$savedCount} deduplicated questions, Difficulty: {$difficulty}{$sourceLabel}).", $teacher_id);
-                                    $success_msg = "Exam '{$title}' successfully created and saved to Question Bank with {$savedCount} verified questions!";
+                                    $success_msg = "Exam '{$title}' successfully created and saved to Question Bank with {$savedCount} verified questions! <a href='print_exam.php?id={$exam_id}' target='_blank' class='inline-flex items-center gap-1.5 ml-2 underline font-black text-emerald-900 bg-emerald-100 hover:bg-emerald-200 px-3 py-1 rounded-lg transition-all'><i class='fa-solid fa-print text-xs'></i> Open & Print Exam Paper (New Tab)</a>";
                                     $generated_questions = null;
                                 }
                             }
@@ -887,152 +887,192 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
             <?php endif; ?>
 
             
-            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            <!-- Step-by-Step Google Forms Wizard Container (Full-Width) -->
+            <div class="max-w-5xl mx-auto w-full space-y-6">
                 
-                
-                <div class="lg:col-span-5 bg-white border border-stone-200 rounded-2xl p-6 shadow-sm space-y-5">
-                    <div class="flex items-center justify-between border-b border-stone-100 pb-3">
-                        <h3 class="text-xs font-extrabold uppercase tracking-wider text-stone-800 flex items-center gap-2">
-                            <i class="fa-solid fa-book-open text-orange-500"></i> 1. Lesson & Branch Setup
-                        </h3>
-                        <span class="text-[10px] bg-orange-100 text-orange-700 font-extrabold px-2 py-0.5 rounded-full">Groq Llama-3.3</span>
+                <!-- Wizard Step Navigation Indicator (Google Forms Style) -->
+                <div class="bg-white border border-stone-200 rounded-2xl p-4 shadow-sm">
+                    <div class="grid grid-cols-3 gap-2 text-center text-xs font-bold">
+                        <button type="button" onclick="goToWizardStep(1)" id="step_tab_1" class="step-tab-btn py-2.5 px-3 rounded-xl transition-all bg-orange-600 text-white flex items-center justify-center gap-2 shadow-sm">
+                            <span class="w-5 h-5 rounded-full bg-white text-orange-600 flex items-center justify-center text-[11px] font-black">1</span>
+                            <span class="truncate">1. Exam Information</span>
+                        </button>
+                        <button type="button" onclick="goToWizardStep(2)" id="step_tab_2" class="step-tab-btn py-2.5 px-3 rounded-xl transition-all bg-stone-100 text-stone-600 hover:bg-stone-200 flex items-center justify-center gap-2">
+                            <span class="w-5 h-5 rounded-full bg-stone-300 text-stone-700 flex items-center justify-center text-[11px] font-black">2</span>
+                            <span class="truncate">2. Lesson Material Pool</span>
+                        </button>
+                        <button type="button" onclick="goToWizardStep(3)" id="step_tab_3" class="step-tab-btn py-2.5 px-3 rounded-xl transition-all bg-stone-100 text-stone-600 hover:bg-stone-200 flex items-center justify-center gap-2">
+                            <span class="w-5 h-5 rounded-full bg-stone-300 text-stone-700 flex items-center justify-center text-[11px] font-black">3</span>
+                            <span class="truncate">3. Blueprint & Generate</span>
+                        </button>
+                    </div>
+                </div>
+
+                <form action="generate_ai.php" method="POST" id="ai_form" class="space-y-6">
+                    <?php echo csrfInputField(); ?>
+                    <input type="hidden" name="specialization" value="Civil Engineering">
+                    <input type="hidden" name="question_type" value="multiple_choice">
+
+                    <!-- PART 1: Basic Exam Information -->
+                    <div id="wizard_part_1" class="wizard-part bg-white border border-stone-200 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 animate-fadeIn">
+                        <div class="border-b border-stone-100 pb-4 flex items-center justify-between">
+                            <div>
+                                <span class="text-[10px] font-extrabold uppercase tracking-widest text-orange-600 bg-orange-50 px-2.5 py-1 rounded-md border border-orange-200">Part 1 of 3</span>
+                                <h3 class="text-base font-black text-stone-900 mt-1">Exam Setup & Target Subject</h3>
+                                <p class="text-xs text-stone-500">Provide the title and target subject for your AI-generated examination paper.</p>
+                            </div>
+                            <div class="w-10 h-10 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center text-lg">
+                                <i class="fa-solid fa-file-signature"></i>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div class="space-y-1.5">
+                                <label class="text-xs font-black uppercase text-stone-700">Exam Title <span class="text-rose-500">*</span></label>
+                                <div class="relative">
+                                    <i class="fa-solid fa-heading absolute left-3.5 top-3.5 text-stone-400 text-xs"></i>
+                                    <input type="text" name="exam_title" id="exam_title_input" required value="<?php echo htmlspecialchars($_POST['exam_title'] ?? ''); ?>" placeholder="e.g. CE 412 - Structural Analysis Midterm Exam" class="w-full bg-stone-50 border border-stone-200 rounded-xl pl-9 pr-4 py-3 text-xs font-bold text-stone-800 outline-none focus:border-orange-500 focus:bg-white transition-all shadow-2xs">
+                                </div>
+                            </div>
+
+                            <div class="space-y-1.5">
+                                <label class="text-xs font-black uppercase text-stone-700">Subject Name <span class="text-rose-500">*</span></label>
+                                <div class="relative">
+                                    <i class="fa-solid fa-book-bookmark absolute left-3.5 top-3.5 text-stone-400 text-xs"></i>
+                                    <input type="text" name="subject" id="subject_input" required value="<?php echo htmlspecialchars($_POST['subject'] ?? $teacher_handled_subject); ?>" placeholder="e.g. CE 412 - Structural Theory & Design" class="w-full bg-stone-50 border border-stone-200 rounded-xl pl-9 pr-4 py-3 text-xs font-bold text-stone-800 outline-none focus:border-orange-500 focus:bg-white transition-all shadow-2xs">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="pt-4 border-t border-stone-100 flex justify-end">
+                            <button type="button" onclick="goToWizardStep(2)" class="bg-orange-600 hover:bg-orange-700 text-white font-extrabold text-xs px-6 py-3 rounded-xl transition-all shadow flex items-center gap-2">
+                                <span>Continue to Lesson Material Pool</span> <i class="fa-solid fa-arrow-right text-xs"></i>
+                            </button>
+                        </div>
                     </div>
 
-                    <form action="generate_ai.php" method="POST" id="ai_form" class="space-y-4">
-                        <?php echo csrfInputField(); ?>
-                        
-                        <div class="space-y-1">
-                            <label class="text-xs font-bold text-stone-700">Exam Title</label>
-                            <div class="relative">
-                                <i class="fa-solid fa-file-signature absolute left-3.5 top-3 text-stone-400 text-xs"></i>
-                                <input type="text" name="exam_title" required value="<?php echo htmlspecialchars($_POST['exam_title'] ?? ''); ?>" placeholder="e.g. Reinforced Concrete Design Quiz 1" class="w-full bg-stone-50 border border-stone-200 rounded-xl pl-9 pr-4 py-2.5 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500 focus:bg-white transition-all">
+                    <!-- PART 2: Lesson Pool & Material Selection (Checkbox Filters) -->
+                    <div id="wizard_part_2" class="wizard-part hidden bg-white border border-stone-200 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 animate-fadeIn">
+                        <div class="border-b border-stone-100 pb-4 flex items-center justify-between">
+                            <div>
+                                <span class="text-[10px] font-extrabold uppercase tracking-widest text-orange-600 bg-orange-50 px-2.5 py-1 rounded-md border border-orange-200">Part 2 of 3</span>
+                                <h3 class="text-base font-black text-stone-900 mt-1">Lesson Content Source & Filter Selection</h3>
+                                <p class="text-xs text-stone-500">Choose instructional materials from your uploaded syllabus or paste raw lecture notes.</p>
+                            </div>
+                            <div class="w-10 h-10 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center text-lg">
+                                <i class="fa-solid fa-book-open"></i>
                             </div>
                         </div>
 
-                        <div class="space-y-1">
-                            <label class="text-xs font-bold text-stone-700">Subject Name</label>
-                            <div class="relative">
-                                <i class="fa-solid fa-book absolute left-3.5 top-3 text-stone-400 text-xs"></i>
-                                <input type="text" name="subject" required value="<?php echo htmlspecialchars($_POST['subject'] ?? $teacher_handled_subject); ?>" placeholder="e.g. CE 412 - Structural Theory" class="w-full bg-stone-50 border border-stone-200 rounded-xl pl-9 pr-4 py-2.5 text-xs font-bold text-stone-800 outline-none focus:border-orange-500 focus:bg-white transition-all">
-                            </div>
-                        </div>
-
-                        <div class="space-y-1">
-                            <label class="text-xs font-bold text-stone-700">Content Input Source</label>
-                            <div class="grid grid-cols-2 gap-2 bg-stone-100 p-1 rounded-xl">
-                                <label class="flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-bold cursor-pointer transition-all has-[:checked]:bg-white has-[:checked]:text-orange-600 has-[:checked]:shadow-sm text-stone-600">
+                        <!-- Source Toggle -->
+                        <div class="space-y-2">
+                            <label class="text-xs font-black uppercase text-stone-700">Content Input Mode</label>
+                            <div class="grid grid-cols-2 gap-3 bg-stone-100 p-1.5 rounded-2xl max-w-md">
+                                <label class="flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold cursor-pointer transition-all has-[:checked]:bg-white has-[:checked]:text-orange-600 has-[:checked]:shadow-sm text-stone-600">
                                     <input type="radio" name="input_source" value="extracted" onclick="toggleInputSource('extracted')" <?php echo (($_POST['input_source'] ?? 'extracted') === 'extracted') ? 'checked' : ''; ?> class="hidden">
-                                    <i class="fa-solid fa-file-lines"></i> Extracted Lessons
+                                    <i class="fa-solid fa-folder-tree"></i> Extracted Lessons
                                 </label>
-                                <label class="flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-bold cursor-pointer transition-all has-[:checked]:bg-white has-[:checked]:text-orange-600 has-[:checked]:shadow-sm text-stone-600">
+                                <label class="flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold cursor-pointer transition-all has-[:checked]:bg-white has-[:checked]:text-orange-600 has-[:checked]:shadow-sm text-stone-600">
                                     <input type="radio" name="input_source" value="manual" onclick="toggleInputSource('manual')" <?php echo (($_POST['input_source'] ?? '') === 'manual') ? 'checked' : ''; ?> class="hidden">
                                     <i class="fa-solid fa-paste"></i> Manual Paste
                                 </label>
                             </div>
                         </div>
 
-                        <div id="extracted_lessons_block" class="space-y-3 <?php echo (($_POST['input_source'] ?? 'extracted') === 'manual') ? 'hidden' : ''; ?>">
-                            <label class="text-xs font-bold text-stone-700 flex justify-between items-center">
-                                <span>Select Extracted Lessons (Cross-Period Pool)</span>
-                                <span class="text-[10px] text-orange-600 font-semibold"><?php echo count($all_teacher_lessons); ?> Total</span>
-                            </label>
-
-                            <div class="bg-stone-50 border border-stone-200 rounded-xl p-2.5 space-y-2">
-                                <div class="flex items-center justify-between">
-                                    <span class="text-[10px] font-extrabold text-stone-700 uppercase tracking-wider">
-                                        <i class="fa-solid fa-filter text-orange-500 mr-1"></i> Filter Lessons
+                        <!-- Extracted Lessons Pool Block -->
+                        <div id="extracted_lessons_block" class="space-y-4 <?php echo (($_POST['input_source'] ?? 'extracted') === 'manual') ? 'hidden' : ''; ?>">
+                            
+                            <!-- Interactive Checkbox Filters Box -->
+                            <div class="bg-stone-50 border border-stone-200 rounded-2xl p-4 sm:p-5 space-y-3.5">
+                                <div class="flex items-center justify-between border-b border-stone-200/80 pb-2">
+                                    <span class="text-xs font-black text-stone-800 uppercase tracking-wider flex items-center gap-1.5">
+                                        <i class="fa-solid fa-filter text-orange-500"></i> Interactive Lesson Filters
                                     </span>
-                                    <button type="button" onclick="resetLessonFilters()" class="text-[10px] text-orange-600 hover:text-orange-800 font-bold">Reset Filters</button>
+                                    <button type="button" onclick="resetCheckboxFilters()" class="text-[11px] text-orange-600 hover:text-orange-800 font-bold">
+                                        <i class="fa-solid fa-rotate-left mr-1"></i> Reset All Filters
+                                    </button>
                                 </div>
-                                <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                    <div>
-                                        <label class="text-[9px] font-bold text-stone-500">Subject</label>
-                                        <select id="filter_subject" data-testid="filter-subject" onchange="applyLessonFilters()" class="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-[11px] font-semibold text-stone-800 outline-none focus:border-orange-500">
-                                            <option value="">All Subjects</option>
-                                            <?php foreach ($filter_subjects as $s): ?>
-                                                <option value="<?php echo htmlspecialchars($s); ?>"><?php echo htmlspecialchars($s); ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
+
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                                    <!-- Academic Period Checkboxes (Prelim, Midterm, Finals) -->
+                                    <div class="space-y-1.5">
+                                        <label class="text-[10px] font-black uppercase tracking-wider text-stone-500 block">Academic Period</label>
+                                        <div class="flex flex-wrap gap-1.5">
+                                            <label class="filter-chip-label inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-stone-200 rounded-xl font-bold text-[11px] cursor-pointer hover:border-orange-400 transition-all text-stone-700 has-[:checked]:bg-blue-50 has-[:checked]:border-blue-400 has-[:checked]:text-blue-800">
+                                                <input type="checkbox" name="filter_period[]" value="prelim" onchange="applyLessonFilters()" class="period-filter-cb accent-blue-600 rounded">
+                                                <span>Prelim</span>
+                                            </label>
+                                            <label class="filter-chip-label inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-stone-200 rounded-xl font-bold text-[11px] cursor-pointer hover:border-orange-400 transition-all text-stone-700 has-[:checked]:bg-amber-50 has-[:checked]:border-amber-400 has-[:checked]:text-amber-800">
+                                                <input type="checkbox" name="filter_period[]" value="midterm" onchange="applyLessonFilters()" class="period-filter-cb accent-amber-600 rounded">
+                                                <span>Midterm</span>
+                                            </label>
+                                            <label class="filter-chip-label inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-stone-200 rounded-xl font-bold text-[11px] cursor-pointer hover:border-orange-400 transition-all text-stone-700 has-[:checked]:bg-purple-50 has-[:checked]:border-purple-400 has-[:checked]:text-purple-800">
+                                                <input type="checkbox" name="filter_period[]" value="finals" onchange="applyLessonFilters()" class="period-filter-cb accent-purple-600 rounded">
+                                                <span>Finals</span>
+                                            </label>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label class="text-[9px] font-bold text-stone-500">Year Level</label>
-                                        <select id="filter_year_level" data-testid="filter-year-level" onchange="applyLessonFilters()" class="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-[11px] font-semibold text-stone-800 outline-none focus:border-orange-500">
-                                            <option value="">All Year Levels</option>
-                                            <?php foreach ($filter_year_levels as $yl): ?>
-                                                <option value="<?php echo htmlspecialchars($yl); ?>"><?php echo htmlspecialchars($yl); ?></option>
+
+                                    <!-- Semester Checkboxes -->
+                                    <div class="space-y-1.5">
+                                        <label class="text-[10px] font-black uppercase tracking-wider text-stone-500 block">Semester</label>
+                                        <div class="flex flex-wrap gap-1.5">
+                                            <?php 
+                                            $semestersList = !empty($filter_semesters) ? $filter_semesters : ['1st Semester', '2nd Semester', 'Summer'];
+                                            foreach ($semestersList as $sem): 
+                                            ?>
+                                                <label class="filter-chip-label inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-stone-200 rounded-xl font-bold text-[11px] cursor-pointer hover:border-orange-400 transition-all text-stone-700 has-[:checked]:bg-orange-50 has-[:checked]:border-orange-400 has-[:checked]:text-orange-800">
+                                                    <input type="checkbox" name="filter_sem[]" value="<?php echo htmlspecialchars(strtolower($sem)); ?>" onchange="applyLessonFilters()" class="sem-filter-cb accent-orange-600 rounded">
+                                                    <span><?php echo htmlspecialchars($sem); ?></span>
+                                                </label>
                                             <?php endforeach; ?>
-                                        </select>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <label class="text-[9px] font-bold text-stone-500">Program</label>
-                                        <select id="filter_program" data-testid="filter-program" onchange="applyLessonFilters()" class="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-[11px] font-semibold text-stone-800 outline-none focus:border-orange-500">
-                                            <option value="">All Programs</option>
-                                            <?php foreach ($filter_programs as $p): ?>
-                                                <option value="<?php echo htmlspecialchars($p); ?>"><?php echo htmlspecialchars($p); ?></option>
+
+                                    <!-- School Year Checkboxes -->
+                                    <div class="space-y-1.5">
+                                        <label class="text-[10px] font-black uppercase tracking-wider text-stone-500 block">School Year</label>
+                                        <div class="flex flex-wrap gap-1.5">
+                                            <?php 
+                                            $syList = !empty($filter_school_years) ? $filter_school_years : [date('Y') . '-' . (date('Y') + 1)];
+                                            foreach ($syList as $sy): 
+                                            ?>
+                                                <label class="filter-chip-label inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-stone-200 rounded-xl font-bold text-[11px] cursor-pointer hover:border-orange-400 transition-all text-stone-700 has-[:checked]:bg-emerald-50 has-[:checked]:border-emerald-400 has-[:checked]:text-emerald-800">
+                                                    <input type="checkbox" name="filter_sy[]" value="<?php echo htmlspecialchars(strtolower($sy)); ?>" onchange="applyLessonFilters()" class="sy-filter-cb accent-emerald-600 rounded">
+                                                    <span><?php echo htmlspecialchars($sy); ?></span>
+                                                </label>
                                             <?php endforeach; ?>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label class="text-[9px] font-bold text-stone-500">Semester</label>
-                                        <select id="filter_semester" data-testid="filter-semester" onchange="applyLessonFilters()" class="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-[11px] font-semibold text-stone-800 outline-none focus:border-orange-500">
-                                            <option value="">All Semesters</option>
-                                            <?php foreach ($filter_semesters as $sem): ?>
-                                                <option value="<?php echo htmlspecialchars($sem); ?>"><?php echo htmlspecialchars($sem); ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label class="text-[9px] font-bold text-stone-500">School Year</label>
-                                        <select id="filter_school_year" data-testid="filter-school-year" onchange="applyLessonFilters()" class="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-[11px] font-semibold text-stone-800 outline-none focus:border-orange-500">
-                                            <option value="">All School Years</option>
-                                            <?php foreach ($filter_school_years as $sy): ?>
-                                                <option value="<?php echo htmlspecialchars($sy); ?>"><?php echo htmlspecialchars($sy); ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label class="text-[9px] font-bold text-stone-500">Academic Period</label>
-                                        <select id="filter_academic_period" data-testid="filter-academic-period" onchange="applyLessonFilters()" class="w-full bg-white border border-stone-200 rounded-lg px-2 py-1 text-[11px] font-semibold text-stone-800 outline-none focus:border-orange-500">
-                                            <option value="">All Periods</option>
-                                            <option value="general">General</option>
-                                            <option value="prelim">Prelim</option>
-                                            <option value="midterm">Midterm</option>
-                                            <option value="finals">Finals</option>
-                                        </select>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <div class="space-y-1">
-                                <label class="text-[10px] font-bold text-stone-500 uppercase tracking-wider">Quick Select Controls</label>
+                            <!-- Quick Select Controls -->
+                            <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+                                <label class="text-[11px] font-extrabold text-stone-700 uppercase tracking-wider">Quick Select Items</label>
                                 <div class="flex flex-wrap gap-1.5">
-                                    <button type="button" onclick="quickSelect('general')" data-testid="select-all-general" class="px-2 py-1 bg-stone-200 hover:bg-stone-300 text-stone-800 rounded-md text-[10px] font-bold transition-all shadow-xs">
-                                        Select All General
-                                    </button>
-                                    <button type="button" onclick="quickSelect('prelim')" data-testid="select-all-prelim" class="px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-md text-[10px] font-bold transition-all shadow-xs">
+                                    <button type="button" onclick="quickSelect('prelim')" class="px-2.5 py-1 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-lg text-[10px] font-bold transition-all">
                                         Select All Prelim
                                     </button>
-                                    <button type="button" onclick="quickSelect('midterm')" data-testid="select-all-midterm" class="px-2 py-1 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-md text-[10px] font-bold transition-all shadow-xs">
+                                    <button type="button" onclick="quickSelect('midterm')" class="px-2.5 py-1 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded-lg text-[10px] font-bold transition-all">
                                         Select All Midterm
                                     </button>
-                                    <button type="button" onclick="quickSelect('finals')" data-testid="select-all-finals" class="px-2 py-1 bg-purple-100 hover:bg-purple-200 text-purple-800 rounded-md text-[10px] font-bold transition-all shadow-xs">
+                                    <button type="button" onclick="quickSelect('finals')" class="px-2.5 py-1 bg-purple-100 hover:bg-purple-200 text-purple-800 rounded-lg text-[10px] font-bold transition-all">
                                         Select All Finals
                                     </button>
-                                    <button type="button" onclick="quickSelect('visible')" data-testid="select-all-visible" class="px-2 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded-md text-[10px] font-bold transition-all shadow-xs">
-                                        Select All Visible
-                                    </button>
-                                    <button type="button" onclick="clearSelection()" data-testid="clear-selection" class="px-2 py-1 bg-rose-100 hover:bg-rose-200 text-rose-800 rounded-md text-[10px] font-bold transition-all shadow-xs">
+                                    <button type="button" onclick="clearSelection()" class="px-2.5 py-1 bg-rose-100 hover:bg-rose-200 text-rose-800 rounded-lg text-[10px] font-bold transition-all">
                                         Clear Selection
                                     </button>
                                 </div>
                             </div>
 
+                            <!-- Lessons Cards List -->
                             <?php if (!empty($all_teacher_lessons)): ?>
-                                <div class="max-h-60 overflow-y-auto border border-stone-200 rounded-xl bg-stone-50 p-2.5 space-y-4 text-xs custom-scrollbar">
-                                    <?php foreach (['general' => 'General', 'prelim' => 'Prelim', 'midterm' => 'Midterm', 'finals' => 'Finals'] as $periodKey => $periodTitle): ?>
-                                        <div class="period-group-block space-y-2" data-period="<?php echo $periodKey; ?>" data-testid="period-group-<?php echo $periodKey; ?>">
-                                            <div class="flex items-center justify-between border-b border-stone-200 pb-1">
-                                                <h4 class="text-xs font-black uppercase tracking-wider text-stone-700 flex items-center gap-1.5">
+                                <div class="max-h-80 overflow-y-auto border border-stone-200 rounded-2xl bg-stone-50/50 p-4 space-y-4 text-xs custom-scrollbar">
+                                    <?php foreach (['prelim' => 'Prelim', 'midterm' => 'Midterm', 'finals' => 'Finals', 'general' => 'General / Other'] as $periodKey => $periodTitle): ?>
+                                        <div class="period-group-block space-y-2.5" data-period="<?php echo $periodKey; ?>">
+                                            <div class="flex items-center justify-between border-b border-stone-200 pb-1.5">
+                                                <h4 class="text-xs font-black uppercase tracking-wider text-stone-700 flex items-center gap-2">
                                                     <?php
                                                     $badgeClass = match($periodKey) {
                                                         'prelim' => 'bg-blue-600 text-white',
@@ -1041,81 +1081,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                                         default => 'bg-stone-600 text-white'
                                                     };
                                                     ?>
-                                                    <span class="px-1.5 py-0.5 rounded text-[9px] font-black <?php echo $badgeClass; ?>"><?php echo strtoupper($periodKey); ?></span>
-                                                    <span><?php echo $periodTitle; ?></span>
+                                                    <span class="px-2 py-0.5 rounded text-[10px] font-black <?php echo $badgeClass; ?>"><?php echo strtoupper($periodKey); ?></span>
+                                                    <span><?php echo $periodTitle; ?> Materials</span>
                                                 </h4>
-                                                <span class="text-[10px] font-bold text-stone-400 period-count"><?php echo count($lessons_by_period[$periodKey]); ?> items</span>
+                                                <span class="text-[11px] font-bold text-stone-400"><?php echo count($lessons_by_period[$periodKey] ?? []); ?> files</span>
                                             </div>
 
                                             <?php if (!empty($lessons_by_period[$periodKey])): ?>
-                                                <div class="space-y-1.5">
+                                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                                                     <?php foreach ($lessons_by_period[$periodKey] as $cl): 
                                                         $isCompleted = ($cl['processing_status'] ?? '') === 'completed';
                                                         $hasContent = !empty(trim($cl['lesson_text'] ?? ''));
                                                         $canSelect = $isCompleted && $hasContent;
                                                     ?>
-                                                        <div class="lesson-card p-2 bg-white border border-stone-200 rounded-lg space-y-1 transition-all" 
-                                                             data-testid="lesson-card-<?php echo $cl['id']; ?>"
+                                                        <div class="lesson-card p-3 bg-white border border-stone-200 rounded-xl space-y-2 hover:border-orange-400 hover:shadow-xs transition-all" 
                                                              data-id="<?php echo $cl['id']; ?>"
-                                                             data-subject="<?php echo htmlspecialchars($cl['subject'] ?? ''); ?>"
-                                                             data-year-level="<?php echo htmlspecialchars($cl['year_level'] ?? ''); ?>"
-                                                             data-program="<?php echo htmlspecialchars($cl['program'] ?? ''); ?>"
-                                                             data-semester="<?php echo htmlspecialchars($cl['semester'] ?? ''); ?>"
-                                                             data-school-year="<?php echo htmlspecialchars($cl['school_year'] ?? ''); ?>"
-                                                             data-academic-period="<?php echo htmlspecialchars($cl['academic_period'] ?? 'general'); ?>">
+                                                             data-subject="<?php echo htmlspecialchars(strtolower($cl['subject'] ?? '')); ?>"
+                                                             data-year-level="<?php echo htmlspecialchars(strtolower($cl['year_level'] ?? '')); ?>"
+                                                             data-program="<?php echo htmlspecialchars(strtolower($cl['program'] ?? '')); ?>"
+                                                             data-semester="<?php echo htmlspecialchars(strtolower($cl['semester'] ?? '')); ?>"
+                                                             data-school-year="<?php echo htmlspecialchars(strtolower($cl['school_year'] ?? '')); ?>"
+                                                             data-academic-period="<?php echo htmlspecialchars(strtolower($cl['academic_period'] ?? 'general')); ?>">
 
                                                             <div class="flex items-start justify-between gap-2">
                                                                 <label class="flex items-start gap-2 cursor-pointer font-bold text-stone-800 text-xs truncate flex-grow">
                                                                     <input type="checkbox" 
                                                                            name="selected_lessons[]" 
                                                                            value="<?php echo $cl['id']; ?>" 
-                                                                           data-testid="lesson-checkbox-<?php echo $cl['id']; ?>"
                                                                            data-period="<?php echo $periodKey; ?>"
                                                                            <?php echo $canSelect ? '' : 'disabled'; ?>
                                                                            <?php echo ($canSelect && (intval($cl['id']) === ($preselected_material_id ?? 0) || in_array($cl['id'], $selected_lesson_ids ?? []))) ? 'checked' : ''; ?>
                                                                            class="lesson-checkbox accent-orange-600 rounded mt-0.5">
-                                                                    <span data-testid="lesson-title-<?php echo $cl['id']; ?>" class="truncate leading-tight <?php echo $canSelect ? '' : 'text-stone-400 line-through'; ?>">
+                                                                    <span class="truncate leading-tight <?php echo $canSelect ? '' : 'text-stone-400 line-through'; ?>">
                                                                         <?php echo htmlspecialchars($cl['title']); ?>
                                                                     </span>
                                                                 </label>
 
                                                                 <?php if ($isCompleted && $hasContent): ?>
-                                                                    <span data-testid="lesson-status-<?php echo $cl['id']; ?>" class="text-[9px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded flex-shrink-0">
-                                                                        Completed
-                                                                    </span>
-                                                                <?php elseif (!$isCompleted): ?>
-                                                                    <span data-testid="lesson-status-<?php echo $cl['id']; ?>" class="text-[9px] font-extrabold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded flex-shrink-0">
-                                                                        <?php echo ucfirst($cl['processing_status'] ?? 'Processing'); ?>
+                                                                    <span class="text-[9px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded flex-shrink-0">
+                                                                        Ready
                                                                     </span>
                                                                 <?php else: ?>
-                                                                    <span data-testid="lesson-status-<?php echo $cl['id']; ?>" class="text-[9px] font-extrabold text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded flex-shrink-0">
-                                                                        Empty
+                                                                    <span class="text-[9px] font-extrabold text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded flex-shrink-0">
+                                                                        Unavailable
                                                                     </span>
                                                                 <?php endif; ?>
                                                             </div>
 
                                                             <div class="flex flex-wrap items-center gap-1.5 text-[10px] text-stone-500 font-medium">
-                                                                <span class="bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200" data-testid="lesson-subject-<?php echo $cl['id']; ?>">
+                                                                <span class="bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200">
                                                                     <i class="fa-solid fa-book text-stone-400 mr-0.5"></i><?php echo htmlspecialchars($cl['subject'] ?? 'General'); ?>
                                                                 </span>
                                                                 <?php if (!empty($cl['semester'])): ?>
-                                                                    <span class="bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200" data-testid="lesson-semester-<?php echo $cl['id']; ?>">
+                                                                    <span class="bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200">
                                                                         <?php echo htmlspecialchars($cl['semester']); ?>
                                                                     </span>
                                                                 <?php endif; ?>
                                                                 <?php if (!empty($cl['school_year'])): ?>
-                                                                    <span class="bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200" data-testid="lesson-school-year-<?php echo $cl['id']; ?>">
+                                                                    <span class="bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200">
                                                                         <?php echo htmlspecialchars($cl['school_year']); ?>
-                                                                    </span>
-                                                                <?php endif; ?>
-                                                                <?php if (!empty($cl['year_level'])): ?>
-                                                                    <span class="bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200" data-testid="lesson-year-level-<?php echo $cl['id']; ?>">
-                                                                        <?php echo htmlspecialchars($cl['year_level']); ?>
-                                                                    </span>
-                                                                <?php endif; ?>
-                                                                <?php if (!empty($cl['program'])): ?>
-                                                                    <span class="bg-stone-100 px-1.5 py-0.5 rounded border border-stone-200" data-testid="lesson-program-<?php echo $cl['id']; ?>">
-                                                                        <?php echo htmlspecialchars($cl['program']); ?>
                                                                     </span>
                                                                 <?php endif; ?>
                                                             </div>
@@ -1123,282 +1147,242 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                                     <?php endforeach; ?>
                                                 </div>
                                             <?php else: ?>
-                                                <p class="text-[11px] text-stone-400 italic px-2">No materials uploaded for this period.</p>
+                                                <p class="text-[11px] text-stone-400 italic px-2">No lesson materials uploaded under this period.</p>
                                             <?php endif; ?>
                                         </div>
                                     <?php endforeach; ?>
                                 </div>
                             <?php else: ?>
-                                <div class="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs font-semibold">
-                                    No extracted lessons found. Please upload lesson materials first under <a href="upload_lessons.php" class="underline font-bold">Upload Lessons</a> or use Manual Paste mode.
+                                <div class="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-amber-800 text-xs font-semibold">
+                                    No extracted lessons found. Please upload syllabus files under <a href="upload_lessons.php" class="underline font-bold">Upload Lessons</a> or switch to Manual Paste.
                                 </div>
                             <?php endif; ?>
                         </div>
 
-                        <div id="manual_text_block" class="space-y-1 <?php echo (($_POST['input_source'] ?? 'extracted') === 'extracted' || !isset($_POST['input_source'])) ? 'hidden' : ''; ?>">
-                            <label class="text-xs font-bold text-stone-700">Paste Lesson Content / Syllabi Notes</label>
-                            <textarea name="lesson_text" rows="5" placeholder="Paste Civil Engineering notes, formulas, or lecture content here..." class="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-xs font-medium text-stone-800 outline-none focus:border-orange-500 focus:bg-white resize-none transition-all"><?php echo htmlspecialchars($_POST['lesson_text'] ?? ''); ?></textarea>
+                        <!-- Manual Text Paste Block -->
+                        <div id="manual_text_block" class="space-y-2 <?php echo (($_POST['input_source'] ?? 'extracted') === 'extracted' || !isset($_POST['input_source'])) ? 'hidden' : ''; ?>">
+                            <label class="text-xs font-black uppercase text-stone-700">Paste Syllabi & Lecture Notes</label>
+                            <textarea name="lesson_text" rows="6" placeholder="Paste Civil Engineering notes, formulas, or lecture content here..." class="w-full bg-stone-50 border border-stone-200 rounded-2xl p-4 text-xs font-medium text-stone-800 outline-none focus:border-orange-500 focus:bg-white resize-none transition-all shadow-2xs"><?php echo htmlspecialchars($_POST['lesson_text'] ?? ''); ?></textarea>
                         </div>
 
-                        <div class="grid grid-cols-2 gap-3">
-                            <div class="space-y-1">
-                                <label class="text-xs font-bold text-stone-700">Difficulty Distribution Mode</label>
-                                <select name="difficulty_mode" id="difficulty_mode" onchange="toggleDifficultyControls()" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500">
-                                    <option value="single" <?php echo (($_POST['difficulty_mode'] ?? 'single') === 'single') ? 'selected' : ''; ?>>Single Uniform Difficulty</option>
-                                    <option value="percentage" <?php echo (($_POST['difficulty_mode'] ?? '') === 'percentage') ? 'selected' : ''; ?>>Percentage Distribution (%)</option>
-                                    <option value="fixed" <?php echo (($_POST['difficulty_mode'] ?? '') === 'fixed') ? 'selected' : ''; ?>>Custom Difficulty Distribution</option>
-                                </select>
-                            </div>
+                        <div class="pt-4 border-t border-stone-100 flex items-center justify-between">
+                            <button type="button" onclick="goToWizardStep(1)" class="bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs px-5 py-3 rounded-xl transition-all">
+                                <i class="fa-solid fa-arrow-left text-xs mr-1"></i> Back to Exam Info
+                            </button>
+                            <button type="button" onclick="goToWizardStep(3)" class="bg-orange-600 hover:bg-orange-700 text-white font-extrabold text-xs px-6 py-3 rounded-xl transition-all shadow flex items-center gap-2">
+                                <span>Continue to Blueprint & Difficulty</span> <i class="fa-solid fa-arrow-right text-xs"></i>
+                            </button>
+                        </div>
+                    </div>
 
-                            <div class="space-y-1">
-                                <label class="text-xs font-bold text-stone-700">Total Number of Items</label>
-                                <select name="num_questions" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500">
+                    <!-- PART 3: Blueprint & Generate -->
+                    <div id="wizard_part_3" class="wizard-part hidden bg-white border border-stone-200 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 animate-fadeIn">
+                        <div class="border-b border-stone-100 pb-4 flex items-center justify-between">
+                            <div>
+                                <span class="text-[10px] font-extrabold uppercase tracking-widest text-orange-600 bg-orange-50 px-2.5 py-1 rounded-md border border-orange-200">Part 3 of 3</span>
+                                <h3 class="text-base font-black text-stone-900 mt-1">Question Blueprint, Difficulty & Generation</h3>
+                                <p class="text-xs text-stone-500">Configure item distribution and trigger the AI generation engine.</p>
+                            </div>
+                            <div class="w-10 h-10 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center text-lg">
+                                <i class="fa-solid fa-sliders"></i>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div class="space-y-1.5">
+                                <label class="text-xs font-black uppercase text-stone-700">Total Number of Items</label>
+                                <select name="num_questions" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs font-bold text-stone-800 outline-none focus:border-orange-500">
                                     <?php foreach ([5, 10, 15, 20, 25, 30, 50] as $n): ?>
                                         <option value="<?php echo $n; ?>" <?php echo (intval($_POST['num_questions'] ?? 5) === $n) ? 'selected' : ''; ?>><?php echo $n; ?> Questions</option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>
+
+                            <div class="space-y-1.5">
+                                <label class="text-xs font-black uppercase text-stone-700">Difficulty Mode</label>
+                                <select name="difficulty_mode" id="difficulty_mode" onchange="toggleDifficultyControls()" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs font-bold text-stone-800 outline-none focus:border-orange-500">
+                                    <option value="single" <?php echo (($_POST['difficulty_mode'] ?? 'single') === 'single') ? 'selected' : ''; ?>>Single Uniform Difficulty</option>
+                                    <option value="percentage" <?php echo (($_POST['difficulty_mode'] ?? '') === 'percentage') ? 'selected' : ''; ?>>Percentage Distribution (%)</option>
+                                    <option value="fixed" <?php echo (($_POST['difficulty_mode'] ?? '') === 'fixed') ? 'selected' : ''; ?>>Custom Item Count</option>
+                                </select>
+                            </div>
+
+                            <div class="space-y-1.5">
+                                <label class="text-xs font-black uppercase text-stone-700">Single Difficulty</label>
+                                <select name="difficulty" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs font-bold text-stone-800 outline-none focus:border-orange-500">
+                                    <option value="easy" <?php echo (($_POST['difficulty'] ?? '') === 'easy') ? 'selected' : ''; ?>>Easy</option>
+                                    <option value="medium" <?php echo (($_POST['difficulty'] ?? 'medium') === 'medium') ? 'selected' : ''; ?>>Medium</option>
+                                    <option value="hard" <?php echo (($_POST['difficulty'] ?? '') === 'hard') ? 'selected' : ''; ?>>Hard / Advanced</option>
+                                </select>
+                            </div>
                         </div>
 
-                        <div class="space-y-1">
-                            <label class="text-xs font-bold text-stone-700">Default Single Difficulty (if single mode)</label>
-                            <select name="difficulty" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500">
-                                <option value="easy" <?php echo (($_POST['difficulty'] ?? '') === 'easy') ? 'selected' : ''; ?>>Easy</option>
-                                <option value="medium" <?php echo (($_POST['difficulty'] ?? 'medium') === 'medium') ? 'selected' : ''; ?>>Medium</option>
-                                <option value="hard" <?php echo (($_POST['difficulty'] ?? '') === 'hard') ? 'selected' : ''; ?>>Hard / Advanced</option>
-                            </select>
-                        </div>
-
-                        <!-- Priority 2: Custom Difficulty Distribution -->
-                        <div id="custom_difficulty_block" class="space-y-2 bg-stone-50 border border-stone-200 p-3 rounded-xl p2-diff-block">
-                            <label class="text-[11px] font-extrabold text-stone-800 block">Difficulty Count Allocation</label>
-                            <div class="grid grid-cols-3 gap-2">
+                        <!-- Custom Difficulty Distribution -->
+                        <div id="custom_difficulty_block" class="space-y-2 bg-stone-50 border border-stone-200 p-4 rounded-2xl p2-diff-block">
+                            <label class="text-xs font-extrabold text-stone-800 block uppercase">Difficulty Count Allocation</label>
+                            <div class="grid grid-cols-3 gap-3">
                                 <div>
                                     <label class="text-[10px] font-bold text-stone-500">Easy Count</label>
-                                    <input type="number" name="difficulty_distribution[easy]" value="<?php echo htmlspecialchars($_POST['difficulty_distribution']['easy'] ?? '0'); ?>" min="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
+                                    <input type="number" name="difficulty_distribution[easy]" value="<?php echo htmlspecialchars($_POST['difficulty_distribution']['easy'] ?? '0'); ?>" min="0" class="w-full bg-white border border-stone-200 rounded-xl p-2 text-xs font-bold text-stone-800">
                                 </div>
                                 <div>
                                     <label class="text-[10px] font-bold text-stone-500">Medium Count</label>
-                                    <input type="number" name="difficulty_distribution[medium]" value="<?php echo htmlspecialchars($_POST['difficulty_distribution']['medium'] ?? '0'); ?>" min="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
+                                    <input type="number" name="difficulty_distribution[medium]" value="<?php echo htmlspecialchars($_POST['difficulty_distribution']['medium'] ?? '0'); ?>" min="0" class="w-full bg-white border border-stone-200 rounded-xl p-2 text-xs font-bold text-stone-800">
                                 </div>
                                 <div>
                                     <label class="text-[10px] font-bold text-stone-500">Hard Count</label>
-                                    <input type="number" name="difficulty_distribution[hard]" value="<?php echo htmlspecialchars($_POST['difficulty_distribution']['hard'] ?? '0'); ?>" min="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
+                                    <input type="number" name="difficulty_distribution[hard]" value="<?php echo htmlspecialchars($_POST['difficulty_distribution']['hard'] ?? '0'); ?>" min="0" class="w-full bg-white border border-stone-200 rounded-xl p-2 text-xs font-bold text-stone-800">
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Priority 2: Period Weighting Mode -->
-                        <div class="space-y-2 bg-stone-50 border border-stone-200 p-3 rounded-xl">
-                            <label class="text-xs font-bold text-stone-700 block">Period Weighting Mode</label>
-                            <select name="period_weighting_mode" id="period_weighting_mode" onchange="togglePeriodWeightControls()" class="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500">
-                                <option value="equal" <?php echo (($_POST['period_weighting_mode'] ?? 'equal') === 'equal') ? 'selected' : ''; ?>>Equal Distribution</option>
-                                <option value="percentage" <?php echo (($_POST['period_weighting_mode'] ?? '') === 'percentage') ? 'selected' : ''; ?>>Percentage Distribution (%)</option>
-                                <option value="fixed" <?php echo (($_POST['period_weighting_mode'] ?? '') === 'fixed') ? 'selected' : ''; ?>>Fixed Question Count</option>
-                            </select>
-
-                            <div id="period_weights_inputs" class="grid grid-cols-4 gap-2 pt-2">
-                                <div>
-                                    <label class="text-[10px] font-bold text-stone-500">General</label>
-                                    <input type="number" name="period_weights[general]" value="<?php echo htmlspecialchars($_POST['period_weights']['general'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
-                                </div>
-                                <div>
-                                    <label class="text-[10px] font-bold text-stone-500">Prelim</label>
-                                    <input type="number" name="period_weights[prelim]" value="<?php echo htmlspecialchars($_POST['period_weights']['prelim'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
-                                </div>
-                                <div>
-                                    <label class="text-[10px] font-bold text-stone-500">Midterm</label>
-                                    <input type="number" name="period_weights[midterm]" value="<?php echo htmlspecialchars($_POST['period_weights']['midterm'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
-                                </div>
-                                <div>
-                                    <label class="text-[10px] font-bold text-stone-500">Finals</label>
-                                    <input type="number" name="period_weights[finals]" value="<?php echo htmlspecialchars($_POST['period_weights']['finals'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Priority 2: Multi-Type Exam Blueprint -->
-                        <div class="space-y-2 bg-stone-50 border border-stone-200 p-3 rounded-xl">
-                            <label class="text-xs font-bold text-stone-700 block">Multi-Type Question Blueprint (Count Allocation)</label>
-                            <div class="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                        <!-- Multi-Type Question Blueprint -->
+                        <div class="space-y-2 bg-stone-50 border border-stone-200 p-4 rounded-2xl">
+                            <label class="text-xs font-extrabold text-stone-800 block uppercase">Multi-Type Question Blueprint (Item Allocation)</label>
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
                                 <div>
                                     <label class="text-[10px] font-bold text-stone-500">Multiple Choice</label>
-                                    <input type="number" name="blueprint[multiple_choice]" value="<?php echo htmlspecialchars($_POST['blueprint']['multiple_choice'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
+                                    <input type="number" name="blueprint[multiple_choice]" value="<?php echo htmlspecialchars($_POST['blueprint']['multiple_choice'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-xl p-2 text-xs font-bold text-stone-800">
                                 </div>
                                 <div>
                                     <label class="text-[10px] font-bold text-stone-500">True or False</label>
-                                    <input type="number" name="blueprint[true_false]" value="<?php echo htmlspecialchars($_POST['blueprint']['true_false'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
+                                    <input type="number" name="blueprint[true_false]" value="<?php echo htmlspecialchars($_POST['blueprint']['true_false'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-xl p-2 text-xs font-bold text-stone-800">
                                 </div>
                                 <div>
                                     <label class="text-[10px] font-bold text-stone-500">Identification</label>
-                                    <input type="number" name="blueprint[identification]" value="<?php echo htmlspecialchars($_POST['blueprint']['identification'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
+                                    <input type="number" name="blueprint[identification]" value="<?php echo htmlspecialchars($_POST['blueprint']['identification'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-xl p-2 text-xs font-bold text-stone-800">
                                 </div>
                                 <div>
                                     <label class="text-[10px] font-bold text-stone-500">Fill in the Blank</label>
-                                    <input type="number" name="blueprint[fill_blank]" value="<?php echo htmlspecialchars($_POST['blueprint']['fill_blank'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
+                                    <input type="number" name="blueprint[fill_blank]" value="<?php echo htmlspecialchars($_POST['blueprint']['fill_blank'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-xl p-2 text-xs font-bold text-stone-800">
                                 </div>
                                 <div>
                                     <label class="text-[10px] font-bold text-stone-500">Matching Type</label>
-                                    <input type="number" name="blueprint[matching]" value="<?php echo htmlspecialchars($_POST['blueprint']['matching'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
+                                    <input type="number" name="blueprint[matching]" value="<?php echo htmlspecialchars($_POST['blueprint']['matching'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-xl p-2 text-xs font-bold text-stone-800">
                                 </div>
                                 <div>
                                     <label class="text-[10px] font-bold text-stone-500">Problem Solving</label>
-                                    <input type="number" name="blueprint[problem_solving]" value="<?php echo htmlspecialchars($_POST['blueprint']['problem_solving'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
+                                    <input type="number" name="blueprint[problem_solving]" value="<?php echo htmlspecialchars($_POST['blueprint']['problem_solving'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-xl p-2 text-xs font-bold text-stone-800">
                                 </div>
                                 <div>
                                     <label class="text-[10px] font-bold text-stone-500">Math Formula</label>
-                                    <input type="number" name="blueprint[math_formula]" value="<?php echo htmlspecialchars($_POST['blueprint']['math_formula'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-lg p-1.5 text-xs font-bold text-stone-800">
+                                    <input type="number" name="blueprint[math_formula]" value="<?php echo htmlspecialchars($_POST['blueprint']['math_formula'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-xl p-2 text-xs font-bold text-stone-800">
                                 </div>
                             </div>
                         </div>
 
-                        <div class="space-y-1">
-                            <label class="text-xs font-bold text-stone-700">Civil Engineering Specialization</label>
-                            <select name="specialization" required class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500">
-                                <?php foreach (getCivilEngineeringSpecializations() as $key => $label): ?>
-                                    <option value="<?php echo htmlspecialchars($key); ?>" <?php echo (($_POST['specialization'] ?? '') === $key) ? 'selected' : ''; ?>>
-                                        <?php echo htmlspecialchars($label); ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
+                        <div class="pt-4 border-t border-stone-100 flex items-center justify-between">
+                            <button type="button" onclick="goToWizardStep(2)" class="bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs px-5 py-3 rounded-xl transition-all">
+                                <i class="fa-solid fa-arrow-left text-xs mr-1"></i> Back to Lessons
+                            </button>
+                            <button type="submit" name="generate_questions" onclick="showLoadingState()" class="bg-orange-600 hover:bg-orange-700 text-white font-extrabold text-xs px-8 py-3.5 rounded-xl transition-all shadow-lg flex items-center gap-2 cursor-pointer">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i> Generate AI Examination Paper
+                            </button>
                         </div>
+                    </div>
+                </form>
 
-                        <div class="space-y-1">
-                            <label class="text-xs font-bold text-stone-700">Default Fallback Question Format</label>
-                            <select name="question_type" required class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-semibold text-stone-800 outline-none focus:border-orange-500">
-                                <option value="multiple_choice" <?php echo (($_POST['question_type'] ?? '') === 'multiple_choice') ? 'selected' : ''; ?>>Multiple Choice (Options A-D)</option>
-                                <option value="true_false" <?php echo (($_POST['question_type'] ?? '') === 'true_false') ? 'selected' : ''; ?>>True or False</option>
-                                <option value="identification" <?php echo (($_POST['question_type'] ?? '') === 'identification') ? 'selected' : ''; ?>>Identification</option>
-                                <option value="fill_blank" <?php echo (($_POST['question_type'] ?? '') === 'fill_blank') ? 'selected' : ''; ?>>Fill in the Blank</option>
-                                <option value="matching" <?php echo (($_POST['question_type'] ?? '') === 'matching') ? 'selected' : ''; ?>>Matching Type</option>
-                                <option value="problem_solving" <?php echo (($_POST['question_type'] ?? '') === 'problem_solving') ? 'selected' : ''; ?>>Problem Solving</option>
-                                <option value="math_formula" <?php echo (($_POST['question_type'] ?? '') === 'math_formula') ? 'selected' : ''; ?>>Math Formula</option>
-                            </select>
-                        </div>
-
-                        <button type="submit" name="generate_questions" onclick="showLoadingState()" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-extrabold text-xs py-3.5 rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-2">
-                            <i class="fa-solid fa-robot"></i> Generate AI Test Items
-                        </button>
-                    </form>
-
-
-                    <script>
-                        function toggleInputSource(type) {
-                            const ext = document.getElementById('extracted_lessons_block');
-                            const man = document.getElementById('manual_text_block');
-                            if (type === 'extracted') {
-                                ext.classList.remove('hidden');
-                                man.classList.add('hidden');
+                <script>
+                    function goToWizardStep(stepNum) {
+                        document.querySelectorAll('.wizard-part').forEach((part, idx) => {
+                            if (idx + 1 === stepNum) {
+                                part.classList.remove('hidden');
                             } else {
-                                ext.classList.add('hidden');
-                                man.classList.remove('hidden');
+                                part.classList.add('hidden');
                             }
-                        }
+                        });
 
-                        function applyLessonFilters() {
-                            const subj = document.getElementById('filter_subject').value.toLowerCase();
-                            const yl = document.getElementById('filter_year_level').value.toLowerCase();
-                            const prog = document.getElementById('filter_program').value.toLowerCase();
-                            const sem = document.getElementById('filter_semester').value.toLowerCase();
-                            const sy = document.getElementById('filter_school_year').value.toLowerCase();
-                            const period = document.getElementById('filter_academic_period').value.toLowerCase();
-
-                            document.querySelectorAll('.lesson-card').forEach(card => {
-                                const cSubj = (card.getAttribute('data-subject') || '').toLowerCase();
-                                const cYl = (card.getAttribute('data-year-level') || '').toLowerCase();
-                                const cProg = (card.getAttribute('data-program') || '').toLowerCase();
-                                const cSem = (card.getAttribute('data-semester') || '').toLowerCase();
-                                const cSy = (card.getAttribute('data-school-year') || '').toLowerCase();
-                                const cPeriod = (card.getAttribute('data-academic-period') || 'general').toLowerCase();
-
-                                let match = true;
-                                if (subj && cSubj !== subj) match = false;
-                                if (yl && cYl !== yl) match = false;
-                                if (prog && cProg !== prog) match = false;
-                                if (sem && cSem !== sem) match = false;
-                                if (sy && cSy !== sy) match = false;
-                                if (period && cPeriod !== period) match = false;
-
-                                if (match) {
-                                    card.classList.remove('hidden');
-                                } else {
-                                    card.classList.add('hidden');
-                                }
-                            });
-
-                            document.querySelectorAll('.period-group-block').forEach(group => {
-                                const visibleCards = group.querySelectorAll('.lesson-card:not(.hidden)');
-                                const gPeriod = group.getAttribute('data-period');
-                                if (period && gPeriod !== period) {
-                                    group.classList.add('hidden');
-                                } else if (visibleCards.length === 0 && (subj || yl || prog || sem || sy || period)) {
-                                    group.classList.add('hidden');
-                                } else {
-                                    group.classList.remove('hidden');
-                                }
-                            });
-                        }
-
-                        function resetLessonFilters() {
-                            if (document.getElementById('filter_subject')) document.getElementById('filter_subject').value = '';
-                            if (document.getElementById('filter_year_level')) document.getElementById('filter_year_level').value = '';
-                            if (document.getElementById('filter_program')) document.getElementById('filter_program').value = '';
-                            if (document.getElementById('filter_semester')) document.getElementById('filter_semester').value = '';
-                            if (document.getElementById('filter_school_year')) document.getElementById('filter_school_year').value = '';
-                            if (document.getElementById('filter_academic_period')) document.getElementById('filter_academic_period').value = '';
-                            applyLessonFilters();
-                        }
-
-                        function quickSelect(target) {
-                            document.querySelectorAll('.lesson-card').forEach(card => {
-                                if (card.classList.contains('hidden')) return;
-
-                                const checkbox = card.querySelector('.lesson-checkbox');
-                                if (!checkbox || checkbox.disabled) return;
-
-                                const cPeriod = (card.getAttribute('data-academic-period') || 'general').toLowerCase();
-
-                                if (target === 'visible') {
-                                    checkbox.checked = true;
-                                } else if (target === cPeriod) {
-                                    checkbox.checked = true;
-                                }
-                            });
-                        }
-
-                        function clearSelection() {
-                            document.querySelectorAll('.lesson-checkbox').forEach(cb => {
-                                cb.checked = false;
-                            });
-                        }
-
-                        function updateManualSourceDisplay(selectElem) {
-                            const card = selectElem.closest('[data-testid="generated-question-item"]');
-                            if (!card) return;
-                            const attrContainer = card.querySelector('[data-testid="question-source-attribution"]');
-                            if (!attrContainer) return;
-                            
-                            const selectedOption = selectElem.options[selectElem.selectedIndex];
-                            const period = selectedOption.getAttribute('data-period') || '';
-                            const title = selectedOption.getAttribute('data-title') || '';
-                            
-                            if (selectElem.value && period) {
-                                attrContainer.innerHTML = `
-                                    <span class="bg-blue-100 text-blue-800 font-extrabold px-2 py-0.5 rounded-full uppercase" data-testid="source-period">${period}</span>
-                                    <span class="bg-stone-200 text-stone-700 font-bold px-2 py-0.5 rounded-full truncate max-w-[120px]" data-testid="source-topic">${title}</span>
-                                    <span class="bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.5 rounded-full" data-testid="source-confidence"><i class="fa-solid fa-circle-check mr-0.5"></i> Manual Verified</span>
-                                `;
+                        document.querySelectorAll('.step-tab-btn').forEach((btn, idx) => {
+                            const badge = btn.querySelector('span:first-child');
+                            if (idx + 1 === stepNum) {
+                                btn.className = 'step-tab-btn py-2.5 px-3 rounded-xl transition-all bg-orange-600 text-white flex items-center justify-center gap-2 shadow-sm';
+                                if (badge) badge.className = 'w-5 h-5 rounded-full bg-white text-orange-600 flex items-center justify-center text-[11px] font-black';
+                            } else if (idx + 1 < stepNum) {
+                                btn.className = 'step-tab-btn py-2.5 px-3 rounded-xl transition-all bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center justify-center gap-2';
+                                if (badge) badge.className = 'w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[11px] font-black';
                             } else {
-                                attrContainer.innerHTML = `
-                                    <span class="bg-amber-100 text-amber-800 font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1" data-testid="source-verification-required"><i class="fa-solid fa-triangle-exclamation text-amber-600"></i> Source verification required.</span>
-                                `;
+                                btn.className = 'step-tab-btn py-2.5 px-3 rounded-xl transition-all bg-stone-100 text-stone-600 hover:bg-stone-200 flex items-center justify-center gap-2';
+                                if (badge) badge.className = 'w-5 h-5 rounded-full bg-stone-300 text-stone-700 flex items-center justify-center text-[11px] font-black';
                             }
-                        }
-                    </script>
-                </div>
+                        });
 
-                
-                <div class="lg:col-span-7 space-y-4">
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
+
+                    function toggleInputSource(type) {
+                        const ext = document.getElementById('extracted_lessons_block');
+                        const man = document.getElementById('manual_text_block');
+                        if (type === 'extracted') {
+                            ext.classList.remove('hidden');
+                            man.classList.add('hidden');
+                        } else {
+                            ext.classList.add('hidden');
+                            man.classList.remove('hidden');
+                        }
+                    }
+
+                    function applyLessonFilters() {
+                        const checkedPeriods = Array.from(document.querySelectorAll('.period-filter-cb:checked')).map(cb => cb.value.toLowerCase());
+                        const checkedSems = Array.from(document.querySelectorAll('.sem-filter-cb:checked')).map(cb => cb.value.toLowerCase());
+                        const checkedSys = Array.from(document.querySelectorAll('.sy-filter-cb:checked')).map(cb => cb.value.toLowerCase());
+
+                        document.querySelectorAll('.lesson-card').forEach(card => {
+                            const cPeriod = (card.getAttribute('data-academic-period') || 'general').toLowerCase();
+                            const cSem = (card.getAttribute('data-semester') || '').toLowerCase();
+                            const cSy = (card.getAttribute('data-school-year') || '').toLowerCase();
+
+                            let match = true;
+                            if (checkedPeriods.length > 0 && !checkedPeriods.includes(cPeriod)) match = false;
+                            if (checkedSems.length > 0 && !checkedSems.some(s => cSem.includes(s))) match = false;
+                            if (checkedSys.length > 0 && !checkedSys.some(y => cSy.includes(y))) match = false;
+
+                            if (match) {
+                                card.classList.remove('hidden');
+                            } else {
+                                card.classList.add('hidden');
+                            }
+                        });
+
+                        document.querySelectorAll('.period-group-block').forEach(group => {
+                            const gPeriod = group.getAttribute('data-period');
+                            const visibleCards = group.querySelectorAll('.lesson-card:not(.hidden)');
+                            if (checkedPeriods.length > 0 && !checkedPeriods.includes(gPeriod)) {
+                                group.classList.add('hidden');
+                            } else if (visibleCards.length === 0 && (checkedPeriods.length > 0 || checkedSems.length > 0 || checkedSys.length > 0)) {
+                                group.classList.add('hidden');
+                            } else {
+                                group.classList.remove('hidden');
+                            }
+                        });
+                    }
+
+                    function resetCheckboxFilters() {
+                        document.querySelectorAll('.period-filter-cb, .sem-filter-cb, .sy-filter-cb').forEach(cb => cb.checked = false);
+                        applyLessonFilters();
+                    }
+
+                    function quickSelect(targetPeriod) {
+                        document.querySelectorAll('.lesson-card').forEach(card => {
+                            if (card.classList.contains('hidden')) return;
+                            const checkbox = card.querySelector('.lesson-checkbox');
+                            if (!checkbox || checkbox.disabled) return;
+
+                            const cPeriod = (card.getAttribute('data-academic-period') || 'general').toLowerCase();
+                            if (targetPeriod === cPeriod) {
+                                checkbox.checked = true;
+                            }
+                        });
+                    }
+
+                    function clearSelection() {
+                        document.querySelectorAll('.lesson-checkbox').forEach(cb => {
+                            cb.checked = false;
+                        });
+                    }
+                </script>
+
+                <!-- Generated Questions View (Full Space) -->
+                <div class="space-y-6">
                     <?php if (!empty($generated_questions)): ?>
                         <!-- Generation Audit Summary View (Repair Prompt 5) -->
                         <div class="bg-stone-900 text-white border border-stone-800 rounded-2xl p-4 shadow-sm space-y-3" data-testid="generation-audit-summary">

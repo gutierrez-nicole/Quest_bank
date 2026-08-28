@@ -304,6 +304,9 @@ unset($ex);
                                             <i class="fa-solid fa-compass-drafting mr-1"></i><?php echo htmlspecialchars($ex['specialization'] ?? 'Structural Engineering'); ?>
                                         </span>
                                         <div class="flex items-center gap-2">
+                                            <a href="print_exam.php?id=<?php echo $ex['id']; ?>" target="_blank" onclick="event.stopPropagation();" class="text-[10px] text-stone-500 hover:text-orange-600 font-bold transition-colors flex items-center gap-1" title="Print Exam Paper">
+                                                <i class="fa-solid fa-print text-[9px]"></i> Print
+                                            </a>
                                             <button type="button" onclick="event.stopPropagation(); deleteExam(<?php echo $ex['id']; ?>, '<?php echo htmlspecialchars(addslashes($ex['title']), ENT_QUOTES, 'UTF-8'); ?>')" class="text-[10px] text-rose-400 hover:text-rose-600 font-bold transition-colors flex items-center gap-1 opacity-0 group-hover:opacity-100" title="Delete Exam" aria-label="Delete <?php echo htmlspecialchars($ex['title']); ?>">
                                                 <i class="fa-solid fa-trash-can text-[9px]"></i> Delete
                                             </button>
@@ -344,9 +347,14 @@ unset($ex);
             </div>
 
             <div class="flex justify-between items-center pt-4 border-t border-stone-100">
-                <button id="modal_delete_btn" type="button" onclick="" class="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5">
-                    <i class="fa-solid fa-trash-can text-xs"></i> Delete Exam
-                </button>
+                <div class="flex items-center gap-2">
+                    <button id="modal_delete_btn" type="button" onclick="" class="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5">
+                        <i class="fa-solid fa-trash-can text-xs"></i> Delete Exam
+                    </button>
+                    <a id="modal_print_btn" href="#" target="_blank" class="px-4 py-2 bg-orange-50 hover:bg-orange-100 text-orange-600 border border-orange-200 font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5">
+                        <i class="fa-solid fa-print text-xs"></i> Print Exam Paper
+                    </a>
+                </div>
                 <button onclick="closeExamPreviewModal()" class="px-5 py-2.5 bg-stone-900 hover:bg-orange-600 text-white font-bold text-xs rounded-xl shadow-sm transition-all">
                     Close Preview
                 </button>
@@ -382,7 +390,7 @@ unset($ex);
             
             const qBlock = document.createElement('div');
             qBlock.id = `q_block_${questionCount}`;
-            qBlock.className = "p-4 border border-stone-200 rounded-xl bg-stone-50/50 space-y-3 relative group";
+            qBlock.className = "p-4 border border-stone-200 rounded-xl bg-stone-50/50 space-y-3.5 relative group";
             
             qBlock.innerHTML = `
                 <div class="flex items-center justify-between">
@@ -392,30 +400,73 @@ unset($ex);
                     </button>
                 </div>
                 <div>
-                    <input type="text" name="questions[${questionCount}][text]" required placeholder="Enter Question Prompt / Description..." class="w-full bg-white border border-stone-200 rounded-lg p-2 text-xs outline-none focus:border-orange-500 font-medium">
+                    <label class="block text-[10px] font-bold uppercase text-stone-500 mb-1">Question Prompt / Description</label>
+                    <input type="text" name="questions[${questionCount}][text]" required placeholder="Enter Question Prompt / Description..." class="w-full bg-white border border-stone-200 rounded-lg p-2.5 text-xs outline-none focus:border-orange-500 font-medium shadow-2xs">
                 </div>
-                <div class="grid grid-cols-2 gap-3">
+                <div class="grid grid-cols-2 gap-3 pt-1">
                     <div class="space-y-1">
                         <label class="text-[10px] font-bold uppercase text-stone-500">Question Type</label>
-                        <select name="questions[${questionCount}][type]" class="w-full bg-white border border-stone-200 rounded p-1.5 text-xs outline-none">
-                            <option value="multiple_choice">Multiple Choice</option>
-                            <option value="identification">Identification</option>
+                        <select name="questions[${questionCount}][type]" onchange="onQuestionTypeChanged(${questionCount}, this.value)" class="w-full bg-white border border-stone-200 rounded-lg p-2 text-xs font-semibold outline-none focus:border-orange-500">
+                            <option value="multiple_choice">Multiple Choice (4 Options)</option>
+                            <option value="true_false">True or False (2 Options)</option>
+                            <option value="identification">Identification (1 Answer)</option>
+                            <option value="fill_blank">Fill in the Blank / Enumeration</option>
                         </select>
                     </div>
                     <div class="space-y-1">
-                        <label class="text-[10px] font-bold uppercase text-stone-500">Correct Answer</label>
-                        <input type="text" name="questions[${questionCount}][correct]" required placeholder="Correct Answer Key" class="w-full bg-white border border-stone-200 rounded p-1.5 text-xs outline-none">
+                        <label class="text-[10px] font-bold uppercase text-stone-500">Correct Answer Key</label>
+                        <input type="text" name="questions[${questionCount}][correct]" required placeholder="e.g. A or Correct Text" class="w-full bg-white border border-stone-200 rounded-lg p-2 text-xs font-bold outline-none focus:border-orange-500">
                     </div>
                 </div>
-                <div class="grid grid-cols-2 gap-2 text-xs">
-                    <input type="text" name="questions[${questionCount}][opt_a]" placeholder="Option A (Optional)" class="bg-white border rounded p-1.5 outline-none">
-                    <input type="text" name="questions[${questionCount}][opt_b]" placeholder="Option B (Optional)" class="bg-white border rounded p-1.5 outline-none">
-                    <input type="text" name="questions[${questionCount}][opt_c]" placeholder="Option C (Optional)" class="bg-white border rounded p-1.5 outline-none">
-                    <input type="text" name="questions[${questionCount}][opt_d]" placeholder="Option D (Optional)" class="bg-white border rounded p-1.5 outline-none">
+                <div id="q_options_container_${questionCount}" class="pt-1">
+                    <label class="block text-[10px] font-bold uppercase text-stone-500 mb-1.5">Answer Options (4 Choices)</label>
+                    <div class="grid grid-cols-2 gap-2.5 text-xs">
+                        <input type="text" name="questions[${questionCount}][opt_a]" placeholder="Option A" class="bg-white border rounded-lg p-2 outline-none focus:border-orange-500">
+                        <input type="text" name="questions[${questionCount}][opt_b]" placeholder="Option B" class="bg-white border rounded-lg p-2 outline-none focus:border-orange-500">
+                        <input type="text" name="questions[${questionCount}][opt_c]" placeholder="Option C" class="bg-white border rounded-lg p-2 outline-none focus:border-orange-500">
+                        <input type="text" name="questions[${questionCount}][opt_d]" placeholder="Option D" class="bg-white border rounded-lg p-2 outline-none focus:border-orange-500">
+                    </div>
                 </div>
             `;
             
             container.appendChild(qBlock);
+        }
+
+        function onQuestionTypeChanged(id, type) {
+            const optContainer = document.getElementById(`q_options_container_${id}`);
+            if (!optContainer) return;
+
+            if (type === 'multiple_choice') {
+                optContainer.classList.remove('hidden');
+                optContainer.innerHTML = `
+                    <label class="block text-[10px] font-bold uppercase text-stone-500 mb-1.5">Answer Options (4 Choices)</label>
+                    <div class="grid grid-cols-2 gap-2.5 text-xs">
+                        <input type="text" name="questions[${id}][opt_a]" placeholder="Option A" class="bg-white border rounded-lg p-2 outline-none focus:border-orange-500">
+                        <input type="text" name="questions[${id}][opt_b]" placeholder="Option B" class="bg-white border rounded-lg p-2 outline-none focus:border-orange-500">
+                        <input type="text" name="questions[${id}][opt_c]" placeholder="Option C" class="bg-white border rounded-lg p-2 outline-none focus:border-orange-500">
+                        <input type="text" name="questions[${id}][opt_d]" placeholder="Option D" class="bg-white border rounded-lg p-2 outline-none focus:border-orange-500">
+                    </div>
+                `;
+            } else if (type === 'true_false') {
+                optContainer.classList.remove('hidden');
+                optContainer.innerHTML = `
+                    <label class="block text-[10px] font-bold uppercase text-stone-500 mb-1.5">True / False Choices (2 Options)</label>
+                    <div class="grid grid-cols-2 gap-2.5 text-xs">
+                        <div class="bg-white border border-stone-200 rounded-lg p-2 font-bold text-stone-700 flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full border border-stone-400"></span> True
+                            <input type="hidden" name="questions[${id}][opt_a]" value="True">
+                        </div>
+                        <div class="bg-white border border-stone-200 rounded-lg p-2 font-bold text-stone-700 flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full border border-stone-400"></span> False
+                            <input type="hidden" name="questions[${id}][opt_b]" value="False">
+                        </div>
+                    </div>
+                `;
+            } else {
+                // Identification or Enumeration: No multiple choice options
+                optContainer.classList.add('hidden');
+                optContainer.innerHTML = '';
+            }
         }
 
         function removeQuestion(id) {
@@ -438,6 +489,11 @@ unset($ex);
                 };
             }
 
+            const printBtn = document.getElementById('modal_print_btn');
+            if (printBtn) {
+                printBtn.href = `print_exam.php?id=${exam.id}`;
+            }
+
             const listContainer = document.getElementById('modal_questions_list');
             listContainer.innerHTML = '';
 
@@ -450,8 +506,8 @@ unset($ex);
                     const correctKey = (q.correct_answer || '').trim().toLowerCase();
 
                     if (q.option_a) {
-                        const isA = correctKey === 'a' || correctKey === (q.option_a || '').trim().toLowerCase();
-                        const isB = correctKey === 'b' || correctKey === (q.option_b || '').trim().toLowerCase();
+                        const isA = correctKey === 'a' || correctKey === (q.option_a || '').trim().toLowerCase() || correctKey === 'true';
+                        const isB = correctKey === 'b' || correctKey === (q.option_b || '').trim().toLowerCase() || correctKey === 'false';
                         const isC = correctKey === 'c' || correctKey === (q.option_c || '').trim().toLowerCase();
                         const isD = correctKey === 'd' || correctKey === (q.option_d || '').trim().toLowerCase();
 
@@ -463,12 +519,14 @@ unset($ex);
                                 <div class="p-2.5 rounded-lg border ${isB ? 'bg-emerald-100 border-emerald-300 text-emerald-900 font-bold' : 'bg-white border-stone-200 text-stone-600'}">
                                     B. ${q.option_b} ${isB ? '<i class="fa-solid fa-circle-check text-emerald-600 ml-1"></i> (Correct Key)' : ''}
                                 </div>
+                                ${q.option_c ? `
                                 <div class="p-2.5 rounded-lg border ${isC ? 'bg-emerald-100 border-emerald-300 text-emerald-900 font-bold' : 'bg-white border-stone-200 text-stone-600'}">
                                     C. ${q.option_c} ${isC ? '<i class="fa-solid fa-circle-check text-emerald-600 ml-1"></i> (Correct Key)' : ''}
-                                </div>
+                                </div>` : ''}
+                                ${q.option_d ? `
                                 <div class="p-2.5 rounded-lg border ${isD ? 'bg-emerald-100 border-emerald-300 text-emerald-900 font-bold' : 'bg-white border-stone-200 text-stone-600'}">
                                     D. ${q.option_d} ${isD ? '<i class="fa-solid fa-circle-check text-emerald-600 ml-1"></i> (Correct Key)' : ''}
-                                </div>
+                                </div>` : ''}
                             </div>
                         `;
                     } else {
