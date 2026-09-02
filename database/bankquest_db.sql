@@ -643,17 +643,23 @@ CREATE TABLE `students` (
 DROP TABLE IF EXISTS `subjects`;
 CREATE TABLE `subjects` (
   `id` int NOT NULL AUTO_INCREMENT,
-  `code` varchar(50) NOT NULL,
-  `title` varchar(255) NOT NULL,
+  `code` varchar(50) DEFAULT NULL,
+  `title` varchar(255) DEFAULT NULL,
+  `subject_code` varchar(50) DEFAULT NULL,
+  `subject_title` varchar(150) DEFAULT NULL,
+  `description` text DEFAULT NULL,
   `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- Dumping data for `subjects`
 
-INSERT INTO `subjects` (`id`, `code`, `title`, `created_at`) VALUES 
-('1', 'CE-401', 'Structural Engineering', '2026-08-06 18:35:43'),
-('2', 'CE-402', 'Geotechnical Engineering & Foundation Design', '2026-08-06 18:35:43');
+INSERT INTO `subjects` (`id`, `code`, `title`, `subject_code`, `subject_title`, `description`, `created_at`) VALUES 
+('1', 'CE 311', 'Fluid Mechanics & Hydraulics', 'CE 311', 'Fluid Mechanics & Hydraulics', 'Behavior of fluids at rest and in motion', '2026-08-06 18:35:43'),
+('2', 'CE 412', 'Structural Theory & Design', 'CE 412', 'Structural Theory & Design', 'Analysis of statically determinate and indeterminate structures', '2026-08-06 18:35:43'),
+('3', 'CE 421', 'Geotechnical Engineering & Soil Mechanics', 'CE 421', 'Geotechnical Engineering & Soil Mechanics', 'Physical and engineering properties of soils', '2026-08-06 18:35:43'),
+('4', 'CE 501', 'Highway & Transportation Engineering', 'CE 501', 'Highway & Transportation Engineering', 'Highway planning, geometric design, and traffic flow', '2026-08-06 18:35:43'),
+('5', 'CE 502', 'Construction Engineering & Management', 'CE 502', 'Construction Engineering & Management', 'Construction methods, cost estimating, and project control', '2026-08-06 18:35:43');
 
 -- --------------------------------------------------------
 -- Table structure for `submission_answers`
@@ -875,6 +881,7 @@ CREATE TABLE `users` (
   `email` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   `password` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   `role` enum('admin','teacher','student') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `handled_subject` varchar(150) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT 'CE 412 - Structural Theory & Design',
   `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,
   `status` varchar(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'active',
@@ -889,14 +896,14 @@ CREATE TABLE `users` (
 
 -- Dumping data for `users`
 
-INSERT INTO `users` (`id`, `fullname`, `username`, `email`, `password`, `role`, `created_at`, `updated_at`, `status`, `is_demo`, `force_password_reset`, `password_changed_at`) VALUES 
-('1', 'System Administrator', 'admin', 'admin@questbank.edu.ph', '$2y$12$2Z9MorXa0S80hjdo13goIul7s72FYsRSUGNqevgli4a3TNyZWVRkW', 'admin', '2026-08-06 18:35:43', NULL, 'active', '1', '1', NULL),
-('10', 'Russel Gregorio', 'Russel', 'russel@gmail.com', '$2y$12$2Z9MorXa0S80hjdo13goIul7s72FYsRSUGNqevgli4a3TNyZWVRkW', 'admin', '2026-08-06 18:35:43', NULL, 'active', '1', '1', NULL),
-('11', 'Ashley Nicole Gutierrez', 'Nicole', 'nikol@gmail.com', '$2y$12$2Z9MorXa0S80hjdo13goIul7s72FYsRSUGNqevgli4a3TNyZWVRkW', 'student', '2026-08-06 18:35:43', NULL, 'active', '1', '1', NULL),
-('12', 'Professor Smith', 'prof_smith', 'smith@questbank.edu.ph', '$2y$12$2Z9MorXa0S80hjdo13goIul7s72FYsRSUGNqevgli4a3TNyZWVRkW', 'teacher', '2026-08-06 18:35:43', NULL, 'active', '1', '1', NULL),
-('13', 'Jolas Lasjo', 'lasjo', 'lasjo@gmail.com', '$2y$12$2Z9MorXa0S80hjdo13goIul7s72FYsRSUGNqevgli4a3TNyZWVRkW', 'teacher', '2026-08-06 18:35:43', NULL, 'active', '1', '1', NULL),
-('20', 'John Mark Santos', 'jmsantos', 'jmsantos@holycross.edu.ph', '$2y$12$2Z9MorXa0S80hjdo13goIul7s72FYsRSUGNqevgli4a3TNyZWVRkW', 'student', '2026-08-06 18:35:43', NULL, 'active', '1', '1', NULL),
-('21', 'Maria Angelica Reyes', 'm_reyes', 'mreyes@holycross.edu.ph', '$2y$12$2Z9MorXa0S80hjdo13goIul7s72FYsRSUGNqevgli4a3TNyZWVRkW', 'student', '2026-08-06 18:35:43', NULL, 'active', '1', '1', NULL);
+INSERT INTO `users` (`id`, `fullname`, `username`, `email`, `password`, `role`, `handled_subject`, `created_at`, `updated_at`, `status`, `is_demo`, `force_password_reset`, `password_changed_at`) VALUES 
+('1', 'System Administrator', 'admin', 'admin@questbank.edu.ph', '$2y$12$2Z9MorXa0S80hjdo13goIul7s72FYsRSUGNqevgli4a3TNyZWVRkW', 'admin', 'CE 412 - Structural Theory & Design', '2026-08-06 18:35:43', NULL, 'active', '1', '1', NULL),
+('10', 'Russel Gregorio', 'Russel', 'russel@gmail.com', '$2y$12$2Z9MorXa0S80hjdo13goIul7s72FYsRSUGNqevgli4a3TNyZWVRkW', 'admin', 'CE 412 - Structural Theory & Design', '2026-08-06 18:35:43', NULL, 'active', '1', '1', NULL),
+('11', 'Ashley Nicole Gutierrez', 'Nicole', 'nikol@gmail.com', '$2y$12$2Z9MorXa0S80hjdo13goIul7s72FYsRSUGNqevgli4a3TNyZWVRkW', 'student', NULL, '2026-08-06 18:35:43', NULL, 'active', '1', '1', NULL),
+('12', 'Professor Smith', 'prof_smith', 'smith@questbank.edu.ph', '$2y$12$2Z9MorXa0S80hjdo13goIul7s72FYsRSUGNqevgli4a3TNyZWVRkW', 'teacher', 'CE 412 - Structural Theory & Design', '2026-08-06 18:35:43', NULL, 'active', '1', '1', NULL),
+('13', 'Jolas Lasjo', 'lasjo', 'lasjo@gmail.com', '$2y$12$2Z9MorXa0S80hjdo13goIul7s72FYsRSUGNqevgli4a3TNyZWVRkW', 'teacher', 'CE 311 - Fluid Mechanics & Hydraulics', '2026-08-06 18:35:43', NULL, 'active', '1', '1', NULL),
+('20', 'John Mark Santos', 'jmsantos', 'jmsantos@holycross.edu.ph', '$2y$12$2Z9MorXa0S80hjdo13goIul7s72FYsRSUGNqevgli4a3TNyZWVRkW', 'student', NULL, '2026-08-06 18:35:43', NULL, 'active', '1', '1', NULL),
+('21', 'Maria Angelica Reyes', 'm_reyes', 'mreyes@holycross.edu.ph', '$2y$12$2Z9MorXa0S80hjdo13goIul7s72FYsRSUGNqevgli4a3TNyZWVRkW', 'student', NULL, '2026-08-06 18:35:43', NULL, 'active', '1', '1', NULL);
 
 SET FOREIGN_KEY_CHECKS=1;
 COMMIT;
