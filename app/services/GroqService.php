@@ -201,32 +201,62 @@ class GroqService {
         }
 
         // Production Credential & Error Enforcement (NO production mock fallbacks!)
-        $rawKey = ($apiKey !== null && $apiKey !== '') ? $apiKey : GROQ_API_KEY;
+        $rawKey = ($apiKey !== null && $apiKey !== '') ? $apiKey : (defined('GROQ_API_KEY') ? GROQ_API_KEY : '');
         $key = trim(trim((string)$rawKey), "\"' \t\n\r\0\x0B");
         if (empty($key) || $key === 'YOUR_GROQ_API_KEY_HERE' || $key === 'MISSING_KEY') {
             return [
                 'success' => false,
                 'error_code' => 'MISSING_API_KEY',
-                'user_message' => 'Groq API Key is not configured. Please set GROQ_API_KEY in your server configuration.',
-                'technical_message' => 'GROQ_API_KEY constant is empty or set to default placeholder.',
+                'user_message' => 'AI API Key is not configured. Please set GROQ_API_KEY or OPENROUTER_API_KEY in your .env configuration.',
+                'technical_message' => 'API Key constant is empty or set to default placeholder.',
                 'retryable' => false,
                 'provider_status' => 401,
                 'request_id' => null,
-                'error' => 'Groq API Key is not configured.'
+                'error' => 'AI API Key is not configured.'
             ];
         }
 
-        if (strpos($key, 'gsk_') === false) {
+        $isOpenRouter = (strpos($key, 'sk-or-v1-') === 0);
+        $isGroq = (strpos($key, 'gsk_') === 0);
+        $isOpenAi = (strpos($key, 'sk-') === 0 && !$isOpenRouter);
+
+        if (!$isOpenRouter && !$isGroq && !$isOpenAi) {
             return [
                 'success' => false,
                 'error_code' => 'INVALID_API_KEY',
-                'user_message' => 'Groq API Key format is invalid. Key must begin with gsk_.',
+                'user_message' => 'AI API Key format is invalid. Key must begin with sk-or-v1- (OpenRouter), gsk_ (Groq), or sk-.',
                 'technical_message' => 'Provided API key prefix check failed.',
                 'retryable' => false,
                 'provider_status' => 401,
                 'request_id' => null,
-                'error' => 'Groq API Key format is invalid.'
+                'error' => 'AI API Key format is invalid.'
             ];
+        }
+
+        // Adjust payload model if mismatch with provider
+        if ($isOpenRouter) {
+            $endpoint = defined('OPENROUTER_API_ENDPOINT') ? OPENROUTER_API_ENDPOINT : 'https://openrouter.ai/api/v1/chat/completions';
+            if (empty($payload['model']) || $payload['model'] === 'openai/gpt-oss-120b' || $payload['model'] === 'llama-3.3-70b-versatile') {
+                $payload['model'] = defined('GROQ_DEFAULT_MODEL') && strpos(GROQ_DEFAULT_MODEL, '/') !== false ? GROQ_DEFAULT_MODEL : 'minimax/minimax-m2.7:free';
+            }
+        } elseif ($isGroq) {
+            $endpoint = defined('GROQ_API_ENDPOINT') ? GROQ_API_ENDPOINT : 'https://api.groq.com/openai/v1/chat/completions';
+            if (empty($payload['model']) || strpos($payload['model'], ':free') !== false) {
+                $payload['model'] = 'openai/gpt-oss-120b';
+            }
+        } else {
+            $endpoint = defined('GROQ_API_ENDPOINT') ? GROQ_API_ENDPOINT : 'https://api.openai.com/v1/chat/completions';
+        }
+
+        $headers = [
+            'Authorization: Bearer ' . $key,
+            'Content-Type: application/json',
+            'User-Agent: QuestBank/1.0 (PHP)'
+        ];
+
+        if ($isOpenRouter) {
+            $headers[] = 'HTTP-Referer: https://questbank.edu.ph';
+            $headers[] = 'X-Title: QuestBank';
         }
 
         $jsonPayload = json_encode($payload, JSON_INVALID_UTF8_SUBSTITUTE | JSON_UNESCAPED_UNICODE);
@@ -239,16 +269,12 @@ class GroqService {
             $jsonPayload = json_encode($payload, JSON_INVALID_UTF8_SUBSTITUTE | JSON_UNESCAPED_UNICODE);
         }
 
-        $ch = curl_init(GROQ_API_ENDPOINT);
+        $ch = curl_init($endpoint);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 25);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 65);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, $jsonPayload);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'Authorization: Bearer ' . $key,
-            'Content-Type: application/json',
-            'User-Agent: QuestBank/1.0 (PHP)'
-        ]);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
 
