@@ -44,7 +44,7 @@ define('GROQ_API_KEY', $configuredAiKey);
 define('OPENROUTER_API_KEY', getenv('OPENROUTER_API_KEY') ?: (strpos($configuredAiKey, 'sk-or-v1-') === 0 ? $configuredAiKey : ''));
 define('GROQ_API_ENDPOINT', getenv('AI_API_ENDPOINT') ?: 'https://api.groq.com/openai/v1/chat/completions');
 define('OPENROUTER_API_ENDPOINT', 'https://openrouter.ai/api/v1/chat/completions');
-define('GROQ_DEFAULT_MODEL', getenv('AI_MODEL') ?: (getenv('GROQ_DEFAULT_MODEL') ?: (strpos($configuredAiKey, 'sk-or-v1-') === 0 ? 'minimax/minimax-m2.7:free' : 'openai/gpt-oss-120b')));
+define('GROQ_DEFAULT_MODEL', getenv('AI_MODEL') ?: (getenv('GROQ_DEFAULT_MODEL') ?: (strpos($configuredAiKey, 'sk-or-v1-') === 0 ? 'meta-llama/llama-3.3-70b-instruct' : 'openai/gpt-oss-120b')));
 define('GROQ_FAST_MODEL', getenv('AI_FAST_MODEL') ?: (getenv('GROQ_FAST_MODEL') ?: (strpos($configuredAiKey, 'sk-or-v1-') === 0 ? 'liquid/lfm-2.5-2.6b:free' : 'openai/gpt-oss-20b')));
 
 define('AI_MAX_CONTEXT_TOKENS', 32000);

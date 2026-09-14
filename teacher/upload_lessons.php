@@ -3,6 +3,7 @@ require_once __DIR__ . '/../app/bootstrap.php';
 
 AuthService::enforceRole('teacher');
 $pdo = getDBConnection();
+$teacher_id = getCurrentUserId();
 
 $success_msg = "";
 $error_msg = "";

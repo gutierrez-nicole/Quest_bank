@@ -236,8 +236,8 @@ class GroqService {
         // Adjust payload model if mismatch with provider
         if ($isOpenRouter) {
             $endpoint = defined('OPENROUTER_API_ENDPOINT') ? OPENROUTER_API_ENDPOINT : 'https://openrouter.ai/api/v1/chat/completions';
-            if (empty($payload['model']) || $payload['model'] === 'openai/gpt-oss-120b' || $payload['model'] === 'llama-3.3-70b-versatile') {
-                $payload['model'] = defined('GROQ_DEFAULT_MODEL') && strpos(GROQ_DEFAULT_MODEL, '/') !== false ? GROQ_DEFAULT_MODEL : 'minimax/minimax-m2.7:free';
+            if (empty($payload['model']) || $payload['model'] === 'openai/gpt-oss-120b' || $payload['model'] === 'llama-3.3-70b-versatile' || strpos($payload['model'], 'minimax-m2.7:free') !== false) {
+                $payload['model'] = defined('GROQ_DEFAULT_MODEL') && strpos(GROQ_DEFAULT_MODEL, '/') !== false && strpos(GROQ_DEFAULT_MODEL, ':free') === false ? GROQ_DEFAULT_MODEL : 'meta-llama/llama-3.3-70b-instruct';
             }
         } elseif ($isGroq) {
             $endpoint = defined('GROQ_API_ENDPOINT') ? GROQ_API_ENDPOINT : 'https://api.groq.com/openai/v1/chat/completions';
