@@ -667,6 +667,43 @@ class GroqService {
         }
     }
 
+    public static function parseQuestionsJson($content) {
+        if (empty($content) || !is_string($content)) {
+            return null;
+        }
+        $cleanContent = preg_replace('/^```(?:json)?\s*|\s*```$/im', '', trim($content));
+        $cleanJson = json_decode($cleanContent, true);
+        if (is_array($cleanJson) && !empty($cleanJson)) {
+            return $cleanJson;
+        }
+
+        // Bracket range recovery [...]
+        $firstBracket = strpos($content, '[');
+        $lastBracket = strrpos($content, ']');
+        if ($firstBracket !== false && $lastBracket !== false && $lastBracket > $firstBracket) {
+            $sub = substr($content, $firstBracket, $lastBracket - $firstBracket + 1);
+            $subClean = preg_replace('/,\s*([\]\}])/', '$1', $sub);
+            $arr = json_decode($subClean, true);
+            if (is_array($arr) && !empty($arr)) {
+                return $arr;
+            }
+        }
+
+        // Regex question object recovery
+        preg_match_all('/\{(?:[^{}]|(?R))*\}/s', $content, $matches);
+        $extracted = [];
+        if (!empty($matches[0])) {
+            foreach ($matches[0] as $itemStr) {
+                $itemClean = preg_replace('/,\s*([\]\}])/', '$1', $itemStr);
+                $item = json_decode($itemClean, true);
+                if (is_array($item) && !empty($item['question']) && isset($item['correct_answer'])) {
+                    $extracted[] = $item;
+                }
+            }
+        }
+        return !empty($extracted) ? $extracted : null;
+    }
+
     public static function generateQuestions($lessonText, $numQuestions, $subject, $examTitle, $specialization = 'Structural Engineering', $questionType = 'multiple_choice', $difficulty = 'medium', $apiKey = null, $options = []) {
         @set_time_limit(300);
         @ini_set('max_execution_time', '300');
@@ -872,7 +909,8 @@ class GroqService {
                 $payload = [
                     'model' => GROQ_DEFAULT_MODEL,
                     'messages' => [['role' => 'user', 'content' => $chunkPrompt]],
-                    'temperature' => 0.3
+                    'temperature' => 0.3,
+                    'max_tokens' => min(16384, max(2048, $chunkShare * 350))
                 ];
 
                 $chunkCallFailed = false;
@@ -909,8 +947,7 @@ class GroqService {
                     }
                 } else {
                     $content = $res['data']['choices'][0]['message']['content'] ?? '';
-                    $cleanContent = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', trim($content));
-                    $cleanJson = json_decode(trim($cleanContent), true);
+                    $cleanJson = self::parseQuestionsJson($content);
 
                     if (is_array($cleanJson)) {
                         foreach ($cleanJson as $q) {
@@ -1167,8 +1204,8 @@ class GroqService {
                     $acceptedThisRefill = 0;
 
                     if (isset($refillRes['data']['choices'][0]['message']['content'])) {
-                        $refillContent = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', trim($refillRes['data']['choices'][0]['message']['content']));
-                        $refillJson = json_decode(trim($refillContent), true);
+                        $refillContent = $refillRes['data']['choices'][0]['message']['content'];
+                        $refillJson = self::parseQuestionsJson($refillContent);
 
                         if (is_array($refillJson)) {
                             foreach ($refillJson as $rq) {
@@ -1499,7 +1536,8 @@ class GroqService {
             'messages' => [
                 ['role' => 'user', 'content' => $prompt]
             ],
-            'temperature' => 0.3
+            'temperature' => 0.3,
+            'max_tokens' => min(16384, max(4096, $numQuestions * 350))
         ];
 
         $res = self::sendRequest($payload, $apiKey);
@@ -1511,11 +1549,10 @@ class GroqService {
         $usage = $res['data']['usage'] ?? ['total_tokens' => $estimatedTokens];
 
         $content = $res['data']['choices'][0]['message']['content'] ?? '';
-        $cleanContent = preg_replace('/^```(?:json)?\s*|\s*```$/i', '', trim($content));
-        $cleanJson = json_decode(trim($cleanContent), true);
+        $cleanJson = self::parseQuestionsJson($content);
 
-        if (json_last_error() !== JSON_ERROR_NONE || !is_array($cleanJson)) {
-            return ['error' => 'Failed to parse AI response as JSON: ' . json_last_error_msg()];
+        if (!is_array($cleanJson) || empty($cleanJson)) {
+            return ['error' => 'Failed to parse AI response as JSON questions array.'];
         }
 
         $validQuestions = [];
