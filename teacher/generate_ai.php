@@ -1009,8 +1009,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                     </div>
                 </div>
 
-                <form action="generate_ai.php" method="POST" id="ai_form" class="space-y-6">
+                <form action="generate_ai.php" method="POST" id="ai_form" novalidate class="space-y-6">
                     <?php echo csrfInputField(); ?>
+                    <input type="hidden" name="generate_questions" value="1">
                     <input type="hidden" name="specialization" value="Civil Engineering">
                     <input type="hidden" name="question_type" value="multiple_choice">
 
@@ -1032,7 +1033,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                 <label class="text-xs font-black uppercase text-stone-700">Exam Title <span class="text-rose-500">*</span></label>
                                 <div class="relative">
                                     <i class="fa-solid fa-heading absolute left-3.5 top-3.5 text-stone-400 text-xs"></i>
-                                    <input type="text" name="exam_title" id="exam_title_input" required value="<?php echo htmlspecialchars($_POST['exam_title'] ?? ''); ?>" placeholder="e.g. CE 412 - Structural Analysis Midterm Exam" class="w-full bg-stone-50 border border-stone-200 rounded-xl pl-9 pr-4 py-3 text-xs font-bold text-stone-800 outline-none focus:border-orange-500 focus:bg-white transition-all shadow-2xs">
+                                    <input type="text" name="exam_title" id="exam_title_input" value="<?php echo htmlspecialchars($_POST['exam_title'] ?? ''); ?>" placeholder="e.g. CE 412 - Structural Analysis Midterm Exam" class="w-full bg-stone-50 border border-stone-200 rounded-xl pl-9 pr-4 py-3 text-xs font-bold text-stone-800 outline-none focus:border-orange-500 focus:bg-white transition-all shadow-2xs">
                                 </div>
                             </div>
 
@@ -1040,7 +1041,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                 <label class="text-xs font-black uppercase text-stone-700">Subject Name <span class="text-rose-500">*</span></label>
                                 <div class="relative">
                                     <i class="fa-solid fa-book-bookmark absolute left-3.5 top-3.5 text-stone-400 text-xs"></i>
-                                    <input type="text" name="subject" id="subject_input" required value="<?php echo htmlspecialchars($_POST['subject'] ?? $teacher_handled_subject); ?>" placeholder="e.g. CE 412 - Structural Theory & Design" class="w-full bg-stone-50 border border-stone-200 rounded-xl pl-9 pr-4 py-3 text-xs font-bold text-stone-800 outline-none focus:border-orange-500 focus:bg-white transition-all shadow-2xs">
+                                    <input type="text" name="subject" id="subject_input" value="<?php echo htmlspecialchars($_POST['subject'] ?? $teacher_handled_subject); ?>" placeholder="e.g. CE 412 - Structural Theory & Design" class="w-full bg-stone-50 border border-stone-200 rounded-xl pl-9 pr-4 py-3 text-xs font-bold text-stone-800 outline-none focus:border-orange-500 focus:bg-white transition-all shadow-2xs">
                                 </div>
                             </div>
                         </div>
@@ -1376,7 +1377,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                             <button type="button" onclick="goToWizardStep(2)" class="bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs px-5 py-3 rounded-xl transition-all">
                                 <i class="fa-solid fa-arrow-left text-xs mr-1"></i> Back to Lessons
                             </button>
-                            <button type="submit" name="generate_questions" id="btn_generate_ai" class="bg-orange-600 hover:bg-orange-700 text-white font-extrabold text-xs px-8 py-3.5 rounded-xl transition-all shadow-lg flex items-center gap-2 cursor-pointer">
+                            <button type="button" id="btn_generate_ai" onclick="submitAIGeneration()" class="bg-orange-600 hover:bg-orange-700 text-white font-extrabold text-xs px-8 py-3.5 rounded-xl transition-all shadow-lg flex items-center gap-2 cursor-pointer">
                                 <i class="fa-solid fa-wand-magic-sparkles"></i> Generate AI Examination Paper
                             </button>
                         </div>
@@ -1906,25 +1907,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                 lbl.textContent = base + suffix;
             });
         }
-        // Wire form validation submit listener
+        function submitAIGeneration() {
+            var form = document.getElementById('ai_form');
+            if (!form) return false;
+
+            var examTitle = document.getElementById('exam_title_input');
+            var subject = document.getElementById('subject_input');
+
+            if (!examTitle || !examTitle.value.trim()) {
+                goToWizardStep(1);
+                if (examTitle) examTitle.focus();
+                alert('Please enter an Exam Title in Step 1 before generating.');
+                return false;
+            }
+
+            if (!subject || !subject.value.trim()) {
+                goToWizardStep(1);
+                if (subject) subject.focus();
+                alert('Please enter a Subject Name in Step 1 before generating.');
+                return false;
+            }
+
+            // Validate lesson content source
+            var isManual = false;
+            var manualRadio = document.querySelector('input[name="input_source"][value="manual"]');
+            if (manualRadio && manualRadio.checked) {
+                isManual = true;
+            }
+
+            if (isManual) {
+                var lessonText = document.querySelector('textarea[name="lesson_text"]');
+                if (!lessonText || !lessonText.value.trim()) {
+                    goToWizardStep(2);
+                    if (lessonText) lessonText.focus();
+                    alert('Please paste lesson content in Step 2 before generating.');
+                    return false;
+                }
+            } else {
+                var checkedLessons = document.querySelectorAll('.lesson-checkbox:checked');
+                if (checkedLessons.length === 0) {
+                    goToWizardStep(2);
+                    alert('Please select at least one lesson material in Step 2 before generating, or switch to Manual Paste.');
+                    return false;
+                }
+            }
+
+            showLoadingState();
+            form.submit();
+            return true;
+        }
+
+        // Wire form submit listener to prevent native blockage
         var aiForm = document.getElementById('ai_form');
         if (aiForm) {
             aiForm.addEventListener('submit', function(e) {
-                var examTitle = document.getElementById('exam_title_input');
-                var subject = document.getElementById('subject_input');
-                if (examTitle && !examTitle.value.trim()) {
-                    goToWizardStep(1);
-                    examTitle.focus();
-                    e.preventDefault();
-                    return false;
-                }
-                if (subject && !subject.value.trim()) {
-                    goToWizardStep(1);
-                    subject.focus();
-                    e.preventDefault();
-                    return false;
-                }
-                showLoadingState();
+                e.preventDefault();
+                submitAIGeneration();
             });
         }
 
