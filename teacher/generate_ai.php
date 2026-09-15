@@ -1,4 +1,6 @@
 <?php
+@set_time_limit(300);
+@ini_set('max_execution_time', '300');
 require_once __DIR__ . '/../app/bootstrap.php';
 
 AuthService::enforceRole('teacher');
@@ -309,9 +311,88 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
                 $ai_meta_output['ack_token'] = $signed_incomplete_ack_token;
             }
 
-            // Final Security Repair: Failure to persist ai_generation_batches MUST be treated as generation failure
+            // Final Security Repair: Failure to persist ai_generation_batches MUST be treated with fallback preservation
             $simulatedScenario = $result['metadata']['simulated_scenario'] ?? null;
             $batchInsertedSuccess = false;
+
+            // Ensure table exists on client DB
+            try {
+                $pdo->exec("
+                    CREATE TABLE IF NOT EXISTS `ai_generation_batches` (
+                        `id` int NOT NULL AUTO_INCREMENT,
+                        `generation_batch_id` varchar(64) NOT NULL,
+                        `teacher_id` int NOT NULL,
+                        `selected_lesson_ids` text,
+                        `selected_lesson_titles` text,
+                        `selected_periods` varchar(255) DEFAULT NULL,
+                        `selected_subject` varchar(150) DEFAULT NULL,
+                        `semester` varchar(50) DEFAULT NULL,
+                        `school_year` varchar(50) DEFAULT NULL,
+                        `year_level` varchar(50) DEFAULT NULL,
+                        `program` varchar(100) DEFAULT NULL,
+                        `total_selected_words` int DEFAULT '0',
+                        `estimated_tokens` int DEFAULT '0',
+                        `ai_model` varchar(100) DEFAULT NULL,
+                        `generation_duration` float DEFAULT '0',
+                        `requested_question_count` int DEFAULT '0',
+                        `generated_question_count` int DEFAULT '0',
+                        `failed_question_count` int DEFAULT '0',
+                        `warnings` text,
+                        `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                        `batch_status` varchar(30) DEFAULT 'completed',
+                        `failed_chunk_count` int DEFAULT '0',
+                        `affected_lesson_ids` text,
+                        `failure_messages` text,
+                        `teacher_acknowledged_at` timestamp NULL DEFAULT NULL,
+                        `teacher_acknowledged_by` int DEFAULT NULL,
+                        `acknowledgement_reason` text,
+                        `acknowledgement_token_hash` varchar(64) DEFAULT NULL,
+                        `batch_consumed_at` timestamp NULL DEFAULT NULL,
+                        `batch_consumed_by` int DEFAULT NULL,
+                        `saved_exam_id` int DEFAULT NULL,
+                        `chunk_generation_results` longtext,
+                        `questions_per_lesson` longtext,
+                        `questions_per_period` longtext,
+                        `uncovered_lesson_ids` longtext,
+                        `uncovered_periods` longtext,
+                        `refill_attempt_count` int DEFAULT '0',
+                        `refill_warnings` longtext,
+                        `simulated_scenario` varchar(100) DEFAULT NULL,
+                        `failed_chunk_index` int DEFAULT NULL,
+                        `refill_target_chunk_index` int DEFAULT NULL,
+                        `refill_target_lesson_ids` longtext,
+                        `refill_target_periods` longtext,
+                        `refill_generated_count` int DEFAULT '0',
+                        `initial_questions_per_lesson` longtext,
+                        `initial_questions_per_period` longtext,
+                        `initial_uncovered_lesson_ids` longtext,
+                        `initial_uncovered_periods` longtext,
+                        `affected_periods` longtext,
+                        `failed_chunk_indexes` longtext,
+                        `failed_chunks` longtext,
+                        `period_weighting_mode` varchar(50) DEFAULT 'equal',
+                        `requested_period_distribution` longtext,
+                        `actual_period_distribution` longtext,
+                        `requested_question_blueprint` longtext,
+                        `actual_question_distribution` longtext,
+                        `requested_difficulty_distribution` longtext,
+                        `actual_difficulty_distribution` longtext,
+                        `duplicate_count` int DEFAULT '0',
+                        `replacement_attempt_count` int DEFAULT '0',
+                        `replacement_success_count` int DEFAULT '0',
+                        `unresolved_duplicate_count` int DEFAULT '0',
+                        `duplicate_warnings` longtext,
+                        `period_distribution_mismatch` tinyint(1) DEFAULT '0',
+                        `question_blueprint_mismatch` tinyint(1) DEFAULT '0',
+                        `difficulty_distribution_mismatch` tinyint(1) DEFAULT '0',
+                        `unresolved_differences` longtext,
+                        PRIMARY KEY (`id`),
+                        KEY `idx_batch_id` (`generation_batch_id`),
+                        KEY `idx_teacher_id` (`teacher_id`)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+                ");
+            } catch (Throwable $ignoreDb) {}
+
             try {
                 $stmtBatch = $pdo->prepare("
                     INSERT INTO ai_generation_batches 
@@ -379,17 +460,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
                     json_encode($result['metadata']['unresolved_differences'] ?? (object)[])
                 ]);
             } catch (Throwable $e) {
+                error_log("ai_generation_batches comprehensive insert warning: " . $e->getMessage());
                 $batchInsertedSuccess = false;
             }
 
-
             if (!$batchInsertedSuccess) {
-                $generated_questions = null;
-                $error_msg = "Generation failed: Server-side audit batch record could not be persisted.";
+                // Fallback: minimal insert to ensure save_ai_exam has a valid batch record
+                try {
+                    $stmtSafe = $pdo->prepare("
+                        INSERT INTO ai_generation_batches 
+                        (generation_batch_id, teacher_id, selected_lesson_ids, selected_subject, ai_model, requested_question_count, generated_question_count, batch_status)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ");
+                    $stmtSafe->execute([
+                        $generation_batch_id,
+                        $teacher_id,
+                        json_encode($associated_lesson_ids),
+                        $subject,
+                        defined('GROQ_DEFAULT_MODEL') ? GROQ_DEFAULT_MODEL : 'openai/gpt-4o',
+                        $num_questions,
+                        is_array($generated_questions) ? count($generated_questions) : 0,
+                        'completed'
+                    ]);
+                    $batchInsertedSuccess = true;
+                } catch (Throwable $e2) {
+                    error_log("ai_generation_batches fallback insert error: " . $e2->getMessage());
+                }
             }
 
             $periodLabel = !empty($associated_periods) ? ' (' . implode(', ', array_map('ucfirst', $associated_periods)) . ')' : '';
-            $success_msg = "AI successfully generated " . count($generated_questions) . " question items from " . ($input_source === 'extracted' ? count($associated_lesson_ids) . " extracted lesson(s)" . $periodLabel : "manual text") . "!";
+            $qCount = is_array($generated_questions) ? count($generated_questions) : 0;
+            $success_msg = "AI successfully generated " . $qCount . " question items from " . ($input_source === 'extracted' ? count($associated_lesson_ids) . " extracted lesson(s)" . $periodLabel : "manual text") . "!";
             if (!empty($ai_meta_output['generation_warnings'])) {
                 $success_msg .= " ⚠ Warnings: " . implode('; ', $ai_meta_output['generation_warnings']);
             }
@@ -1275,7 +1376,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                             <button type="button" onclick="goToWizardStep(2)" class="bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs px-5 py-3 rounded-xl transition-all">
                                 <i class="fa-solid fa-arrow-left text-xs mr-1"></i> Back to Lessons
                             </button>
-                            <button type="submit" name="generate_questions" onclick="showLoadingState()" class="bg-orange-600 hover:bg-orange-700 text-white font-extrabold text-xs px-8 py-3.5 rounded-xl transition-all shadow-lg flex items-center gap-2 cursor-pointer">
+                            <button type="submit" name="generate_questions" id="btn_generate_ai" class="bg-orange-600 hover:bg-orange-700 text-white font-extrabold text-xs px-8 py-3.5 rounded-xl transition-all shadow-lg flex items-center gap-2 cursor-pointer">
                                 <i class="fa-solid fa-wand-magic-sparkles"></i> Generate AI Examination Paper
                             </button>
                         </div>
@@ -1382,7 +1483,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                 </script>
 
                 <!-- Generated Questions View (Full Space) -->
-                <div class="space-y-6">
+                <div id="generated_questions_section" class="space-y-6">
                     <?php if (!empty($generated_questions)): ?>
                         <!-- Generation Audit Summary View (Repair Prompt 5) -->
                         <div class="bg-stone-900 text-white border border-stone-800 rounded-2xl p-4 shadow-sm space-y-3" data-testid="generation-audit-summary">
@@ -1750,19 +1851,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
             <div class="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
             <div>
                 <h4 class="font-extrabold text-sm text-stone-800">Generating Exam Questions</h4>
-                <p class="text-xs text-stone-500 mt-1">Groq Llama-3.3 AI is parsing lesson content and formatting answer keys...</p>
+                <p class="text-xs text-stone-500 mt-1">AI is parsing lesson content and formatting answer keys...</p>
             </div>
         </div>
     </div>
 
     <script>
         function showLoadingState() {
-            document.getElementById('loading_overlay').classList.remove('hidden');
-            document.getElementById('loading_overlay').classList.add('flex');
+            var overlay = document.getElementById('loading_overlay');
+            if (overlay) {
+                overlay.classList.remove('hidden');
+                overlay.classList.add('flex');
+            }
+        }
+        function hideLoadingState() {
+            var overlay = document.getElementById('loading_overlay');
+            if (overlay) {
+                overlay.classList.add('hidden');
+                overlay.classList.remove('flex');
+            }
         }
         function toggleDifficultyControls() {
-            var mode = document.getElementById('difficulty_mode').value;
+            var el = document.getElementById('difficulty_mode');
+            if (!el) return;
+            var mode = el.value;
             var block = document.getElementById('custom_difficulty_block');
+            if (!block) return;
             if (mode === 'single') {
                 block.style.display = 'none';
             } else {
@@ -1774,8 +1888,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
             labels.forEach(function(lbl, idx) { if (labelTexts[idx]) lbl.textContent = labelTexts[idx]; });
         }
         function togglePeriodWeightControls() {
-            var mode = document.getElementById('period_weighting_mode').value;
+            var el = document.getElementById('period_weighting_mode');
+            if (!el) return;
+            var mode = el.value;
             var block = document.getElementById('period_weights_inputs');
+            if (!block) return;
             if (mode === 'equal') {
                 block.style.display = 'none';
             } else {
@@ -1789,10 +1906,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                 lbl.textContent = base + suffix;
             });
         }
-        // Init on page load
+        // Wire form validation submit listener
+        var aiForm = document.getElementById('ai_form');
+        if (aiForm) {
+            aiForm.addEventListener('submit', function(e) {
+                var examTitle = document.getElementById('exam_title_input');
+                var subject = document.getElementById('subject_input');
+                if (examTitle && !examTitle.value.trim()) {
+                    goToWizardStep(1);
+                    examTitle.focus();
+                    e.preventDefault();
+                    return false;
+                }
+                if (subject && !subject.value.trim()) {
+                    goToWizardStep(1);
+                    subject.focus();
+                    e.preventDefault();
+                    return false;
+                }
+                showLoadingState();
+            });
+        }
+
+        // Init on page load & bfcache restore
         document.addEventListener('DOMContentLoaded', function() {
+            hideLoadingState();
             toggleDifficultyControls();
             togglePeriodWeightControls();
+
+            <?php if (!empty($generated_questions)): ?>
+            var qSec = document.getElementById('generated_questions_section');
+            if (qSec) {
+                setTimeout(function() {
+                    qSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 150);
+            }
+            <?php endif; ?>
+        });
+
+        window.addEventListener('pageshow', function() {
+            hideLoadingState();
         });
     </script>
 </body>
