@@ -277,21 +277,87 @@ class LessonExtractionService {
         return trim($text);
     }
 
+    public static function extractZipEntriesPurePhp($filePath, $pattern = null) {
+        if (!file_exists($filePath) || !is_readable($filePath)) {
+            return [];
+        }
+        $data = @file_get_contents($filePath);
+        if (!$data || strlen($data) < 22) {
+            return [];
+        }
+
+        $eocdPos = strrpos($data, "PK\x05\x06");
+        if ($eocdPos === false) {
+            return [];
+        }
+
+        $eocd = @unpack("vdisk/vdiskStart/vtotalEntriesDisk/vtotalEntries/VcdSize/VcdOffset", substr($data, $eocdPos + 4, 16));
+        if (!$eocd) {
+            return [];
+        }
+        $totalEntries = $eocd["totalEntries"] ?? 0;
+        $cdOffset = $eocd["cdOffset"] ?? 0;
+
+        $entries = [];
+        $pos = $cdOffset;
+        for ($i = 0; $i < $totalEntries; $i++) {
+            if ($pos + 46 > strlen($data)) break;
+            if (substr($data, $pos, 4) !== "PK\x01\x02") break;
+
+            $cdHeader = @unpack("vversion/vversionNeeded/vflags/vmethod/vmtime/vmdate/Vcrc/VcompSize/VuncompSize/vnameLen/vextraLen/vcommentLen/vdiskStart/vintAttr/VextAttr/VlocalOffset", substr($data, $pos + 4, 42));
+            if (!$cdHeader) break;
+
+            $pos += 46;
+            $filename = substr($data, $pos, $cdHeader["nameLen"]);
+            $pos += $cdHeader["nameLen"] + $cdHeader["extraLen"] + $cdHeader["commentLen"];
+
+            if ($pattern && !preg_match($pattern, $filename)) {
+                continue;
+            }
+
+            $localOffset = $cdHeader["localOffset"];
+            if ($localOffset + 30 > strlen($data)) continue;
+            if (substr($data, $localOffset, 4) !== "PK\x03\x04") continue;
+
+            $localHdr = @unpack("vversion/vflags/vmethod/vmtime/vmdate/Vcrc/VcompSize/VuncompSize/vnameLen/vextraLen", substr($data, $localOffset + 4, 26));
+            if (!$localHdr) continue;
+
+            $dataOffset = $localOffset + 30 + $localHdr["nameLen"] + $localHdr["extraLen"];
+            $compData = substr($data, $dataOffset, $cdHeader["compSize"]);
+
+            $uncomp = null;
+            if ($cdHeader["method"] == 8 && function_exists('gzinflate')) {
+                $uncomp = @gzinflate($compData);
+            } elseif ($cdHeader["method"] == 0) {
+                $uncomp = $compData;
+            }
+
+            if ($uncomp !== false && $uncomp !== null) {
+                $entries[$filename] = $uncomp;
+            }
+        }
+
+        return $entries;
+    }
+
     private static function extractFromDocx($filePath) {
-        if (!class_exists('ZipArchive')) {
-            throw new Exception("The PHP ZipArchive extension is required on the server to read DOCX files.");
-        }
+        $documentXml = null;
 
-        $zip = new ZipArchive();
-        if ($zip->open($filePath) !== true) {
-            throw new Exception("Unable to open DOCX file archive. Document may be corrupted.");
+        if (class_exists('ZipArchive')) {
+            $zip = new ZipArchive();
+            if ($zip->open($filePath) === true) {
+                $documentXml = $zip->getFromName('word/document.xml');
+                $zip->close();
+            }
         }
-
-        $documentXml = $zip->getFromName('word/document.xml');
-        $zip->close();
 
         if (!$documentXml) {
-            throw new Exception("Invalid DOCX format: word/document.xml missing.");
+            $entries = self::extractZipEntriesPurePhp($filePath, '/^word\/document\.xml$/i');
+            $documentXml = $entries['word/document.xml'] ?? null;
+        }
+
+        if (!$documentXml) {
+            throw new Exception("Unable to extract text from DOCX document. Document may be corrupted or missing word/document.xml.");
         }
 
         // Use DOMDocument if available
@@ -338,62 +404,73 @@ class LessonExtractionService {
     }
 
     private static function extractFromPptx($filePath) {
-        if (!class_exists('ZipArchive')) {
-            throw new Exception("The PHP ZipArchive extension is required on the server to read PPTX presentations.");
+        $slidesXml = [];
+
+        if (class_exists('ZipArchive')) {
+            $zip = new ZipArchive();
+            if ($zip->open($filePath) === true) {
+                for ($i = 0; $i < $zip->numFiles; $i++) {
+                    $filename = $zip->getNameIndex($i);
+                    if (preg_match('/^ppt\/slides\/slide\d+\.xml$/i', $filename)) {
+                        $content = $zip->getFromName($filename);
+                        if ($content) {
+                            $slidesXml[$filename] = $content;
+                        }
+                    }
+                }
+                $zip->close();
+            }
         }
 
-        $zip = new ZipArchive();
-        if ($zip->open($filePath) !== true) {
-            throw new Exception("Unable to open PPTX file archive. Presentation may be corrupted.");
+        if (empty($slidesXml)) {
+            $slidesXml = self::extractZipEntriesPurePhp($filePath, '/^ppt\/slides\/slide\d+\.xml$/i');
         }
+
+        if (empty($slidesXml)) {
+            throw new Exception("No readable slides found in PPTX presentation. If on a custom server without ZipArchive, ensure zlib is enabled.");
+        }
+
+        uksort($slidesXml, 'strnatcasecmp');
 
         $slideCount = 0;
         $extractedTextLines = [];
 
-        for ($i = 0; $i < $zip->numFiles; $i++) {
-            $filename = $zip->getNameIndex($i);
-            if (preg_match('/^ppt\/slides\/slide\d+\.xml$/i', $filename)) {
-                $slideCount++;
-                $slideXml = $zip->getFromName($filename);
-                if (!$slideXml) continue;
+        foreach ($slidesXml as $filename => $slideXml) {
+            $slideCount++;
+            if (class_exists('DOMDocument')) {
+                $dom = new DOMDocument();
+                libxml_use_internal_errors(true);
+                $dom->loadXML($slideXml);
+                libxml_clear_errors();
 
-                if (class_exists('DOMDocument')) {
-                    $dom = new DOMDocument();
-                    libxml_use_internal_errors(true);
-                    $dom->loadXML($slideXml);
-                    libxml_clear_errors();
+                $xpath = new DOMXPath($dom);
+                $xpath->registerNamespace('a', 'http://schemas.openxmlformats.org/drawingml/2006/main');
 
-                    $xpath = new DOMXPath($dom);
-                    $xpath->registerNamespace('a', 'http://schemas.openxmlformats.org/drawingml/2006/main');
-
-                    $textNodes = $xpath->query('//a:t');
-                    $slideLines = [];
-                    if ($textNodes) {
-                        foreach ($textNodes as $node) {
-                            $val = trim($node->nodeValue);
-                            if ($val !== '') {
-                                $slideLines[] = $val;
-                            }
+                $textNodes = $xpath->query('//a:t');
+                $slideLines = [];
+                if ($textNodes) {
+                    foreach ($textNodes as $node) {
+                        $val = trim($node->nodeValue);
+                        if ($val !== '') {
+                            $slideLines[] = $val;
                         }
                     }
-                    if (!empty($slideLines)) {
-                        $extractedTextLines[] = "--- Slide {$slideCount} ---\n" . implode(" ", $slideLines);
-                        continue;
-                    }
                 }
+                if (!empty($slideLines)) {
+                    $extractedTextLines[] = "--- Slide {$slideCount} ---\n" . implode(" ", $slideLines);
+                    continue;
+                }
+            }
 
-                // Fallback regex for slides
-                preg_match_all('/<a:t[^>]*>(.*?)<\/a:t>/is', $slideXml, $sMatches);
-                if (!empty($sMatches[1])) {
-                    $extractedTextLines[] = "--- Slide {$slideCount} ---\n" . html_entity_decode(implode(' ', $sMatches[1]), ENT_QUOTES, 'UTF-8');
-                }
+            // Fallback regex for slides
+            preg_match_all('/<a:t[^>]*>(.*?)<\/a:t>/is', $slideXml, $sMatches);
+            if (!empty($sMatches[1])) {
+                $extractedTextLines[] = "--- Slide {$slideCount} ---\n" . html_entity_decode(implode(' ', $sMatches[1]), ENT_QUOTES, 'UTF-8');
             }
         }
 
-        $zip->close();
-
-        if ($slideCount === 0) {
-            throw new Exception("No slides found in PPTX presentation.");
+        if ($slideCount === 0 || empty($extractedTextLines)) {
+            throw new Exception("Unable to extract legible text from PPTX slides. Presentation may be image-only.");
         }
 
         return [
