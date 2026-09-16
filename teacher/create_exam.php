@@ -40,6 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_exam'])) {
     $qualifying_is_required = intval($_POST['qualifying_is_required'] ?? 1);
     $qualifying_unlock_date = !empty($_POST['qualifying_unlock_date']) ? $_POST['qualifying_unlock_date'] : null;
     $qualifying_deadline = !empty($_POST['qualifying_deadline']) ? $_POST['qualifying_deadline'] : null;
+    $time_limit = max(1, intval($_POST['time_limit'] ?? 60));
     
     $questions = $_POST['questions'] ?? [];
 

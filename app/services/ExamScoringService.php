@@ -16,12 +16,13 @@ class ExamScoringService {
 
         if ($studentAnswerStr === '' || $studentAnswerRaw === null) {
             return [
-                'question_id' => $question['id'],
+                'question_id' => $question['id'] ?? ($question['question_id'] ?? 0),
                 'question_type' => $qType,
                 'student_answer' => '',
                 'stored_correct_answer' => $correctAnswer,
                 'awarded_points' => 0.00,
                 'maximum_points' => $maxPoints,
+                'is_correct' => false,
                 'evaluation_status' => 'unanswered',
                 'evaluation_reason' => 'No answer provided by student.',
                 'requires_review' => false,
@@ -144,17 +145,22 @@ class ExamScoringService {
         $evalStatus = $requiresReview ? 'requires_review' : ($isCorrect ? 'correct' : 'incorrect');
 
         return [
-            'question_id' => $question['id'],
+            'question_id' => $question['id'] ?? ($question['question_id'] ?? 0),
             'question_type' => $qType,
             'student_answer' => $studentAnswerStr,
             'stored_correct_answer' => $correctAnswer,
             'awarded_points' => round($awardedPoints, 2),
             'maximum_points' => round($maxPoints, 2),
+            'is_correct' => ($evalStatus === 'correct'),
             'evaluation_status' => $evalStatus,
             'evaluation_reason' => $reason,
             'requires_review' => $requiresReview,
             'confidence' => 100.00
         ];
+    }
+
+    public static function evaluateSingleItem($question, $studentAnswerRaw) {
+        return self::evaluateSingleAnswer($question, $studentAnswerRaw);
     }
 
     

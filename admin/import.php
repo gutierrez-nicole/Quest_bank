@@ -62,7 +62,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // 3. MIME type check
                 $finfo = finfo_open(FILEINFO_MIME_TYPE);
                 $mime = finfo_file($finfo, $tmpPath);
-                finfo_close($finfo);
+                if (PHP_VERSION_ID < 80500 && is_resource($finfo)) {
+                    @finfo_close($finfo);
+                }
 
                 $allowedMimes = ['text/csv', 'text/plain', 'text/x-csv', 'application/csv', 'application/x-csv', 'application/vnd.ms-excel', 'text/comma-separated-values'];
                 if (!in_array($mime, $allowedMimes, true)) {

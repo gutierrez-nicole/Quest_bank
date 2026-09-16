@@ -12,22 +12,38 @@ $error_msg = "";
 $generated_questions = null;
 $ai_meta_output = null;
 
-$stmtT = $pdo->prepare("SELECT handled_subject FROM users WHERE id = ?");
-$stmtT->execute([$teacher_id]);
-$teacher_handled_subject = $stmtT->fetchColumn() ?: 'CE 412 - Structural Theory & Design';
+LessonExtractionService::ensureSchema($pdo);
+
+$teacher_handled_subject = 'CE 412 - Structural Theory & Design';
+try {
+    $stmtT = $pdo->prepare("SELECT handled_subject FROM users WHERE id = ?");
+    $stmtT->execute([$teacher_id]);
+    $foundSubject = $stmtT->fetchColumn();
+    if (!empty($foundSubject)) {
+        $teacher_handled_subject = $foundSubject;
+    }
+} catch (Throwable $e) {
+    // Fallback gracefully if column or user is missing
+}
 
 $preselected_material_id = intval($_GET['material_id'] ?? $_GET['lesson_id'] ?? 0);
 
-$stmtMaterials = $pdo->prepare("
-    SELECT id, title, subject, lesson_text, word_count, page_count,
-           COALESCE(academic_period, 'general') AS academic_period,
-           semester, school_year, year_level, program, processing_status
-    FROM lesson_materials 
-    WHERE teacher_id = ? 
-    ORDER BY FIELD(COALESCE(academic_period,'general'), 'general','prelim','midterm','finals'), id DESC
-");
-$stmtMaterials->execute([$teacher_id]);
-$all_teacher_lessons = $stmtMaterials->fetchAll(PDO::FETCH_ASSOC);
+$all_teacher_lessons = [];
+try {
+    $stmtMaterials = $pdo->prepare("
+        SELECT id, title, subject, lesson_text, word_count, page_count,
+               COALESCE(academic_period, 'general') AS academic_period,
+               semester, school_year, year_level, program, processing_status
+        FROM lesson_materials 
+        WHERE teacher_id = ? 
+        ORDER BY FIELD(COALESCE(academic_period,'general'), 'general','prelim','midterm','finals'), id DESC
+    ");
+    $stmtMaterials->execute([$teacher_id]);
+    $all_teacher_lessons = $stmtMaterials->fetchAll(PDO::FETCH_ASSOC) ?: [];
+} catch (Throwable $e) {
+    error_log("Failed querying lesson materials in generate_ai: " . $e->getMessage());
+    $all_teacher_lessons = [];
+}
 
 $lessons_by_period = [
     'general' => [],

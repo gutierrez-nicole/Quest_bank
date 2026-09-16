@@ -156,10 +156,18 @@ class OcrService {
             ];
         }
 
-        
-        $finfo = finfo_open(FILEINFO_MIME_TYPE);
-        $detectedMime = finfo_file($finfo, $filePath);
-        finfo_close($finfo);
+        $detectedMime = 'application/octet-stream';
+        if (function_exists('finfo_open')) {
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            if ($finfo) {
+                $detectedMime = finfo_file($finfo, $filePath);
+                if (PHP_VERSION_ID < 80500 && is_resource($finfo)) {
+                    @finfo_close($finfo);
+                }
+            }
+        } elseif (function_exists('mime_content_type')) {
+            $detectedMime = @mime_content_type($filePath) ?: 'application/octet-stream';
+        }
 
         
         $headerBytes = @file_get_contents($filePath, false, null, 0, 16);
@@ -452,7 +460,9 @@ class OcrService {
 
             $response = curl_exec($ch);
             $err = curl_error($ch);
-            curl_close($ch);
+            if (PHP_VERSION_ID < 80500 && is_resource($ch)) {
+                @curl_close($ch);
+            }
 
             if ($err || !$response) {
                 return ['success' => false, 'text' => ''];

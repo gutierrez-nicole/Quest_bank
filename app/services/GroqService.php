@@ -286,7 +286,9 @@ class GroqService {
         $curlErrNo = curl_errno($ch);
         $curlError = curl_error($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        if (PHP_VERSION_ID < 80500 && is_resource($ch)) {
+            @curl_close($ch);
+        }
 
         if ($curlErrNo) {
             if ($curlErrNo === CURLE_OPERATION_TIMEDOUT) {
@@ -546,7 +548,7 @@ class GroqService {
             throw new InvalidArgumentException("Question text cannot be empty.");
         }
 
-        $correct = trim($q['correct'] ?? $q['correct_answer'] ?? '');
+        $correct = trim($q['correct'] ?? $q['correct_answer'] ?? $q['answer'] ?? '');
         if (empty($correct) && $type !== 'problem_solving' && $type !== 'math_formula') {
             throw new InvalidArgumentException("Answer key is required for type '{$type}'.");
         }
@@ -557,8 +559,8 @@ class GroqService {
         }
 
         if ($type === 'multiple_choice') {
-            $optA = trim($q['opt_a'] ?? $q['option_a'] ?? '');
-            $optB = trim($q['opt_b'] ?? $q['option_b'] ?? '');
+            $optA = trim($q['opt_a'] ?? $q['option_a'] ?? ($q['options'][0] ?? ''));
+            $optB = trim($q['opt_b'] ?? $q['option_b'] ?? ($q['options'][1] ?? ''));
             if (empty($optA) || empty($optB)) {
                 throw new InvalidArgumentException("Multiple choice questions require options A and B at minimum.");
             }
