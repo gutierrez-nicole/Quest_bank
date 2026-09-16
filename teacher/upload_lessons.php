@@ -1,4 +1,8 @@
 <?php
+@ini_set('max_execution_time', '300');
+@set_time_limit(300);
+@ini_set('memory_limit', '256M');
+
 require_once __DIR__ . '/../app/bootstrap.php';
 
 AuthService::enforceRole('teacher');
@@ -7,6 +11,10 @@ $teacher_id = getCurrentUserId();
 
 $success_msg = "";
 $error_msg = "";
+
+function ensureLessonMaterialsSchema(PDO $pdo): void {
+    LessonExtractionService::ensureSchema($pdo);
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_material'])) {
     validateCSRFToken();
@@ -25,22 +33,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_material'])) {
     if (isset($_FILES['lesson_file']) && $_FILES['lesson_file']['error'] === UPLOAD_ERR_OK) {
         $file_tmp = $_FILES['lesson_file']['tmp_name'];
         $file_name = $_FILES['lesson_file']['name'];
-        $file_size = $_FILES['lesson_file']['size'];
+        $file_size = (int)($_FILES['lesson_file']['size'] ?? 0);
         $file_ext = strtolower(pathinfo($file_name, PATHINFO_EXTENSION));
 
         $allowed_exts = ['pdf', 'docx', 'pptx', 'txt'];
         $allowed_mimes = [
             'application/pdf',
+            'application/x-pdf',
             'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-            'text/plain'
+            'application/zip',
+            'application/x-zip',
+            'application/x-zip-compressed',
+            'application/octet-stream',
+            'text/plain',
+            'text/x-gettext-translation',
+            'text/csv'
         ];
 
-        $finfo = finfo_open(FILEINFO_MIME_TYPE);
-        $mime_type = finfo_file($finfo, $file_tmp);
-        finfo_close($finfo);
+        $mime_type = 'application/octet-stream';
+        if (function_exists('finfo_open')) {
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            if ($finfo) {
+                $detected = finfo_file($finfo, $file_tmp);
+                if (!empty($detected)) {
+                    $mime_type = $detected;
+                }
+                if (PHP_VERSION_ID < 80500) {
+                    @finfo_close($finfo);
+                }
+            }
+        } elseif (function_exists('mime_content_type')) {
+            $mime_type = @mime_content_type($file_tmp) ?: 'application/octet-stream';
+        }
 
-        
         $clean_original_filename = basename($file_name);
         $file_parts = explode('.', $clean_original_filename);
         $forbidden_exts = ['php', 'phtml', 'php3', 'php4', 'php5', 'phps', 'phar', 'exe', 'sh', 'bat', 'cmd', 'js', 'pl', 'py', 'cgi'];
@@ -54,14 +80,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_material'])) {
 
         if (!$has_forbidden && $file_size > 0 && $file_size <= 10485760 && in_array($file_ext, $allowed_exts) && in_array($mime_type, $allowed_mimes)) {
             require_once __DIR__ . '/../app/services/FileValidationService.php';
-            $validationResult = FileValidationService::validateFile($file_tmp, $file_name);
+            try {
+                $validationResult = FileValidationService::validateFile($file_tmp, $file_name);
+            } catch (Throwable $e) {
+                $validationResult = ['success' => false, 'error' => 'Validation error: ' . $e->getMessage()];
+            }
             
             if (!$validationResult['success']) {
                 $error_msg = $validationResult['error'];
             } else {
                 $upload_dir = __DIR__ . '/uploads/';
                 if (!is_dir($upload_dir)) {
-                    mkdir($upload_dir, 0755, true);
+                    @mkdir($upload_dir, 0755, true);
                 }
 
                 $new_file_name = uniqid('lesson_') . '.' . $file_ext;
@@ -69,6 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_material'])) {
 
                 if (move_uploaded_file($file_tmp, $target_path)) {
                     try {
+                        ensureLessonMaterialsSchema($pdo);
                         $stmt = $pdo->prepare("
                             INSERT INTO lesson_materials 
                             (teacher_id, subject, title, academic_period, semester, school_year, year_level, program, file_name, file_path, file_type, file_size, processing_status, original_filename, stored_filename, mime_type) 
@@ -94,61 +125,103 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['upload_material'])) {
                         $material_id = $pdo->lastInsertId();
                         logActivity("Uploaded new lesson material '{$title}' ({$clean_original_filename}) for subject '{$subject}'.");
 
-                        
                         $extractRes = LessonExtractionService::extractAndSave($material_id);
-                        if ($extractRes['success']) {
-                            $success_msg = "Lesson material uploaded and content extracted successfully! ({$extractRes['word_count']} words, {$extractRes['page_count']} pages) <a href='generate_ai.php?material_id={$material_id}' class='underline font-black text-orange-700 ml-2 inline-flex items-center gap-1'><i class='fa-solid fa-wand-magic-sparkles'></i> Generate AI Exam Now &rarr;</a>";
+                        if (is_array($extractRes) && ($extractRes['success'] ?? false)) {
+                            $words = intval($extractRes['word_count'] ?? 0);
+                            $pages = intval($extractRes['page_count'] ?? 1);
+                            $success_msg = "Lesson material uploaded and content extracted successfully! ({$words} words, {$pages} pages) <a href='generate_ai.php?material_id={$material_id}' class='underline font-black text-orange-700 ml-2 inline-flex items-center gap-1'><i class='fa-solid fa-wand-magic-sparkles'></i> Generate AI Exam Now &rarr;</a>";
                         } else {
-                            $error_msg = "Lesson uploaded, but text extraction encountered an issue: " . $extractRes['error'];
+                            $err = is_array($extractRes) ? ($extractRes['error'] ?? 'Unknown extraction issue') : 'Text extraction encountered an issue.';
+                            $error_msg = "Lesson uploaded, but text extraction encountered an issue: " . htmlspecialchars($err);
                         }
-                    } catch (PDOException $e) {
+                    } catch (Throwable $e) {
                         $error_msg = "Database record failed: " . $e->getMessage();
+                        error_log("Lesson upload failure [Teacher ID " . getCurrentUserId() . "]: " . $e->getMessage());
                     }
                 } else {
-                    $error_msg = "Failed to move uploaded file to server directory.";
+                    $error_msg = "Failed to move uploaded file to server directory. Please check server folder permissions for teacher/uploads/";
                 }
             }
         } else {
-            $error_msg = "Invalid file type. Allowed formats: PDF, DOCX, PPTX, TXT.";
+            $error_msg = "Invalid file type or file size. Allowed formats: PDF, DOCX, PPTX, TXT (Maximum 10MB).";
         }
     } else {
-        $error_msg = "Please select a valid file to upload.";
+        $uploadError = $_FILES['lesson_file']['error'] ?? UPLOAD_ERR_NO_FILE;
+        switch ($uploadError) {
+            case UPLOAD_ERR_INI_SIZE:
+            case UPLOAD_ERR_FORM_SIZE:
+                $iniMax = ini_get('upload_max_filesize') ?: '2M';
+                $error_msg = "The uploaded file is too large for the current server configuration (PHP upload limit: {$iniMax}). Please upload a smaller file or increase upload_max_filesize.";
+                break;
+            case UPLOAD_ERR_PARTIAL:
+                $error_msg = "The file was only partially uploaded. Please check your network connection and try again.";
+                break;
+            case UPLOAD_ERR_NO_FILE:
+                $error_msg = "Please select a valid document file (PDF, DOCX, PPTX, or TXT) to upload.";
+                break;
+            case UPLOAD_ERR_NO_TMP_DIR:
+                $error_msg = "Server temporary upload folder missing. Please notify your system administrator.";
+                break;
+            case UPLOAD_ERR_CANT_WRITE:
+                $error_msg = "Failed to write file to server disk. Check server disk space or permissions.";
+                break;
+            default:
+                $error_msg = "Please select a valid file to upload (Error code: {$uploadError}).";
+                break;
+        }
     }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['retry_extraction'])) {
     validateCSRFToken();
-    $material_id = intval($_POST['material_id'] ?? 0);
-    $res = LessonExtractionService::extractAndSave($material_id);
-    if ($res['success']) {
-        $success_msg = "Extraction retried successfully! ({$res['word_count']} words extracted)";
-    } else {
-        $error_msg = "Extraction retry failed: " . $res['error'];
+    try {
+        $material_id = intval($_POST['material_id'] ?? 0);
+        $res = LessonExtractionService::extractAndSave($material_id);
+        if (is_array($res) && ($res['success'] ?? false)) {
+            $words = intval($res['word_count'] ?? 0);
+            $success_msg = "Extraction retried successfully! ({$words} words extracted)";
+        } else {
+            $err = is_array($res) ? ($res['error'] ?? 'Extraction failed') : 'Extraction failed';
+            $error_msg = "Extraction retry failed: " . htmlspecialchars($err);
+        }
+    } catch (Throwable $e) {
+        $error_msg = "Extraction retry encountered an error: " . $e->getMessage();
     }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_material'])) {
     validateCSRFToken();
-    $delete_id = intval($_POST['delete_id'] ?? 0);
-    $stmtFindMaterial = $pdo->prepare("SELECT file_path, title FROM lesson_materials WHERE id = ? AND teacher_id = ?");
-    $stmtFindMaterial->execute([$delete_id, getCurrentUserId()]);
-    $material = $stmtFindMaterial->fetch(PDO::FETCH_ASSOC);
+    try {
+        $delete_id = intval($_POST['delete_id'] ?? 0);
+        $stmtFindMaterial = $pdo->prepare("SELECT file_path, title FROM lesson_materials WHERE id = ? AND teacher_id = ?");
+        $stmtFindMaterial->execute([$delete_id, getCurrentUserId()]);
+        $material = $stmtFindMaterial->fetch(PDO::FETCH_ASSOC);
 
-    if ($material) {
-        $full_path = __DIR__ . '/' . $material['file_path'];
-        if (file_exists($full_path)) {
-            unlink($full_path);
+        if ($material) {
+            $full_path = __DIR__ . '/' . $material['file_path'];
+            if (file_exists($full_path)) {
+                @unlink($full_path);
+            }
+            $stmtDeleteMaterial = $pdo->prepare("DELETE FROM lesson_materials WHERE id = ?");
+            $stmtDeleteMaterial->execute([$delete_id]);
+            logActivity("Deleted lesson material '{$material['title']}'.");
+            $success_msg = "Lesson material removed successfully!";
         }
-        $stmtDeleteMaterial = $pdo->prepare("DELETE FROM lesson_materials WHERE id = ?");
-        $stmtDeleteMaterial->execute([$delete_id]);
-        logActivity("Deleted lesson material '{$material['title']}'.");
-        $success_msg = "Lesson material removed successfully!";
+    } catch (Throwable $e) {
+        $error_msg = "Failed to remove lesson material: " . $e->getMessage();
     }
 }
 
-$stmtMaterials = $pdo->prepare("SELECT * FROM lesson_materials WHERE teacher_id = ? ORDER BY id DESC");
-$stmtMaterials->execute([getCurrentUserId()]);
-$materials = $stmtMaterials->fetchAll(PDO::FETCH_ASSOC);
+$materials = [];
+try {
+    ensureLessonMaterialsSchema($pdo);
+    $stmtMaterials = $pdo->prepare("SELECT * FROM lesson_materials WHERE teacher_id = ? ORDER BY id DESC");
+    $stmtMaterials->execute([getCurrentUserId()]);
+    $materials = $stmtMaterials->fetchAll(PDO::FETCH_ASSOC) ?: [];
+} catch (Throwable $e) {
+    error_log("Failed querying lesson_materials: " . $e->getMessage());
+    $materials = [];
+}
 ?>
 
 <!DOCTYPE html>
@@ -195,9 +268,17 @@ $materials = $stmtMaterials->fetchAll(PDO::FETCH_ASSOC);
                     </div>
 
                     <?php
-                        $stmtT = $pdo->prepare("SELECT handled_subject FROM users WHERE id = ?");
-                        $stmtT->execute([$teacher_id]);
-                        $teacher_handled_subject = $stmtT->fetchColumn() ?: 'CE 412 - Structural Theory & Design';
+                        $teacher_handled_subject = 'CE 412 - Structural Theory & Design';
+                        try {
+                            $stmtT = $pdo->prepare("SELECT handled_subject FROM users WHERE id = ?");
+                            $stmtT->execute([$teacher_id]);
+                            $foundSubject = $stmtT->fetchColumn();
+                            if (!empty($foundSubject)) {
+                                $teacher_handled_subject = $foundSubject;
+                            }
+                        } catch (Throwable $e) {
+                            // Column might not exist in unmigrated database
+                        }
                     ?>
                     <div class="space-y-1">
                         <label class="text-xs font-bold text-stone-600">Subject / Category</label>
@@ -314,14 +395,14 @@ $materials = $stmtMaterials->fetchAll(PDO::FETCH_ASSOC);
                                         
                                         <div class="flex flex-wrap items-center gap-1.5 mt-2">
                                             <span class="text-[9px] font-extrabold uppercase bg-stone-200 text-stone-700 px-1.5 py-0.5 rounded">
-                                                <?php echo htmlspecialchars($m['file_type']); ?> • <?php echo number_format($m['file_size'] / 1024, 1); ?> KB
+                                                <?php echo htmlspecialchars($m['file_type'] ?? 'DOC'); ?> • <?php echo number_format(floatval($m['file_size'] ?? 0) / 1024, 1); ?> KB
                                             </span>
                                             <?php if ($status === 'completed'): ?>
                                                 <span class="text-[9px] font-bold bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200">
-                                                    <i class="fa-solid fa-font mr-0.5"></i><?php echo number_format($m['word_count']); ?> words
+                                                    <i class="fa-solid fa-font mr-0.5"></i><?php echo number_format(intval($m['word_count'] ?? 0)); ?> words
                                                 </span>
                                                 <span class="text-[9px] font-bold bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-200">
-                                                    <i class="fa-solid fa-book-open mr-0.5"></i><?php echo $m['page_count']; ?> pages
+                                                    <i class="fa-solid fa-book-open mr-0.5"></i><?php echo intval($m['page_count'] ?? 1); ?> pages
                                                 </span>
                                             <?php endif; ?>
                                         </div>

@@ -34,9 +34,18 @@ class FileValidationService {
             return ['success' => false, 'error' => 'Could not read file.'];
         }
 
-        $finfo = finfo_open(FILEINFO_MIME_TYPE);
-        $mime_type = finfo_file($finfo, $fileTmpPath);
-        finfo_close($finfo);
+        $mime_type = 'application/octet-stream';
+        if (function_exists('finfo_open')) {
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            if ($finfo) {
+                $mime_type = finfo_file($finfo, $fileTmpPath);
+                if (PHP_VERSION_ID < 80500) {
+                    @finfo_close($finfo);
+                }
+            }
+        } elseif (function_exists('mime_content_type')) {
+            $mime_type = @mime_content_type($fileTmpPath) ?: 'application/octet-stream';
+        }
 
         $identified = false;
 
@@ -61,29 +70,34 @@ class FileValidationService {
                 return ['success' => false, 'error' => 'Invalid Office document: Not a ZIP container.'];
             }
             
-            $zip = new ZipArchive();
-            if ($zip->open($fileTmpPath) === true) {
-                $valid = false;
-                if ($file_ext === 'docx') {
-                    if ($zip->getFromName('word/document.xml') !== false) {
-                        $valid = true;
-                    }
-                } elseif ($file_ext === 'pptx') {
-                    for ($i = 0; $i < $zip->numFiles; $i++) {
-                        $filename = $zip->getNameIndex($i);
-                        if (preg_match('/^ppt\/slides\/slide\d+\.xml$/i', $filename)) {
+            if (class_exists('ZipArchive')) {
+                $zip = new ZipArchive();
+                if ($zip->open($fileTmpPath) === true) {
+                    $valid = false;
+                    if ($file_ext === 'docx') {
+                        if ($zip->getFromName('word/document.xml') !== false) {
                             $valid = true;
-                            break;
+                        }
+                    } elseif ($file_ext === 'pptx') {
+                        for ($i = 0; $i < $zip->numFiles; $i++) {
+                            $filename = $zip->getNameIndex($i);
+                            if (preg_match('/^ppt\/slides\/slide\d+\.xml$/i', $filename)) {
+                                $valid = true;
+                                break;
+                            }
                         }
                     }
+                    $zip->close();
+                    if (!$valid) {
+                        return ['success' => false, 'error' => "Invalid {$file_ext}: Missing required internal structure."];
+                    }
+                    $identified = true;
+                } else {
+                    return ['success' => false, 'error' => 'Invalid Office document: Could not open ZIP container.'];
                 }
-                $zip->close();
-                if (!$valid) {
-                    return ['success' => false, 'error' => "Invalid {$file_ext}: Missing required internal structure."];
-                }
-                $identified = true;
             } else {
-                return ['success' => false, 'error' => 'Invalid Office document: Could not open ZIP container.'];
+                // If ZipArchive extension is not available, accept valid PK container
+                $identified = true;
             }
         } elseif ($file_ext === 'txt') {
             
