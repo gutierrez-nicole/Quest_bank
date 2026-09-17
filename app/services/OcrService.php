@@ -410,7 +410,7 @@ class OcrService {
     }
 
     private static function processImageWithGroqVision($filePath, $fileExt) {
-        $apiKey = defined('GROQ_API_KEY') ? GROQ_API_KEY : getenv('GROQ_API_KEY');
+        $apiKey = defined('OPENROUTER_API_KEY') && !empty(OPENROUTER_API_KEY) ? OPENROUTER_API_KEY : (defined('GROQ_API_KEY') ? GROQ_API_KEY : getenv('GROQ_API_KEY'));
         if (empty($apiKey) || !file_exists($filePath)) {
             return ['success' => false, 'text' => ''];
         }
@@ -418,10 +418,27 @@ class OcrService {
         try {
             $imageData = base64_encode(file_get_contents($filePath));
             $mimeType = ($fileExt === 'png') ? 'image/png' : 'image/jpeg';
+            $cleanKey = trim(trim((string)$apiKey), "\"' \t\n\r\0\x0B");
+
+            $isOpenRouter = (strpos($cleanKey, 'sk-or-v1-') === 0);
+            $isOpenAi = (strpos($cleanKey, 'sk-') === 0 && !$isOpenRouter);
+
             $endpoint = defined('GROQ_API_ENDPOINT') ? GROQ_API_ENDPOINT : 'https://api.groq.com/openai/v1/chat/completions';
+            $visionModel = 'llama-3.2-11b-vision-preview';
+            $extraHeaders = [];
+
+            if ($isOpenRouter) {
+                $endpoint = defined('OPENROUTER_API_ENDPOINT') ? OPENROUTER_API_ENDPOINT : 'https://openrouter.ai/api/v1/chat/completions';
+                $visionModel = 'openai/gpt-4o';
+                $extraHeaders[] = 'HTTP-Referer: http://localhost:8000';
+                $extraHeaders[] = 'X-Title: QuestBank';
+            } elseif ($isOpenAi) {
+                $endpoint = 'https://api.openai.com/v1/chat/completions';
+                $visionModel = 'gpt-4o-mini';
+            }
 
             $payload = [
-                'model' => 'llama-3.2-11b-vision-preview',
+                'model' => $visionModel,
                 'messages' => [
                     [
                         'role' => 'user',
@@ -443,18 +460,19 @@ class OcrService {
                 'max_tokens' => 1024
             ];
 
-            $apiKey = trim(trim((string)$apiKey), "\"' \t\n\r\0\x0B");
             $jsonPayload = json_encode($payload, JSON_INVALID_UTF8_SUBSTITUTE | JSON_UNESCAPED_UNICODE);
             $ch = curl_init($endpoint);
+            $headers = array_merge([
+                'Content-Type: application/json',
+                'Authorization: Bearer ' . $cleanKey
+            ], $extraHeaders);
+
             curl_setopt_array($ch, [
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_POST => true,
                 CURLOPT_POSTFIELDS => $jsonPayload,
-                CURLOPT_HTTPHEADER => [
-                    'Content-Type: application/json',
-                    'Authorization: Bearer ' . $apiKey
-                ],
-                CURLOPT_TIMEOUT => 20,
+                CURLOPT_HTTPHEADER => $headers,
+                CURLOPT_TIMEOUT => 30,
                 CURLOPT_SSL_VERIFYPEER => false
             ]);
 

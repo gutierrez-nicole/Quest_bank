@@ -700,6 +700,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                 if ($qType === 'fill_in_the_blank') $qType = 'fill_blank';
                                 if ($qType === 'matching_type') $qType = 'matching';
 
+                                $cleanMatchingPairs = null;
+                                if (!empty($q['matching_pairs'])) {
+                                    if (is_array($q['matching_pairs'])) {
+                                        $cleanMatchingPairs = json_encode($q['matching_pairs']);
+                                    } elseif (is_string($q['matching_pairs'])) {
+                                        $trimmed = trim($q['matching_pairs']);
+                                        if ($trimmed !== '' && $trimmed !== 'null') {
+                                            $dec = json_decode($trimmed, true);
+                                            if (json_last_error() === JSON_ERROR_NONE && is_array($dec) && !empty($dec)) {
+                                                $cleanMatchingPairs = json_encode($dec);
+                                            }
+                                        }
+                                    }
+                                }
+
+                                $cleanFormula = (!empty($q['formula_latex']) && trim((string)$q['formula_latex']) !== '') ? trim((string)$q['formula_latex']) : null;
+                                $cleanExplanation = (!empty($q['explanation']) && trim((string)$q['explanation']) !== '') ? trim((string)$q['explanation']) : null;
+
                                 $qStmt->execute([
                                     $exam_id,
                                     $qText,
@@ -709,10 +727,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                     $q['opt_c'] ?? null,
                                     $q['opt_d'] ?? null,
                                     $q['correct'] ?? $q['correct_answer'] ?? '',
-                                    $q['formula_latex'] ?? null,
-                                    isset($q['matching_pairs']) ? (is_string($q['matching_pairs']) ? $q['matching_pairs'] : json_encode($q['matching_pairs'])) : null,
+                                    $cleanFormula,
+                                    $cleanMatchingPairs,
                                     max(1, intval($q['points'] ?? 1)),
-                                    $q['explanation'] ?? null,
+                                    $cleanExplanation,
                                     $difficulty,
                                     $q['source_topic'] ?? $subject,
                                     $qLessonId

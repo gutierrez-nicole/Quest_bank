@@ -519,16 +519,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
             const examSelect = document.getElementById('examSelect');
             const studentSelect = document.getElementById('studentSelect');
 
-            if (!examSelect.value) {
-                alert("Please select a Stored Exam first before launching the camera scanner.");
-                examSelect.focus();
-                return;
+            // Auto-select first exam if available and not yet chosen
+            if (!examSelect.value && examSelect.options.length > 1) {
+                examSelect.selectedIndex = 1;
+                onExamChanged();
             }
 
-            if (!studentSelect.value || studentSelect.disabled) {
-                alert("Please select an Enrolled Student first before launching the camera scanner.");
-                studentSelect.focus();
-                return;
+            // Auto-select first student if available and not yet chosen
+            if (studentSelect && !studentSelect.disabled && !studentSelect.value && studentSelect.options.length > 1) {
+                studentSelect.selectedIndex = 1;
             }
 
             const modal = document.getElementById('cameraModal');
