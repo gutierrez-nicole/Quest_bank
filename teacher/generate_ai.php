@@ -826,6 +826,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                     'opt_c' => $pq['opt_c'] ?? null,
                     'opt_d' => $pq['opt_d'] ?? null,
                     'correct_answer' => $pq['correct'] ?? $pq['correct_answer'] ?? '',
+                    'explanation' => $pq['explanation'] ?? '',
                     'points' => intval($pq['points'] ?? 1),
                     'source_lesson_ids' => $srcIds,
                     'source_topic' => $pq['source_topic'] ?? '',
@@ -1357,7 +1358,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                         <!-- Multi-Type Question Blueprint -->
                         <div class="space-y-2 bg-stone-50 border border-stone-200 p-4 rounded-2xl">
                             <label class="text-xs font-extrabold text-stone-800 block uppercase">Multi-Type Question Blueprint (Item Allocation)</label>
-                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
                                 <div>
                                     <label class="text-[10px] font-bold text-stone-500">Multiple Choice</label>
                                     <input type="number" name="blueprint[multiple_choice]" value="<?php echo htmlspecialchars($_POST['blueprint']['multiple_choice'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-xl p-2 text-xs font-bold text-stone-800">
@@ -1375,11 +1376,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                     <input type="number" name="blueprint[fill_blank]" value="<?php echo htmlspecialchars($_POST['blueprint']['fill_blank'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-xl p-2 text-xs font-bold text-stone-800">
                                 </div>
                                 <div>
-                                    <label class="text-[10px] font-bold text-stone-500">Matching Type</label>
-                                    <input type="number" name="blueprint[matching]" value="<?php echo htmlspecialchars($_POST['blueprint']['matching'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-xl p-2 text-xs font-bold text-stone-800">
-                                </div>
-                                <div>
-                                    <label class="text-[10px] font-bold text-stone-500">Problem Solving</label>
+                                    <label class="text-[10px] font-bold text-stone-500">Problem Solving (w/ Solutions)</label>
                                     <input type="number" name="blueprint[problem_solving]" value="<?php echo htmlspecialchars($_POST['blueprint']['problem_solving'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-xl p-2 text-xs font-bold text-stone-800">
                                 </div>
                                 <div>
@@ -1834,6 +1831,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                                 <i class="fa-solid fa-key text-emerald-600"></i> Correct Answer Key:
                                             </label>
                                             <input type="text" name="questions[<?php echo $idx; ?>][correct]" data-testid="answer-key" value="<?php echo htmlspecialchars($item['correct_answer']); ?>" class="w-full bg-emerald-50 border border-emerald-200 rounded-lg p-2 text-xs font-bold text-emerald-700 outline-none focus:border-emerald-500 mt-1">
+                                        </div>
+
+                                        <div class="pt-1">
+                                            <label class="text-[10px] font-bold text-stone-600 uppercase flex items-center gap-1">
+                                                <i class="fa-solid fa-calculator text-orange-500"></i> Step-by-Step Solution / Mathematical Derivation:
+                                            </label>
+                                            <textarea name="questions[<?php echo $idx; ?>][explanation]" rows="2" placeholder="Step-by-step calculations, applied engineering formula, and explanation..." class="w-full bg-white border border-stone-200 rounded-lg p-2 text-xs font-mono text-stone-800 outline-none focus:border-orange-500 mt-1"><?php echo htmlspecialchars($item['explanation'] ?? ''); ?></textarea>
                                         </div>
                                     </div>
                                 <?php endforeach; ?>
