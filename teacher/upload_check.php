@@ -266,13 +266,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
                             <span class="text-[10px] text-stone-400 font-semibold">1 or more pages</span>
                         </div>
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <button type="button" id="openCameraButton" data-testid="scan-using-camera-btn" onclick="openCameraScanner()" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs py-3 px-4 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2">
-                                <i class="fa-solid fa-camera text-sm"></i> Scan Pages Using Camera
-                            </button>
+                            <!-- Camera Button: Direct phone camera on mobile or live webcam on desktop -->
+                            <label for="mobileDirectCameraInput" id="openCameraButton" data-testid="scan-using-camera-btn" onclick="handleCameraBtnClick(event)" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs py-3 px-4 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer text-center select-none">
+                                <i class="fa-solid fa-camera text-sm"></i> <span id="cameraBtnLabel">Take Photo with Camera</span>
+                            </label>
 
-                            <label for="examFileInput" class="w-full bg-stone-100 hover:bg-stone-200 border border-stone-300 text-stone-700 font-bold text-xs py-3 px-4 rounded-xl cursor-pointer transition-all flex items-center justify-center gap-2 text-center">
+                            <label for="examFileInput" class="w-full bg-stone-100 hover:bg-stone-200 border border-stone-300 text-stone-700 font-bold text-xs py-3 px-4 rounded-xl cursor-pointer transition-all flex items-center justify-center gap-2 text-center select-none">
                                 <i class="fa-solid fa-upload text-sm"></i> Upload Images or PDF
                             </label>
+                        </div>
+
+                        <div class="flex items-center justify-between text-[11px] text-stone-500 px-1">
+                            <span class="text-stone-400"><i class="fa-solid fa-mobile-screen-button text-orange-500 mr-1"></i> Phone: Native camera 1-tap snap</span>
+                            <button type="button" onclick="openCameraScanner()" class="text-orange-600 hover:text-orange-700 font-semibold underline flex items-center gap-1">
+                                <i class="fa-solid fa-video text-xs"></i> Live Webcam Scanner (Desktop)
+                            </button>
                         </div>
 
                         <!-- Selected Files / Multi-Page Scan Status Tray -->
@@ -288,8 +296,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
                             <!-- Multi-page Badges Tray -->
                             <div id="pagesListTray" class="flex flex-wrap gap-2 pt-1 hidden"></div>
 
-                            <input type="file" name="exam_files[]" id="examFileInput" multiple accept=".jpg,.jpeg,.png,.pdf" onchange="onFileSelected(event)" class="hidden">
-                            <input type="file" id="mobileDirectCameraInput" accept="image/*" capture="environment" onchange="onDirectCameraCapture(event)" class="hidden">
+                            <input type="file" name="exam_files[]" id="examFileInput" multiple accept=".jpg,.jpeg,.png,.pdf" onchange="onFileSelected(event)" class="sr-only" style="opacity:0; position:absolute; pointer-events:none; width:1px; height:1px;">
+                            <input type="file" id="mobileDirectCameraInput" accept="image/*" capture="environment" onchange="onDirectCameraCapture(event)" class="sr-only" style="opacity:0; position:absolute; pointer-events:none; width:1px; height:1px;">
                         </div>
                     </div>
 
@@ -571,17 +579,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
             }
         }
 
+        function handleCameraBtnClick(event) {
+            const examSelect = document.getElementById('examSelect');
+            const studentSelect = document.getElementById('studentSelect');
+            if (!examSelect.value && examSelect.options.length > 1) {
+                examSelect.selectedIndex = 1;
+                onExamChanged();
+            }
+            if (studentSelect && !studentSelect.disabled && !studentSelect.value && studentSelect.options.length > 1) {
+                studentSelect.selectedIndex = 1;
+            }
+
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || window.innerWidth < 768;
+            const isUnsecure = !window.isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1';
+
+            if (!isMobile && !isUnsecure && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                event.preventDefault();
+                openCameraScanner();
+            }
+            // On mobile / network IP, let label naturally trigger mobileDirectCameraInput
+        }
+
         async function openCameraScanner() {
             const examSelect = document.getElementById('examSelect');
             const studentSelect = document.getElementById('studentSelect');
 
-            // Auto-select first exam if available and not yet chosen
             if (!examSelect.value && examSelect.options.length > 1) {
                 examSelect.selectedIndex = 1;
                 onExamChanged();
             }
 
-            // Auto-select first student if available and not yet chosen
             if (studentSelect && !studentSelect.disabled && !studentSelect.value && studentSelect.options.length > 1) {
                 studentSelect.selectedIndex = 1;
             }
@@ -596,18 +623,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
             updateModalPageCounter();
             resetCapturedState();
 
-            // If accessing over network HTTP on mobile/cellphone, launch native camera directly or show direct capture banner
             const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
             const isUnsecureNetworkContext = !window.isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1';
 
             if (isMobileDevice || isUnsecureNetworkContext) {
-                // Check if navigator.mediaDevices.getUserMedia exists; if blocked by HTTP, provide seamless native phone camera
                 if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || isUnsecureNetworkContext) {
                     showCameraError("Live browser stream requires HTTPS over network IP. Tap below to capture directly with your phone's native camera.");
-                    // Auto-trigger native camera capture on mobile for 1-tap experience
-                    if (isMobileDevice) {
-                        launchNativeCameraCapture();
-                    }
                     return;
                 }
             }
@@ -647,36 +668,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
 
         function onDirectCameraCapture(event) {
             const input = event.target;
-            if (!input.files || !input.files[0]) return;
+            if (!input.files || input.files.length === 0) return;
 
-            const file = input.files[0];
-            const reader = new FileReader();
+            for (let i = 0; i < input.files.length; i++) {
+                const file = input.files[i];
+                const pageNum = capturedPages.length + 1;
+                const filename = `page_${pageNum}_camera_${Date.now()}.jpg`;
 
-            reader.onload = function(e) {
-                const img = new Image();
-                img.onload = function() {
-                    rawCapturedCanvas = document.createElement('canvas');
-                    rawCapturedCanvas.width = img.width;
-                    rawCapturedCanvas.height = img.height;
-                    const ctx = rawCapturedCanvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0);
+                capturedPages.push({
+                    id: Date.now() + i,
+                    blob: file,
+                    filename: filename,
+                    size: file.size,
+                    dataUrl: URL.createObjectURL(file)
+                });
+            }
 
-                    activeCanvas = document.createElement('canvas');
-                    activeCanvas.width = img.width;
-                    activeCanvas.height = img.height;
-                    activeCanvas.getContext('2d').drawImage(rawCapturedCanvas, 0, 0);
+            selectedFileObjects = [];
+            renderPagesTray();
 
-                    currentRotation = 0;
+            const examSelect = document.getElementById('examSelect');
+            const studentSelect = document.getElementById('studentSelect');
+            if (!examSelect.value && examSelect.options.length > 1) {
+                examSelect.selectedIndex = 1;
+                onExamChanged();
+            }
+            if (studentSelect && !studentSelect.disabled && !studentSelect.value && studentSelect.options.length > 1) {
+                studentSelect.selectedIndex = 1;
+            }
 
-                    // Hide error banner and show preview in modal for review & enhancements
-                    const errorBanner = document.getElementById('cameraErrorBanner');
-                    if (errorBanner) errorBanner.classList.add('hidden');
-                    
-                    updatePreviewDisplay();
-                };
-                img.src = e.target.result;
-            };
-            reader.readAsDataURL(file);
+            closeCameraScanner();
+            input.value = '';
         }
 
         async function startCameraStream() {
@@ -997,23 +1019,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
 
                 capturedPages.forEach((p, idx) => {
                     const badge = document.createElement('div');
-                    badge.className = "flex items-center gap-1.5 bg-white border border-stone-200 shadow-2xs rounded-lg px-2.5 py-1 text-xs text-stone-800 font-semibold";
+                    badge.className = "flex items-center gap-2 bg-white border border-stone-200 shadow-2xs rounded-xl p-2 text-xs text-stone-800 font-semibold";
                     badge.innerHTML = `
-                        <i class="fa-solid fa-file-image text-orange-500 text-xs"></i>
-                        <span>Page ${idx + 1} (${(p.size / (1024 * 1024)).toFixed(2)} MB)</span>
-                        <button type="button" onclick="removeCapturedPage(${p.id})" class="text-stone-400 hover:text-rose-600 font-bold ml-1 transition-colors" title="Remove Page">
-                            <i class="fa-solid fa-xmark text-xs"></i>
+                        <img src="${p.dataUrl}" class="w-9 h-9 object-cover rounded-lg border border-stone-200 flex-shrink-0" alt="Page ${idx + 1}">
+                        <div class="flex-grow min-w-0">
+                            <p class="font-bold text-stone-800 truncate">Page ${idx + 1}</p>
+                            <p class="text-[10px] text-stone-400 font-mono">${(p.size / (1024 * 1024)).toFixed(2)} MB</p>
+                        </div>
+                        <button type="button" onclick="removeCapturedPage(${p.id})" class="text-stone-400 hover:text-rose-600 p-1 flex-shrink-0 transition-colors" title="Remove Page">
+                            <i class="fa-solid fa-xmark text-sm font-bold"></i>
                         </button>
                     `;
                     tray.appendChild(badge);
                 });
 
-                const addMoreBtn = document.createElement('button');
-                addMoreBtn.type = "button";
-                addMoreBtn.onclick = openCameraScanner;
-                addMoreBtn.className = "flex items-center gap-1 bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-700 rounded-lg px-2.5 py-1 text-xs font-bold transition-all";
-                addMoreBtn.innerHTML = `<i class="fa-solid fa-plus text-xs"></i> + Add More Pages`;
-                tray.appendChild(addMoreBtn);
+                const addMoreLabel = document.createElement('label');
+                addMoreLabel.htmlFor = "mobileDirectCameraInput";
+                addMoreLabel.className = "flex items-center gap-1.5 bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-700 rounded-xl px-3 py-2 text-xs font-bold transition-all cursor-pointer select-none";
+                addMoreLabel.innerHTML = `<i class="fa-solid fa-camera text-xs"></i> + Snap Next Page`;
+                tray.appendChild(addMoreLabel);
 
             } else if (selectedFileObjects.length > 0) {
                 nameDisplay.textContent = (selectedFileObjects.length === 1) 
@@ -1025,13 +1049,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
 
                 selectedFileObjects.forEach((f, idx) => {
                     const badge = document.createElement('div');
-                    badge.className = "flex items-center gap-1.5 bg-white border border-stone-200 shadow-2xs rounded-lg px-2.5 py-1 text-xs text-stone-800 font-semibold";
+                    badge.className = "flex items-center gap-2 bg-white border border-stone-200 shadow-2xs rounded-xl p-2 text-xs text-stone-800 font-semibold";
                     badge.innerHTML = `
-                        <i class="fa-solid fa-file-lines text-stone-500 text-xs"></i>
-                        <span class="truncate max-w-[150px]">${f.name}</span>
-                        <span class="text-[10px] text-stone-400">(${(f.size / (1024 * 1024)).toFixed(2)}MB)</span>
-                        <button type="button" onclick="removeSelectedFile(${idx})" class="text-stone-400 hover:text-rose-600 font-bold ml-1 transition-colors" title="Remove File">
-                            <i class="fa-solid fa-xmark text-xs"></i>
+                        <i class="fa-solid fa-file-lines text-stone-500 text-sm flex-shrink-0 ml-1"></i>
+                        <div class="flex-grow min-w-0">
+                            <p class="font-bold text-stone-800 truncate max-w-[150px]">${f.name}</p>
+                            <p class="text-[10px] text-stone-400 font-mono">${(f.size / (1024 * 1024)).toFixed(2)} MB</p>
+                        </div>
+                        <button type="button" onclick="removeSelectedFile(${idx})" class="text-stone-400 hover:text-rose-600 p-1 flex-shrink-0 transition-colors" title="Remove File">
+                            <i class="fa-solid fa-xmark text-sm font-bold"></i>
                         </button>
                     `;
                     tray.appendChild(badge);
@@ -1045,7 +1071,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
             }
         }
 
-        document.getElementById('ocrUploadForm').addEventListener('submit', async function(e) {
+        document.getElementById('ocrUploadForm').addEventListener('submit', function(e) {
             const examSelect = document.getElementById('examSelect');
             const studentSelect = document.getElementById('studentSelect');
 
@@ -1061,13 +1087,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
                 return;
             }
 
-            // If we have captured camera pages or multiple selected files, submit via AJAX FormData
-            e.preventDefault();
-
             const form = this;
             const submitBtn = form.querySelector('button[type="submit"]');
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Submitting & Processing Multi-Page OCR...';
+
+            if (window.DataTransfer) {
+                try {
+                    const dt = new DataTransfer();
+                    if (capturedPages.length > 0) {
+                        capturedPages.forEach((p) => {
+                            const f = (p.blob instanceof File) ? p.blob : new File([p.blob], p.filename, { type: 'image/jpeg' });
+                            dt.items.add(f);
+                        });
+                    } else if (selectedFileObjects.length > 0) {
+                        selectedFileObjects.forEach((f) => {
+                            dt.items.add(f);
+                        });
+                    }
+                    document.getElementById('examFileInput').files = dt.files;
+                    return true;
+                } catch (dtErr) {
+                    console.warn("DataTransfer population fallback to FormData fetch:", dtErr);
+                }
+            }
+
+            e.preventDefault();
 
             const formData = new FormData(form);
             formData.delete('exam_file');
@@ -1085,25 +1130,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
 
             formData.append('process_ocr_grading', '1');
 
-            try {
-                const response = await fetch('upload_check.php', {
-                    method: 'POST',
-                    body: formData,
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest'
-                    }
-                });
-
-                const html = await response.text();
-                document.open();
-                document.write(html);
-                document.close();
-            } catch (err) {
+            fetch('upload_check.php', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            }).then(r => r.text()).then(html => {
+                document.documentElement.innerHTML = html;
+                window.scrollTo(0, 0);
+            }).catch(err => {
                 console.error("Multi-page upload submission error:", err);
                 alert("Network or upload error occurred. Please try again.");
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = '<i class="fa-solid fa-microchip mr-2"></i> Process & Grade Server-Side';
-            }
+            });
         });
     </script>
 </body>
