@@ -577,6 +577,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['publish_entire_exam']
                                 </button>
                             </div>
                         </div>
+                        ${item.question_text ? `<p class="text-[11px] font-medium text-stone-700">${item.question_text}</p>` : ''}
                         <div class="grid grid-cols-2 gap-2 text-[11px]">
                             <div class="p-1.5 rounded bg-white border border-stone-200 font-medium text-stone-700 truncate">
                                 <span class="text-stone-400 font-bold mr-1">Student Answer:</span>
@@ -587,6 +588,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['publish_entire_exam']
                                 <strong class="text-emerald-800 font-black">${item.stored_correct_answer || item.correct_answer || 'N/A'}</strong>
                             </div>
                         </div>
+                        ${item.explanation ? `
+                            <div class="p-2 rounded-lg bg-amber-50 border border-amber-200/70 text-[11px] text-amber-950">
+                                <span class="text-amber-800 font-bold flex items-center gap-1 mb-0.5"><i class="fa-solid fa-lightbulb text-amber-600"></i> Step-by-Step Solution / Explanation:</span>
+                                <div class="font-mono text-[10.5px] leading-relaxed text-stone-700 whitespace-pre-wrap">${item.explanation}</div>
+                            </div>
+                        ` : ''}
                         ${item.evaluation_reason ? `<p class="text-[10px] text-stone-500 font-medium italic">${item.evaluation_reason}</p>` : ''}
                     `;
                     answersContainer.appendChild(row);

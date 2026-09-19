@@ -146,9 +146,11 @@ class ExamScoringService {
 
         return [
             'question_id' => $question['id'] ?? ($question['question_id'] ?? 0),
+            'question_text' => $question['question_text'] ?? '',
             'question_type' => $qType,
             'student_answer' => $studentAnswerStr,
             'stored_correct_answer' => $correctAnswer,
+            'explanation' => $question['explanation'] ?? '',
             'awarded_points' => round($awardedPoints, 2),
             'maximum_points' => round($maxPoints, 2),
             'is_correct' => ($evalStatus === 'correct'),

@@ -322,6 +322,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
                             <p class="text-lg font-black text-emerald-600"><?php echo $evaluation_summary['correct_count']; ?> <span class="text-stone-300">/</span> <span class="text-rose-600"><?php echo $evaluation_summary['incorrect_count']; ?></span></p>
                         </div>
                     </div>
+
+                    <?php if (!empty($evaluation_summary['item_results']) && is_array($evaluation_summary['item_results'])): ?>
+                        <div class="border-t border-stone-100 pt-4 space-y-3">
+                            <div class="flex items-center justify-between">
+                                <h5 class="text-xs font-extrabold text-stone-800 uppercase tracking-wider flex items-center gap-1.5">
+                                    <i class="fa-solid fa-list-check text-orange-600"></i> Evaluated Items & Solutions
+                                </h5>
+                                <span class="text-[11px] font-semibold text-stone-500 font-mono"><?php echo count($evaluation_summary['item_results']); ?> Items Evaluated</span>
+                            </div>
+                            <div class="space-y-2.5 max-h-96 overflow-y-auto pr-1">
+                                <?php foreach ($evaluation_summary['item_results'] as $idx => $item): 
+                                    $isCorrect = ($item['evaluation_status'] ?? '') === 'correct' || (($item['awarded_points'] ?? 0) > 0 && ($item['awarded_points'] ?? 0) >= ($item['maximum_points'] ?? 1));
+                                    $isReview = !empty($item['requires_review']) || ($item['evaluation_status'] ?? '') === 'requires_review';
+                                ?>
+                                    <div class="p-3 rounded-xl border <?php echo $isCorrect ? 'bg-emerald-50/40 border-emerald-200' : ($isReview ? 'bg-amber-50/40 border-amber-200' : 'bg-stone-50 border-stone-200'); ?> text-xs space-y-1.5">
+                                        <div class="flex items-center justify-between">
+                                            <span class="font-extrabold text-stone-800 text-[11px]">Item #<?php echo $idx + 1; ?> <?php echo !empty($item['question_type']) ? '(' . htmlspecialchars(str_replace('_', ' ', $item['question_type'])) . ')' : ''; ?></span>
+                                            <?php if ($isCorrect): ?>
+                                                <span class="bg-emerald-100 text-emerald-800 font-extrabold px-2 py-0.5 rounded-full text-[10px] flex items-center gap-1 border border-emerald-200"><i class="fa-solid fa-circle-check text-emerald-600"></i> Correct (+<?php echo number_format($item['awarded_points'] ?? 1, 1); ?> pt)</span>
+                                            <?php elseif ($isReview): ?>
+                                                <span class="bg-amber-100 text-amber-800 font-extrabold px-2 py-0.5 rounded-full text-[10px] flex items-center gap-1 border border-amber-200"><i class="fa-solid fa-triangle-exclamation text-amber-600"></i> Needs Review</span>
+                                            <?php else: ?>
+                                                <span class="bg-rose-100 text-rose-800 font-extrabold px-2 py-0.5 rounded-full text-[10px] flex items-center gap-1 border border-rose-200"><i class="fa-solid fa-circle-xmark text-rose-600"></i> Incorrect (0 pt)</span>
+                                            <?php endif; ?>
+                                        </div>
+                                        <?php if (!empty($item['question_text'])): ?>
+                                            <p class="text-[11px] font-medium text-stone-700"><?php echo htmlspecialchars($item['question_text']); ?></p>
+                                        <?php endif; ?>
+                                        <div class="grid grid-cols-2 gap-2 text-[11px]">
+                                            <div class="p-1.5 rounded bg-white border border-stone-200 font-medium text-stone-700 truncate">
+                                                <span class="text-stone-400 font-bold mr-1">Scanned Answer:</span>
+                                                <strong class="<?php echo $isCorrect ? 'text-emerald-700 font-black' : 'text-rose-700 font-black'; ?>"><?php echo htmlspecialchars($item['student_answer'] ?: '(None)'); ?></strong>
+                                            </div>
+                                            <div class="p-1.5 rounded bg-white border border-stone-200 font-medium text-stone-700 truncate">
+                                                <span class="text-stone-400 font-bold mr-1">Correct Key:</span>
+                                                <strong class="text-emerald-800 font-black"><?php echo htmlspecialchars($item['stored_correct_answer'] ?? 'N/A'); ?></strong>
+                                            </div>
+                                        </div>
+                                        <?php if (!empty($item['explanation'])): ?>
+                                            <div class="p-2 rounded-lg bg-amber-50 border border-amber-200/70 text-[11px] text-amber-950">
+                                                <span class="text-amber-800 font-bold flex items-center gap-1 mb-0.5"><i class="fa-solid fa-lightbulb text-amber-600"></i> Step-by-Step Solution / Explanation:</span>
+                                                <div class="font-mono text-[10.5px] leading-relaxed text-stone-700 whitespace-pre-wrap"><?php echo htmlspecialchars($item['explanation']); ?></div>
+                                            </div>
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+
+                    <div class="pt-2 flex items-center justify-between text-xs border-t border-stone-100">
+                        <span class="text-stone-500 font-medium">Submission ID: #<?php echo $evaluation_summary['submission_id']; ?> (Recorded to Reports)</span>
+                        <a href="reports.php" class="text-orange-600 hover:text-orange-700 font-bold flex items-center gap-1">
+                            Go to Reports for Review <i class="fa-solid fa-arrow-right"></i>
+                        </a>
+                    </div>
                 </div>
             <?php endif; ?>
 
