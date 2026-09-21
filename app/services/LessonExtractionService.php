@@ -61,7 +61,8 @@ class LessonExtractionService {
                 'semester' => "VARCHAR(20) DEFAULT NULL",
                 'school_year' => "VARCHAR(20) DEFAULT NULL",
                 'year_level' => "VARCHAR(50) DEFAULT NULL",
-                'program' => "VARCHAR(100) DEFAULT NULL"
+                'program' => "VARCHAR(100) DEFAULT NULL",
+                'deleted_at' => "DATETIME DEFAULT NULL"
             ];
 
             foreach ($missingCols as $c => $def) {

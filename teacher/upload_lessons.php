@@ -193,19 +193,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_material'])) {
     validateCSRFToken();
     try {
         $delete_id = intval($_POST['delete_id'] ?? 0);
-        $stmtFindMaterial = $pdo->prepare("SELECT file_path, title FROM lesson_materials WHERE id = ? AND teacher_id = ?");
+        $stmtFindMaterial = $pdo->prepare("SELECT file_path, title FROM lesson_materials WHERE id = ? AND teacher_id = ? AND deleted_at IS NULL");
         $stmtFindMaterial->execute([$delete_id, getCurrentUserId()]);
         $material = $stmtFindMaterial->fetch(PDO::FETCH_ASSOC);
 
         if ($material) {
-            $full_path = __DIR__ . '/' . $material['file_path'];
-            if (file_exists($full_path)) {
-                @unlink($full_path);
-            }
-            $stmtDeleteMaterial = $pdo->prepare("DELETE FROM lesson_materials WHERE id = ?");
+            $stmtDeleteMaterial = $pdo->prepare("UPDATE lesson_materials SET deleted_at = NOW() WHERE id = ?");
             $stmtDeleteMaterial->execute([$delete_id]);
-            logActivity("Deleted lesson material '{$material['title']}'.");
-            $success_msg = "Lesson material removed successfully!";
+            logActivity("Moved lesson material '{$material['title']}' to Recycle Bin.");
+            $success_msg = "Lesson material '{$material['title']}' moved to Deleted Lessons. You can restore it anytime in System Backup & Restore!";
+        } else {
+            $error_msg = "Lesson material not found or already deleted.";
         }
     } catch (Throwable $e) {
         $error_msg = "Failed to remove lesson material: " . $e->getMessage();
@@ -215,7 +213,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_material'])) {
 $materials = [];
 try {
     ensureLessonMaterialsSchema($pdo);
-    $stmtMaterials = $pdo->prepare("SELECT * FROM lesson_materials WHERE teacher_id = ? ORDER BY id DESC");
+    $stmtMaterials = $pdo->prepare("SELECT * FROM lesson_materials WHERE teacher_id = ? AND deleted_at IS NULL ORDER BY id DESC");
     $stmtMaterials->execute([getCurrentUserId()]);
     $materials = $stmtMaterials->fetchAll(PDO::FETCH_ASSOC) ?: [];
 } catch (Throwable $e) {
@@ -245,6 +243,9 @@ try {
                 <h1 class="text-2xl font-extrabold text-stone-800 mt-2"><i class="fa-solid fa-file-arrow-up text-orange-600 mr-1"></i> Upload Lesson Materials</h1>
                 <p class="text-xs text-stone-400">Store class reviewers, syllabi, and reading resources for learning management.</p>
             </div>
+            <a href="backup.php" class="text-xs font-bold text-stone-700 hover:text-orange-600 bg-white hover:bg-orange-50 border border-stone-200 hover:border-orange-300 px-4 py-2.5 rounded-xl transition-all shadow-xs flex items-center gap-2">
+                <i class="fa-solid fa-trash-can-arrow-up text-orange-500"></i> Restore Deleted Lessons
+            </a>
         </div>
 
         <?php if (!empty($success_msg)): ?>

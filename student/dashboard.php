@@ -34,6 +34,79 @@ try {
         }
     }
 
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'get_submission_breakdown') {
+        header('Content-Type: application/json');
+        $sub_id = intval($_POST['submission_id'] ?? 0);
+        try {
+            $stmtSub = $pdo->prepare("
+                SELECT es.*, COALESCE(e.title, es.exam_title) as exam_name, e.subject, u.fullname as teacher_name
+                FROM exam_submissions es
+                LEFT JOIN exams e ON es.exam_id = e.id
+                LEFT JOIN users u ON (es.teacher_id = u.id OR e.teacher_id = u.id)
+                WHERE es.id = ? AND es.student_id = ? AND es.review_status = 'published'
+            ");
+            $stmtSub->execute([$sub_id, $student_id]);
+            $sub = $stmtSub->fetch(PDO::FETCH_ASSOC);
+
+            if (!$sub) {
+                echo json_encode(['success' => false, 'error' => 'Submission record not found or results are not yet published by the teacher.']);
+                exit;
+            }
+
+            // Fetch individual question records from submission_answers
+            $stmtAns = $pdo->prepare("
+                SELECT sa.*, eq.question_text, eq.question_type, eq.option_a, eq.option_b, eq.option_c, eq.option_d, eq.explanation
+                FROM submission_answers sa
+                LEFT JOIN exam_questions eq ON sa.question_id = eq.id
+                WHERE sa.submission_id = ?
+                ORDER BY sa.question_id ASC
+            ");
+            $stmtAns->execute([$sub_id]);
+            $answers = $stmtAns->fetchAll(PDO::FETCH_ASSOC);
+
+            if (empty($answers) && !empty($sub['evaluation_result'])) {
+                $parsed = json_decode($sub['evaluation_result'], true);
+                if (is_array($parsed)) {
+                    foreach ($parsed as $pIdx => $p) {
+                        $answers[] = [
+                            'question_id' => $p['question_id'] ?? ($pIdx + 1),
+                            'question_text' => $p['question_text'] ?? "Question #" . ($pIdx + 1),
+                            'question_type' => $p['question_type'] ?? 'standard',
+                            'student_answer' => $p['student_answer'] ?? '',
+                            'correct_answer' => $p['stored_correct_answer'] ?? $p['correct_answer'] ?? '',
+                            'awarded_points' => $p['awarded_points'] ?? 0,
+                            'max_points' => $p['maximum_points'] ?? 1,
+                            'evaluation_status' => $p['evaluation_status'] ?? 'correct',
+                            'evaluation_reason' => $p['evaluation_reason'] ?? '',
+                            'explanation' => $p['explanation'] ?? ''
+                        ];
+                    }
+                }
+            }
+
+            echo json_encode([
+                'success' => true,
+                'submission' => [
+                    'id' => $sub['id'],
+                    'exam_name' => $sub['exam_name'],
+                    'subject' => $sub['subject'] ?? 'Civil Engineering',
+                    'teacher_name' => $sub['teacher_name'] ?? 'Faculty Instructor',
+                    'score' => $sub['total_score'] ?? $sub['correct_count'],
+                    'total_items' => $sub['total_possible_score'] ?? $sub['total_items'],
+                    'percentage' => $sub['percentage'],
+                    'status' => $sub['status'],
+                    'teacher_remarks' => $sub['teacher_remarks'] ?? '',
+                    'date_taken' => date("M d, Y", strtotime($sub['created_at']))
+                ],
+                'answers' => $answers
+            ]);
+            exit;
+        } catch (Exception $e) {
+            echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+            exit;
+        }
+    }
+
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'get_exam_questions') {
         header('Content-Type: application/json');
         $exam_id = intval($_POST['exam_id'] ?? 0);
@@ -1121,9 +1194,14 @@ try {
                                                 <?php endif; ?>
                                             </td>
                                             <td class="p-4 pr-6 text-center">
-                                                <a href="export_pdf.php?id=<?php echo $result['id']; ?>" target="_blank" class="inline-flex items-center gap-1 bg-stone-100 dark:bg-stone-800 hover:bg-orange-100 text-stone-700 dark:text-stone-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-all">
-                                                    <i class="fa-solid fa-file-pdf text-rose-500"></i> PDF
-                                                </a>
+                                                <div class="inline-flex items-center justify-center gap-1.5">
+                                                    <button type="button" onclick="openStudentBreakdownModal(<?php echo $result['id']; ?>)" class="inline-flex items-center gap-1 bg-orange-600 hover:bg-orange-700 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer">
+                                                        <i class="fa-solid fa-list-check"></i> Details
+                                                    </button>
+                                                    <a href="export_pdf.php?id=<?php echo $result['id']; ?>" target="_blank" class="inline-flex items-center gap-1 bg-stone-100 dark:bg-stone-800 hover:bg-orange-100 text-stone-700 dark:text-stone-200 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all">
+                                                        <i class="fa-solid fa-file-pdf text-rose-500"></i> PDF
+                                                    </a>
+                                                </div>
                                             </td>
                                         </tr>
                                     <?php endforeach; ?>
@@ -1386,7 +1464,12 @@ try {
                                         <h5 class="font-bold text-stone-800 dark:text-stone-100 text-sm"><?php echo htmlspecialchars($history['title']); ?></h5>
                                         <p class="text-stone-400 mt-0.5">Attempted on <?php echo date("M d, Y", strtotime($history['created_at'])); ?> | Auto-Proctored</p>
                                     </div>
-                                    <span class="font-mono font-extrabold text-orange-500 text-sm"><?php echo number_format($history['percentage'], 1); ?>%</span>
+                                    <div class="flex items-center gap-3">
+                                        <span class="font-mono font-extrabold text-orange-500 text-sm"><?php echo number_format($history['percentage'], 1); ?>%</span>
+                                        <button type="button" onclick="openStudentBreakdownModal(<?php echo $history['id']; ?>)" class="bg-orange-50 hover:bg-orange-100 dark:bg-orange-950/40 dark:hover:bg-orange-900/50 text-orange-700 dark:text-orange-300 font-extrabold text-xs px-3 py-1.5 rounded-xl border border-orange-200 dark:border-orange-800 transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer">
+                                            <i class="fa-solid fa-list-check"></i> View Results
+                                        </button>
+                                    </div>
                                 </div>
                             <?php endforeach; ?>
                         <?php else: ?>
@@ -1968,6 +2051,174 @@ try {
                 }
             });
         });
+
+        function openStudentBreakdownModal(subId) {
+            var modal = document.getElementById('student_breakdown_modal');
+            if (!modal) return;
+
+            var container = document.getElementById('sbm_questions_container');
+            container.innerHTML = '<div class="text-center py-6 text-stone-400"><i class="fa-solid fa-circle-notch fa-spin text-2xl"></i><p class="text-xs mt-2">Loading detailed exam evaluation...</p></div>';
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+
+            var formData = new FormData();
+            formData.append('action', 'get_submission_breakdown');
+            formData.append('submission_id', subId);
+
+            fetch('dashboard.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) {
+                    container.innerHTML = '<p class="text-rose-500 text-center py-4 font-bold text-xs">' + (data.error || 'Failed to load details') + '</p>';
+                    return;
+                }
+
+                var sub = data.submission;
+                document.getElementById('sbm_title').textContent = sub.exam_name;
+                document.getElementById('sbm_subtitle').textContent = "Subject: " + sub.subject + " | Instructor: " + sub.teacher_name;
+                document.getElementById('sbm_score').textContent = sub.score + ' / ' + sub.total_items;
+                document.getElementById('sbm_percentage').textContent = parseFloat(sub.percentage).toFixed(1) + '%';
+                document.getElementById('sbm_date').textContent = sub.date_taken;
+
+                var statusEl = document.getElementById('sbm_status');
+                if (sub.status === 'Pass' || sub.percentage >= 75) {
+                    statusEl.className = 'font-black text-xs px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300';
+                    statusEl.textContent = 'PASSED';
+                } else {
+                    statusEl.className = 'font-black text-xs px-2 py-0.5 rounded bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300';
+                    statusEl.textContent = 'FAILED';
+                }
+
+                var remBox = document.getElementById('sbm_remarks_box');
+                var remText = document.getElementById('sbm_remarks_text');
+                if (sub.teacher_remarks && sub.teacher_remarks.trim()) {
+                    remText.textContent = sub.teacher_remarks;
+                    remBox.classList.remove('hidden');
+                } else {
+                    remBox.classList.add('hidden');
+                }
+
+                var pdfLink = document.getElementById('sbm_pdf_link');
+                if (pdfLink) pdfLink.href = 'export_pdf.php?id=' + sub.id;
+
+                container.innerHTML = '';
+                if (Array.isArray(data.answers) && data.answers.length > 0) {
+                    data.answers.forEach(function(item, idx) {
+                        var card = document.createElement('div');
+                        var isCorrect = item.evaluation_status === 'correct' || (parseFloat(item.awarded_points) > 0 && parseFloat(item.awarded_points) >= parseFloat(item.max_points));
+                        var isReview = item.evaluation_status === 'requires_review';
+
+                        card.className = 'p-3 rounded-xl border ' + (isCorrect ? 'bg-emerald-50/40 border-emerald-200' : 'bg-stone-50 dark:bg-stone-800/40 border-stone-200 dark:border-stone-700') + ' space-y-1.5 text-xs';
+                        card.innerHTML = `
+                            <div class="flex items-center justify-between">
+                                <span class="font-extrabold text-stone-800 dark:text-stone-100 text-[11px]">Question #${idx + 1}</span>
+                                <span class="px-2 py-0.5 rounded-full text-[10px] font-black ${isCorrect ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : (isReview ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800 border border-rose-300')}">
+                                    ${isCorrect ? '✓ Correct (' + (item.awarded_points || 1) + ' pt)' : (isReview ? '⚠ Under Review' : '✗ Incorrect (0 pt)')}
+                                </span>
+                            </div>
+                            ${item.question_text ? `<p class="font-bold text-stone-800 dark:text-stone-200 text-xs">${item.question_text}</p>` : ''}
+                            <div class="grid grid-cols-2 gap-2 text-[11px] pt-1">
+                                <div class="p-1.5 rounded bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700">
+                                    <span class="text-stone-400 font-bold block text-[10px]">Your Answer:</span>
+                                    <strong class="${isCorrect ? 'text-emerald-700 font-black' : 'text-rose-700 font-black'}">${item.student_answer ? item.student_answer : '(No answer)'}</strong>
+                                </div>
+                                <div class="p-1.5 rounded bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700">
+                                    <span class="text-stone-400 font-bold block text-[10px]">Correct Answer Key:</span>
+                                    <strong class="text-emerald-800 dark:text-emerald-400 font-black">${item.correct_answer || 'N/A'}</strong>
+                                </div>
+                            </div>
+                            ${item.explanation ? `
+                                <div class="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 text-[10.5px] text-stone-700 dark:text-stone-300">
+                                    <span class="text-amber-800 dark:text-amber-400 font-bold block text-[10px] mb-0.5"><i class="fa-solid fa-lightbulb"></i> Solution / Explanation:</span>
+                                    <div class="font-mono leading-relaxed whitespace-pre-wrap">${item.explanation}</div>
+                                </div>
+                            ` : ''}
+                        `;
+                        container.appendChild(card);
+                    });
+                } else {
+                    container.innerHTML = '<p class="text-center py-4 text-stone-400 italic text-xs">No itemized question records found for this submission.</p>';
+                }
+            })
+            .catch(err => {
+                container.innerHTML = '<p class="text-rose-500 text-center py-4 font-bold text-xs">Network error while fetching result breakdown.</p>';
+            });
+        }
+
+        function closeStudentBreakdownModal() {
+            var modal = document.getElementById('student_breakdown_modal');
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }
+        }
     </script>
+
+    <!-- Student Exam Breakdown Modal (Req 9) -->
+    <div id="student_breakdown_modal" class="fixed inset-0 bg-stone-950/80 backdrop-blur-sm hidden items-center justify-center z-50 p-4 animate-fadeIn">
+        <div class="bg-white dark:bg-stone-900 rounded-3xl p-6 max-w-2xl w-full shadow-2xl space-y-4 border border-stone-200 dark:border-stone-800 max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <div class="flex items-center justify-between border-b border-stone-100 dark:border-stone-800 pb-3">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-xl bg-orange-100 dark:bg-orange-950 text-orange-600 flex items-center justify-center font-bold text-sm">
+                        <i class="fa-solid fa-award"></i>
+                    </div>
+                    <div>
+                        <h4 class="font-extrabold text-sm text-stone-800 dark:text-stone-100" id="sbm_title">Exam Result Breakdown</h4>
+                        <p class="text-[10px] text-stone-400 font-medium" id="sbm_subtitle">Inspect your item-level performance and question answer keys.</p>
+                    </div>
+                </div>
+                <button type="button" onclick="closeStudentBreakdownModal()" class="text-stone-400 hover:text-stone-700 dark:hover:text-stone-200 text-sm p-1">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                <div class="bg-stone-50 dark:bg-stone-800/50 p-2.5 rounded-xl border border-stone-200 dark:border-stone-700">
+                    <span class="text-[9px] font-bold text-stone-400 uppercase block">Score</span>
+                    <span class="font-mono font-black text-sm text-stone-800 dark:text-stone-100" id="sbm_score">0 / 0</span>
+                </div>
+                <div class="bg-stone-50 dark:bg-stone-800/50 p-2.5 rounded-xl border border-stone-200 dark:border-stone-700">
+                    <span class="text-[9px] font-bold text-stone-400 uppercase block">Percentage</span>
+                    <span class="font-black text-sm text-orange-500" id="sbm_percentage">0%</span>
+                </div>
+                <div class="bg-stone-50 dark:bg-stone-800/50 p-2.5 rounded-xl border border-stone-200 dark:border-stone-700">
+                    <span class="text-[9px] font-bold text-stone-400 uppercase block">Status</span>
+                    <span class="font-black text-xs" id="sbm_status">Pass</span>
+                </div>
+                <div class="bg-stone-50 dark:bg-stone-800/50 p-2.5 rounded-xl border border-stone-200 dark:border-stone-700">
+                    <span class="text-[9px] font-bold text-stone-400 uppercase block">Date Taken</span>
+                    <span class="font-bold text-xs text-stone-600 dark:text-stone-300" id="sbm_date">N/A</span>
+                </div>
+            </div>
+
+            <div id="sbm_remarks_box" class="hidden p-3 rounded-xl bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 text-xs">
+                <span class="text-[10px] font-bold text-orange-600 dark:text-orange-400 uppercase flex items-center gap-1 mb-1">
+                    <i class="fa-solid fa-comment-dots"></i> Teacher Remarks:
+                </span>
+                <p class="text-stone-700 dark:text-stone-300 font-medium" id="sbm_remarks_text"></p>
+            </div>
+
+            <div class="space-y-2 pt-2 border-t border-stone-100 dark:border-stone-800">
+                <h5 class="text-xs font-black uppercase text-stone-700 dark:text-stone-300 flex items-center gap-1.5">
+                    <i class="fa-solid fa-list-check text-orange-500"></i> Question-by-Question Response Review
+                </h5>
+                <div id="sbm_questions_container" class="space-y-2 max-h-72 overflow-y-auto pr-1 custom-scrollbar text-xs">
+                    <!-- Dynamic Question Cards -->
+                </div>
+            </div>
+
+            <div class="pt-3 border-t border-stone-100 dark:border-stone-800 flex items-center justify-between">
+                <a id="sbm_pdf_link" href="export_pdf.php" target="_blank" class="bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 text-stone-700 dark:text-stone-200 font-bold text-xs px-4 py-2.5 rounded-xl transition-all flex items-center gap-1.5">
+                    <i class="fa-solid fa-file-pdf text-rose-500"></i> Download Official PDF
+                </a>
+                <button type="button" onclick="closeStudentBreakdownModal()" class="bg-stone-900 hover:bg-stone-800 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-all cursor-pointer">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

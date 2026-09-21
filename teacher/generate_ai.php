@@ -35,7 +35,7 @@ try {
                COALESCE(academic_period, 'general') AS academic_period,
                semester, school_year, year_level, program, processing_status
         FROM lesson_materials 
-        WHERE teacher_id = ? 
+        WHERE teacher_id = ? AND deleted_at IS NULL
         ORDER BY FIELD(COALESCE(academic_period,'general'), 'general','prelim','midterm','finals'), id DESC
     ");
     $stmtMaterials->execute([$teacher_id]);
@@ -86,6 +86,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
     $blueprint_input = $_POST['blueprint'] ?? [];
     $difficulty_mode = $_POST['difficulty_mode'] ?? 'single';
     $difficulty_dist_input = $_POST['difficulty_distribution'] ?? [];
+
+    // Validate blueprint item allocation limit vs total questions
+    if (!empty($blueprint_input) && is_array($blueprint_input)) {
+        $bpSum = 0;
+        foreach ($blueprint_input as $cnt) {
+            $bpSum += max(0, intval($cnt));
+        }
+        if ($bpSum > $num_questions) {
+            $error_msg = "Item Allocation Limit Exceeded: You allocated {$bpSum} items in the Question Blueprint, but Total Items is set to {$num_questions}. Please adjust your breakdown so it does not exceed {$num_questions}.";
+        }
+    }
 
     $generation_options = [
         'period_weighting_mode' => $period_weighting_mode,
@@ -143,7 +154,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['generate_questions']
                 SELECT id, title, subject, lesson_text, COALESCE(academic_period,'general') AS academic_period,
                        processing_status, word_count, semester, school_year, year_level, program
                 FROM lesson_materials 
-                WHERE id IN ($placeholders) AND teacher_id = ?
+                WHERE id IN ($placeholders) AND teacher_id = ? AND deleted_at IS NULL
             ");
             $params = array_merge($selected_lesson_ids, [$teacher_id]);
             $stmtFetchSel->execute($params);
@@ -1328,7 +1339,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div class="space-y-1.5">
                                 <label class="text-xs font-black uppercase text-stone-700">Total Number of Items</label>
-                                <select name="num_questions" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs font-bold text-stone-800 outline-none focus:border-orange-500">
+                                <select name="num_questions" id="num_questions_select" onchange="updateBlueprintAllocationStatus()" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2.5 text-xs font-bold text-stone-800 outline-none focus:border-orange-500">
                                     <?php foreach ([5, 10, 15, 20, 25, 30, 50] as $n): ?>
                                         <option value="<?php echo $n; ?>" <?php echo (intval($_POST['num_questions'] ?? 5) === $n) ? 'selected' : ''; ?>><?php echo $n; ?> Questions</option>
                                     <?php endforeach; ?>
@@ -1374,32 +1385,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                         </div>
 
                         <!-- Multi-Type Question Blueprint -->
-                        <div class="space-y-2 bg-stone-50 border border-stone-200 p-4 rounded-2xl">
-                            <label class="text-xs font-extrabold text-stone-800 block uppercase">Multi-Type Question Blueprint (Item Allocation)</label>
+                        <div id="blueprint_container" class="space-y-3 bg-stone-50 border border-stone-200 p-4 rounded-2xl transition-all">
+                            <div class="flex items-center justify-between flex-wrap gap-1">
+                                <label class="text-xs font-extrabold text-stone-800 block uppercase">Multi-Type Question Blueprint (Item Allocation)</label>
+                                <span id="blueprint_summary_badge" class="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-stone-200 text-stone-700 transition-all">
+                                    Allocated: 0 / 5 items
+                                </span>
+                            </div>
+
+                            <!-- Live Allocation Overflow Alert Banner -->
+                            <div id="blueprint_overflow_alert" class="hidden p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold space-y-1">
+                                <div class="flex items-center gap-1.5 text-rose-700">
+                                    <i class="fa-solid fa-triangle-exclamation text-sm"></i>
+                                    <span>Item Allocation Limit Exceeded!</span>
+                                </div>
+                                <p id="blueprint_overflow_message" class="text-[11px] font-normal text-rose-600">
+                                    Total items is set to 30, but you have allocated 35 items. Please reduce your question breakdown by 5 items.
+                                </p>
+                            </div>
+
                             <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
                                 <div>
                                     <label class="text-[10px] font-bold text-stone-500">Multiple Choice</label>
-                                    <input type="number" name="blueprint[multiple_choice]" value="<?php echo htmlspecialchars($_POST['blueprint']['multiple_choice'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-xl p-2 text-xs font-bold text-stone-800">
+                                    <input type="number" name="blueprint[multiple_choice]" id="bp_multiple_choice" oninput="updateBlueprintAllocationStatus()" value="<?php echo htmlspecialchars($_POST['blueprint']['multiple_choice'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-xl p-2 text-xs font-bold text-stone-800 outline-none focus:border-orange-500">
                                 </div>
                                 <div>
                                     <label class="text-[10px] font-bold text-stone-500">True or False</label>
-                                    <input type="number" name="blueprint[true_false]" value="<?php echo htmlspecialchars($_POST['blueprint']['true_false'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-xl p-2 text-xs font-bold text-stone-800">
+                                    <input type="number" name="blueprint[true_false]" id="bp_true_false" oninput="updateBlueprintAllocationStatus()" value="<?php echo htmlspecialchars($_POST['blueprint']['true_false'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-xl p-2 text-xs font-bold text-stone-800 outline-none focus:border-orange-500">
                                 </div>
                                 <div>
                                     <label class="text-[10px] font-bold text-stone-500">Identification</label>
-                                    <input type="number" name="blueprint[identification]" value="<?php echo htmlspecialchars($_POST['blueprint']['identification'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-xl p-2 text-xs font-bold text-stone-800">
+                                    <input type="number" name="blueprint[identification]" id="bp_identification" oninput="updateBlueprintAllocationStatus()" value="<?php echo htmlspecialchars($_POST['blueprint']['identification'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-xl p-2 text-xs font-bold text-stone-800 outline-none focus:border-orange-500">
                                 </div>
                                 <div>
                                     <label class="text-[10px] font-bold text-stone-500">Fill in the Blank</label>
-                                    <input type="number" name="blueprint[fill_blank]" value="<?php echo htmlspecialchars($_POST['blueprint']['fill_blank'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-xl p-2 text-xs font-bold text-stone-800">
+                                    <input type="number" name="blueprint[fill_blank]" id="bp_fill_blank" oninput="updateBlueprintAllocationStatus()" value="<?php echo htmlspecialchars($_POST['blueprint']['fill_blank'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-xl p-2 text-xs font-bold text-stone-800 outline-none focus:border-orange-500">
                                 </div>
                                 <div>
                                     <label class="text-[10px] font-bold text-stone-500">Problem Solving (w/ Solutions)</label>
-                                    <input type="number" name="blueprint[problem_solving]" value="<?php echo htmlspecialchars($_POST['blueprint']['problem_solving'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-xl p-2 text-xs font-bold text-stone-800">
+                                    <input type="number" name="blueprint[problem_solving]" id="bp_problem_solving" oninput="updateBlueprintAllocationStatus()" value="<?php echo htmlspecialchars($_POST['blueprint']['problem_solving'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-xl p-2 text-xs font-bold text-stone-800 outline-none focus:border-orange-500">
                                 </div>
                                 <div>
                                     <label class="text-[10px] font-bold text-stone-500">Math Formula</label>
-                                    <input type="number" name="blueprint[math_formula]" value="<?php echo htmlspecialchars($_POST['blueprint']['math_formula'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-xl p-2 text-xs font-bold text-stone-800">
+                                    <input type="number" name="blueprint[math_formula]" id="bp_math_formula" oninput="updateBlueprintAllocationStatus()" value="<?php echo htmlspecialchars($_POST['blueprint']['math_formula'] ?? ''); ?>" min="0" placeholder="0" class="w-full bg-white border border-stone-200 rounded-xl p-2 text-xs font-bold text-stone-800 outline-none focus:border-orange-500">
                                 </div>
                             </div>
                         </div>
@@ -1823,32 +1851,84 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                             </select>
                                         </div>
 
+                                        <?php 
+                                            $rawAns = trim($item['correct_answer'] ?? '');
+                                            $detectedLetter = '';
+                                            if ($item['type'] === 'multiple_choice') {
+                                                if (preg_match('/^([A-D])[\.\:\s\)\-]/i', $rawAns, $mLetter)) {
+                                                    $detectedLetter = strtoupper($mLetter[1]);
+                                                } elseif (in_array(strtoupper($rawAns), ['A', 'B', 'C', 'D'])) {
+                                                    $detectedLetter = strtoupper($rawAns);
+                                                } else {
+                                                    $optMap = [
+                                                        'A' => trim($item['opt_a'] ?? ''),
+                                                        'B' => trim($item['opt_b'] ?? ''),
+                                                        'C' => trim($item['opt_c'] ?? ''),
+                                                        'D' => trim($item['opt_d'] ?? '')
+                                                    ];
+                                                    foreach ($optMap as $let => $val) {
+                                                        if (!empty($val) && (strcasecmp($rawAns, $val) === 0 || stripos($rawAns, $val) !== false || stripos($val, $rawAns) !== false)) {
+                                                            $detectedLetter = $let;
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        ?>
+
                                         <?php if ($item['type'] === 'multiple_choice'): ?>
                                             <div class="grid grid-cols-2 gap-2 text-xs" data-testid="mcq-options">
                                                 <div class="relative">
                                                     <span class="absolute left-2 top-2 text-[10px] font-bold text-stone-400">A.</span>
-                                                    <input type="text" name="questions[<?php echo $idx; ?>][opt_a]" value="<?php echo htmlspecialchars($item['opt_a'] ?? ''); ?>" placeholder="Option A" class="w-full bg-white border border-stone-200 rounded-lg pl-6 pr-2 py-1.5 outline-none focus:border-orange-500 text-xs">
+                                                    <input type="text" name="questions[<?php echo $idx; ?>][opt_a]" value="<?php echo htmlspecialchars($item['opt_a'] ?? ''); ?>" placeholder="Option A" oninput="syncDetectedLetterBadge(<?php echo $idx; ?>)" class="w-full bg-white border border-stone-200 rounded-lg pl-6 pr-2 py-1.5 outline-none focus:border-orange-500 text-xs">
                                                 </div>
                                                 <div class="relative">
                                                     <span class="absolute left-2 top-2 text-[10px] font-bold text-stone-400">B.</span>
-                                                    <input type="text" name="questions[<?php echo $idx; ?>][opt_b]" value="<?php echo htmlspecialchars($item['opt_b'] ?? ''); ?>" placeholder="Option B" class="w-full bg-white border border-stone-200 rounded-lg pl-6 pr-2 py-1.5 outline-none focus:border-orange-500 text-xs">
+                                                    <input type="text" name="questions[<?php echo $idx; ?>][opt_b]" value="<?php echo htmlspecialchars($item['opt_b'] ?? ''); ?>" placeholder="Option B" oninput="syncDetectedLetterBadge(<?php echo $idx; ?>)" class="w-full bg-white border border-stone-200 rounded-lg pl-6 pr-2 py-1.5 outline-none focus:border-orange-500 text-xs">
                                                 </div>
                                                 <div class="relative">
                                                     <span class="absolute left-2 top-2 text-[10px] font-bold text-stone-400">C.</span>
-                                                    <input type="text" name="questions[<?php echo $idx; ?>][opt_c]" value="<?php echo htmlspecialchars($item['opt_c'] ?? ''); ?>" placeholder="Option C" class="w-full bg-white border border-stone-200 rounded-lg pl-6 pr-2 py-1.5 outline-none focus:border-orange-500 text-xs">
+                                                    <input type="text" name="questions[<?php echo $idx; ?>][opt_c]" value="<?php echo htmlspecialchars($item['opt_c'] ?? ''); ?>" placeholder="Option C" oninput="syncDetectedLetterBadge(<?php echo $idx; ?>)" class="w-full bg-white border border-stone-200 rounded-lg pl-6 pr-2 py-1.5 outline-none focus:border-orange-500 text-xs">
                                                 </div>
                                                 <div class="relative">
                                                     <span class="absolute left-2 top-2 text-[10px] font-bold text-stone-400">D.</span>
-                                                    <input type="text" name="questions[<?php echo $idx; ?>][opt_d]" value="<?php echo htmlspecialchars($item['opt_d'] ?? ''); ?>" placeholder="Option D" class="w-full bg-white border border-stone-200 rounded-lg pl-6 pr-2 py-1.5 outline-none focus:border-orange-500 text-xs">
+                                                    <input type="text" name="questions[<?php echo $idx; ?>][opt_d]" value="<?php echo htmlspecialchars($item['opt_d'] ?? ''); ?>" placeholder="Option D" oninput="syncDetectedLetterBadge(<?php echo $idx; ?>)" class="w-full bg-white border border-stone-200 rounded-lg pl-6 pr-2 py-1.5 outline-none focus:border-orange-500 text-xs">
+                                                </div>
+                                            </div>
+
+                                            <div class="flex items-center gap-2 pt-1">
+                                                <span class="text-[10px] font-black uppercase text-stone-500 flex items-center gap-1">
+                                                    <i class="fa-solid fa-hand-pointer text-orange-500"></i> Answer Key Letter:
+                                                </span>
+                                                <div class="flex items-center gap-1">
+                                                    <?php foreach (['A', 'B', 'C', 'D'] as $optLetter): ?>
+                                                        <button type="button" 
+                                                                onclick="setAnswerKeyChoice(<?php echo $idx; ?>, '<?php echo $optLetter; ?>')"
+                                                                id="btn_choice_<?php echo $idx; ?>_<?php echo $optLetter; ?>"
+                                                                class="w-7 h-7 rounded-lg text-xs font-black border transition-all flex items-center justify-center cursor-pointer <?php echo ($detectedLetter === $optLetter) ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm' : 'bg-white text-stone-700 border-stone-300 hover:bg-stone-100'; ?>">
+                                                            <?php echo $optLetter; ?>
+                                                        </button>
+                                                    <?php endforeach; ?>
                                                 </div>
                                             </div>
                                         <?php endif; ?>
 
                                         <div class="pt-1">
-                                            <label class="text-[10px] font-bold text-stone-500 uppercase flex items-center gap-1">
-                                                <i class="fa-solid fa-key text-emerald-600"></i> Correct Answer Key:
-                                            </label>
-                                            <input type="text" name="questions[<?php echo $idx; ?>][correct]" data-testid="answer-key" value="<?php echo htmlspecialchars($item['correct_answer']); ?>" class="w-full bg-emerald-50 border border-emerald-200 rounded-lg p-2 text-xs font-bold text-emerald-700 outline-none focus:border-emerald-500 mt-1">
+                                            <div class="flex items-center justify-between">
+                                                <label class="text-[10px] font-bold text-stone-500 uppercase flex items-center gap-1">
+                                                    <i class="fa-solid fa-key text-emerald-600"></i> Correct Answer Key:
+                                                </label>
+                                                <span id="detected_badge_<?php echo $idx; ?>" class="px-2.5 py-0.5 rounded-md text-[10px] font-black <?php echo !empty($detectedLetter) ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'hidden'; ?>">
+                                                    Choice: <span id="detected_letter_<?php echo $idx; ?>"><?php echo $detectedLetter; ?></span>
+                                                </span>
+                                            </div>
+                                            <input type="text" 
+                                                   id="ans_key_input_<?php echo $idx; ?>"
+                                                   name="questions[<?php echo $idx; ?>][correct]" 
+                                                   data-testid="answer-key" 
+                                                   value="<?php echo htmlspecialchars($item['correct_answer']); ?>" 
+                                                   oninput="syncDetectedLetterBadge(<?php echo $idx; ?>)"
+                                                   class="w-full bg-emerald-50 border border-emerald-200 rounded-lg p-2 text-xs font-bold text-emerald-800 outline-none focus:border-emerald-500 mt-1">
                                         </div>
 
                                         <div class="pt-1">
@@ -1945,6 +2025,126 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                 lbl.textContent = base + suffix;
             });
         }
+
+        function updateBlueprintAllocationStatus() {
+            var numSelect = document.getElementById('num_questions_select') || document.querySelector('select[name="num_questions"]');
+            var maxAllowed = numSelect ? parseInt(numSelect.value, 10) : 5;
+            if (isNaN(maxAllowed) || maxAllowed <= 0) maxAllowed = 5;
+
+            var bpFields = ['bp_multiple_choice', 'bp_true_false', 'bp_identification', 'bp_fill_blank', 'bp_problem_solving', 'bp_math_formula'];
+            var totalAllocated = 0;
+
+            bpFields.forEach(function(id) {
+                var el = document.getElementById(id);
+                if (el) {
+                    var val = parseInt(el.value, 10);
+                    if (!isNaN(val) && val > 0) {
+                        totalAllocated += val;
+                    }
+                }
+            });
+
+            var badge = document.getElementById('blueprint_summary_badge');
+            var alertBox = document.getElementById('blueprint_overflow_alert');
+            var alertMsg = document.getElementById('blueprint_overflow_message');
+
+            if (badge) {
+                badge.textContent = 'Allocated: ' + totalAllocated + ' / ' + maxAllowed + ' items';
+                if (totalAllocated > maxAllowed) {
+                    badge.className = 'text-[11px] font-black px-2.5 py-0.5 rounded-full bg-rose-500 text-white shadow-sm transition-all animate-pulse';
+                } else if (totalAllocated === maxAllowed && totalAllocated > 0) {
+                    badge.className = 'text-[11px] font-black px-2.5 py-0.5 rounded-full bg-emerald-600 text-white shadow-sm transition-all';
+                } else if (totalAllocated > 0) {
+                    badge.className = 'text-[11px] font-black px-2.5 py-0.5 rounded-full bg-amber-500 text-white shadow-sm transition-all';
+                } else {
+                    badge.className = 'text-[11px] font-black px-2.5 py-0.5 rounded-full bg-stone-200 text-stone-700 transition-all';
+                }
+            }
+
+            if (alertBox && alertMsg) {
+                if (totalAllocated > maxAllowed) {
+                    var excess = totalAllocated - maxAllowed;
+                    alertMsg.textContent = 'Total examination items is set to ' + maxAllowed + ', but you have allocated ' + totalAllocated + ' items in the Question Blueprint (' + excess + ' excess items). Please reduce your breakdown by ' + excess + ' item(s).';
+                    alertBox.classList.remove('hidden');
+                } else {
+                    alertBox.classList.add('hidden');
+                }
+            }
+
+            return { totalAllocated: totalAllocated, maxAllowed: maxAllowed, isOverflow: totalAllocated > maxAllowed };
+        }
+
+        function setAnswerKeyChoice(idx, letter) {
+            var optInput = document.querySelector('input[name="questions[' + idx + '][opt_' + letter.toLowerCase() + ']"]');
+            var ansInput = document.getElementById('ans_key_input_' + idx) || document.querySelector('input[name="questions[' + idx + '][correct]"]');
+            var optText = optInput ? optInput.value.trim() : '';
+
+            if (ansInput) {
+                ansInput.value = letter + (optText ? '. ' + optText : '');
+            }
+
+            ['A', 'B', 'C', 'D'].forEach(function(l) {
+                var btn = document.getElementById('btn_choice_' + idx + '_' + l);
+                if (btn) {
+                    if (l === letter) {
+                        btn.className = 'w-7 h-7 rounded-lg text-xs font-black border transition-all flex items-center justify-center cursor-pointer bg-emerald-600 text-white border-emerald-600 shadow-sm';
+                    } else {
+                        btn.className = 'w-7 h-7 rounded-lg text-xs font-black border transition-all flex items-center justify-center cursor-pointer bg-white text-stone-700 border-stone-300 hover:bg-stone-100';
+                    }
+                }
+            });
+
+            var badge = document.getElementById('detected_badge_' + idx);
+            var badgeLetter = document.getElementById('detected_letter_' + idx);
+            if (badge && badgeLetter) {
+                badgeLetter.textContent = letter;
+                badge.classList.remove('hidden');
+            }
+        }
+
+        function syncDetectedLetterBadge(idx) {
+            var ansInput = document.getElementById('ans_key_input_' + idx) || document.querySelector('input[name="questions[' + idx + '][correct]"]');
+            if (!ansInput) return;
+            var val = ansInput.value.trim();
+            var detected = '';
+
+            var match = val.match(/^([A-D])[\.\:\s\)\-]/i);
+            if (match) {
+                detected = match[1].toUpperCase();
+            } else if (['A', 'B', 'C', 'D'].indexOf(val.toUpperCase()) !== -1) {
+                detected = val.toUpperCase();
+            } else {
+                ['A', 'B', 'C', 'D'].forEach(function(l) {
+                    var optInput = document.querySelector('input[name="questions[' + idx + '][opt_' + l.toLowerCase() + ']"]');
+                    if (optInput && optInput.value.trim() && (optInput.value.trim().toLowerCase() === val.toLowerCase() || val.toLowerCase().indexOf(optInput.value.trim().toLowerCase()) !== -1)) {
+                        detected = l;
+                    }
+                });
+            }
+
+            ['A', 'B', 'C', 'D'].forEach(function(l) {
+                var btn = document.getElementById('btn_choice_' + idx + '_' + l);
+                if (btn) {
+                    if (detected && l === detected) {
+                        btn.className = 'w-7 h-7 rounded-lg text-xs font-black border transition-all flex items-center justify-center cursor-pointer bg-emerald-600 text-white border-emerald-600 shadow-sm';
+                    } else {
+                        btn.className = 'w-7 h-7 rounded-lg text-xs font-black border transition-all flex items-center justify-center cursor-pointer bg-white text-stone-700 border-stone-300 hover:bg-stone-100';
+                    }
+                }
+            });
+
+            var badge = document.getElementById('detected_badge_' + idx);
+            var badgeLetter = document.getElementById('detected_letter_' + idx);
+            if (badge && badgeLetter) {
+                if (detected) {
+                    badgeLetter.textContent = detected;
+                    badge.classList.remove('hidden');
+                } else {
+                    badge.classList.add('hidden');
+                }
+            }
+        }
+
         function submitAIGeneration() {
             var form = document.getElementById('ai_form');
             if (!form) return false;
@@ -1990,6 +2190,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                 }
             }
 
+            // Validate Question Blueprint Item Count Allocation Limit
+            var bpStatus = updateBlueprintAllocationStatus();
+            if (bpStatus && bpStatus.isOverflow) {
+                goToWizardStep(3);
+                alert('Item Allocation Limit Exceeded!\n\nTotal items is set to ' + bpStatus.maxAllowed + ' items, but you have allocated ' + bpStatus.totalAllocated + ' items across question types in the Blueprint.\n\nPlease reduce your question breakdown by ' + (bpStatus.totalAllocated - bpStatus.maxAllowed) + ' items before generating.');
+                var firstBp = document.getElementById('bp_multiple_choice');
+                if (firstBp) firstBp.focus();
+                return false;
+            }
+
             showLoadingState();
             form.submit();
             return true;
@@ -2009,6 +2219,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
             hideLoadingState();
             toggleDifficultyControls();
             togglePeriodWeightControls();
+            updateBlueprintAllocationStatus();
 
             <?php if (!empty($generated_questions)): ?>
             var qSec = document.getElementById('generated_questions_section');

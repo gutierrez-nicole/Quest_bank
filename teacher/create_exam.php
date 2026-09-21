@@ -133,6 +133,36 @@ foreach ($existing_exams as &$ex) {
     $ex['questions'] = $qStmt->fetchAll(PDO::FETCH_ASSOC);
 }
 unset($ex);
+
+// Question Bank: Accumulated questions with usage count
+$bank_questions = [];
+try {
+    $stmtBank = $pdo->prepare("
+        SELECT 
+            MIN(q.id) as sample_id,
+            q.question_text,
+            q.question_type,
+            MAX(q.option_a) as option_a,
+            MAX(q.option_b) as option_b,
+            MAX(q.option_c) as option_c,
+            MAX(q.option_d) as option_d,
+            MAX(q.correct_answer) as correct_answer,
+            MAX(q.formula_latex) as formula_latex,
+            MAX(q.points) as points,
+            COUNT(DISTINCT q.exam_id) as usage_count,
+            MAX(e.subject) as latest_subject,
+            MAX(e.title) as latest_exam_title
+        FROM exam_questions q
+        JOIN exams e ON q.exam_id = e.id
+        WHERE e.teacher_id = ?
+        GROUP BY q.question_text, q.question_type
+        ORDER BY usage_count DESC, sample_id DESC
+    ");
+    $stmtBank->execute([$_SESSION['user_id']]);
+    $bank_questions = $stmtBank->fetchAll(PDO::FETCH_ASSOC) ?: [];
+} catch (Exception $e) {
+    $bank_questions = [];
+}
 ?>
 
 <!DOCTYPE html>
@@ -278,12 +308,24 @@ unset($ex);
                         </div>
 
                         
+                        <!-- Question Items Section with Recycling & Question Bank -->
                         <div class="space-y-4 pt-4 border-t">
-                            <div class="flex items-center justify-between">
-                                <h3 class="text-sm font-bold uppercase tracking-wider text-stone-700"><i class="fa-solid fa-list-check text-orange-500 mr-1"></i> Question Items</h3>
-                                <button type="button" onclick="addQuestion()" class="bg-stone-900 hover:bg-orange-600 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition-all">
-                                    <i class="fa-solid fa-plus mr-1"></i> Add Item
-                                </button>
+                            <div class="flex items-center justify-between flex-wrap gap-2">
+                                <div>
+                                    <h3 class="text-sm font-bold uppercase tracking-wider text-stone-700 flex items-center gap-1.5">
+                                        <i class="fa-solid fa-list-check text-orange-500"></i> Question Items
+                                        <span id="form_items_count_badge" class="ml-1 text-[10px] bg-orange-100 text-orange-800 font-extrabold px-2.5 py-0.5 rounded-full">1 Item</span>
+                                    </h3>
+                                    <p class="text-[11px] text-stone-400">Design items manually or recycle questions directly from your past exams & Question Bank.</p>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <button type="button" onclick="openRecycleModal()" class="bg-orange-600 hover:bg-orange-700 text-white font-extrabold text-xs px-3.5 py-2 rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer" title="Recycle questions from previous exams">
+                                        <i class="fa-solid fa-recycle"></i> Recycle from Past Exams / Bank
+                                    </button>
+                                    <button type="button" onclick="addQuestion()" class="bg-stone-900 hover:bg-stone-800 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-all cursor-pointer flex items-center gap-1">
+                                        <i class="fa-solid fa-plus"></i> Blank Item
+                                    </button>
+                                </div>
                             </div>
 
                             <div id="questions_container" class="space-y-4">
@@ -291,54 +333,105 @@ unset($ex);
                             </div>
                         </div>
 
-                        <button type="submit" name="save_exam" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs py-3 rounded-xl shadow-md transition-all">
+                        <button type="submit" name="save_exam" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs py-3 rounded-xl shadow-md transition-all cursor-pointer">
                             <i class="fa-solid fa-floppy-disk mr-1"></i> Save Exam to Question Bank
                         </button>
                     </form>
                 </div>
 
-                
+                <!-- Right Column: Saved Exams & Central Question Bank with Usage Counts -->
                 <div class="bg-white border border-stone-200 rounded-2xl p-6 shadow-sm space-y-4 h-fit">
-                    <h3 class="text-sm font-bold uppercase tracking-wider text-stone-700 border-b pb-3"><i class="fa-solid fa-database text-orange-500 mr-1"></i> Saved Question Bank</h3>
-                    
-                    <?php if (!empty($existing_exams)): ?>
-                        <div class="space-y-3 max-h-[650px] overflow-y-auto pr-1 custom-scrollbar">
-                            <?php foreach ($existing_exams as $ex): ?>
-                                <div class="p-3.5 border border-stone-200 rounded-xl bg-stone-50/50 hover:border-orange-500 hover:bg-orange-50/30 hover:shadow-md transition-all space-y-1.5 group relative">
-                                    <div onclick="openExamPreviewModal(<?php echo htmlspecialchars(json_encode($ex), ENT_QUOTES, 'UTF-8'); ?>)" data-testid="saved-exam-item" data-exam-title="<?php echo htmlspecialchars($ex['title']); ?>" class="cursor-pointer">
-                                        <div class="flex items-center justify-between">
-                                            <h4 class="font-extrabold text-xs text-stone-800 group-hover:text-orange-600 transition-colors flex items-center gap-1.5">
-                                                <i class="fa-solid fa-folder-open text-orange-500"></i>
-                                                <?php echo htmlspecialchars($ex['title']); ?>
-                                            </h4>
-                                            <span class="text-[9px] bg-orange-100 text-orange-700 font-extrabold px-2.5 py-0.5 rounded-full shadow-2xs">
-                                                <?php echo $ex['total_items']; ?> Items
-                                            </span>
+                    <!-- Tab Switcher -->
+                    <div class="flex items-center gap-1.5 border-b border-stone-100 pb-3">
+                        <button type="button" id="tab_btn_saved_exams" onclick="switchRightPanelTab('exams')" class="text-xs font-black uppercase tracking-wider px-3 py-1.5 rounded-xl bg-orange-600 text-white shadow-xs transition-all cursor-pointer">
+                            <i class="fa-solid fa-folder-open mr-1"></i> Past Exams (<?php echo count($existing_exams); ?>)
+                        </button>
+                        <button type="button" id="tab_btn_question_bank" onclick="switchRightPanelTab('bank')" class="text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-xl bg-stone-100 text-stone-600 hover:bg-stone-200 transition-all cursor-pointer">
+                            <i class="fa-solid fa-database mr-1"></i> Question Bank (<?php echo count($bank_questions); ?>)
+                        </button>
+                    </div>
+
+                    <!-- Panel 1: Saved Past Exams -->
+                    <div id="panel_saved_exams" class="space-y-3">
+                        <?php if (!empty($existing_exams)): ?>
+                            <div class="space-y-3 max-h-[650px] overflow-y-auto pr-1 custom-scrollbar">
+                                <?php foreach ($existing_exams as $ex): ?>
+                                    <div class="p-3.5 border border-stone-200 rounded-xl bg-stone-50/50 hover:border-orange-500 hover:bg-orange-50/30 hover:shadow-md transition-all space-y-1.5 group relative">
+                                        <div onclick="openExamPreviewModal(<?php echo htmlspecialchars(json_encode($ex), ENT_QUOTES, 'UTF-8'); ?>)" data-testid="saved-exam-item" data-exam-title="<?php echo htmlspecialchars($ex['title']); ?>" class="cursor-pointer">
+                                            <div class="flex items-center justify-between">
+                                                <h4 class="font-extrabold text-xs text-stone-800 group-hover:text-orange-600 transition-colors flex items-center gap-1.5">
+                                                    <i class="fa-solid fa-folder-open text-orange-500"></i>
+                                                    <?php echo htmlspecialchars($ex['title']); ?>
+                                                </h4>
+                                                <span class="text-[9px] bg-orange-100 text-orange-700 font-extrabold px-2.5 py-0.5 rounded-full shadow-2xs">
+                                                    <?php echo $ex['total_items']; ?> Items
+                                                </span>
+                                            </div>
+                                            <p class="text-[10px] text-stone-400 font-semibold mt-1.5"><?php echo htmlspecialchars($ex['subject']); ?></p>
                                         </div>
-                                        <p class="text-[10px] text-stone-400 font-semibold mt-1.5"><?php echo htmlspecialchars($ex['subject']); ?></p>
-                                    </div>
-                                    <div class="flex items-center justify-between pt-1 border-t border-stone-100/80 mt-2">
-                                        <span class="inline-block text-[9px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
-                                            <i class="fa-solid fa-compass-drafting mr-1"></i><?php echo htmlspecialchars($ex['specialization'] ?? 'Structural Engineering'); ?>
-                                        </span>
-                                        <div class="flex items-center gap-2">
-                                            <a href="print_exam.php?id=<?php echo $ex['id']; ?>" target="_blank" onclick="event.stopPropagation();" class="text-[10px] text-stone-500 hover:text-orange-600 font-bold transition-colors flex items-center gap-1" title="Print Exam Paper">
-                                                <i class="fa-solid fa-print text-[9px]"></i> Print
-                                            </a>
-                                            <button type="button" onclick="event.stopPropagation(); deleteExam(<?php echo $ex['id']; ?>, '<?php echo htmlspecialchars(addslashes($ex['title']), ENT_QUOTES, 'UTF-8'); ?>')" class="text-[10px] text-rose-400 hover:text-rose-600 font-bold transition-colors flex items-center gap-1 opacity-0 group-hover:opacity-100" title="Delete Exam" aria-label="Delete <?php echo htmlspecialchars($ex['title']); ?>">
-                                                <i class="fa-solid fa-trash-can text-[9px]"></i> Delete
-                                            </button>
-                                            <span onclick="openExamPreviewModal(<?php echo htmlspecialchars(json_encode($ex), ENT_QUOTES, 'UTF-8'); ?>)" class="text-[10px] text-orange-600 font-bold group-hover:translate-x-0.5 transition-transform flex items-center gap-1 cursor-pointer">
-                                                View Items <i class="fa-solid fa-arrow-right text-[9px]"></i>
+                                        <div class="flex items-center justify-between pt-1 border-t border-stone-100/80 mt-2 flex-wrap gap-1">
+                                            <span class="inline-block text-[9px] font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200">
+                                                <i class="fa-solid fa-compass-drafting mr-1"></i><?php echo htmlspecialchars($ex['specialization'] ?? 'Structural Engineering'); ?>
                                             </span>
+                                            <div class="flex items-center gap-2">
+                                                <button type="button" onclick="event.stopPropagation(); recycleAllFromExam(<?php echo htmlspecialchars(json_encode($ex), ENT_QUOTES, 'UTF-8'); ?>)" class="text-[10px] text-orange-600 hover:text-orange-700 font-extrabold transition-colors flex items-center gap-0.5" title="Recycle all questions into current form">
+                                                    <i class="fa-solid fa-recycle text-[9px]"></i> Recycle
+                                                </button>
+                                                <a href="print_exam.php?id=<?php echo $ex['id']; ?>" target="_blank" onclick="event.stopPropagation();" class="text-[10px] text-stone-500 hover:text-orange-600 font-bold transition-colors flex items-center gap-1" title="Print Exam Paper">
+                                                    <i class="fa-solid fa-print text-[9px]"></i> Print
+                                                </a>
+                                                <button type="button" onclick="event.stopPropagation(); deleteExam(<?php echo $ex['id']; ?>, '<?php echo htmlspecialchars(addslashes($ex['title']), ENT_QUOTES, 'UTF-8'); ?>')" class="text-[10px] text-rose-400 hover:text-rose-600 font-bold transition-colors flex items-center gap-1 opacity-0 group-hover:opacity-100" title="Delete Exam" aria-label="Delete <?php echo htmlspecialchars($ex['title']); ?>">
+                                                    <i class="fa-solid fa-trash-can text-[9px]"></i> Delete
+                                                </button>
+                                                <span onclick="openExamPreviewModal(<?php echo htmlspecialchars(json_encode($ex), ENT_QUOTES, 'UTF-8'); ?>)" class="text-[10px] text-orange-600 font-bold group-hover:translate-x-0.5 transition-transform flex items-center gap-1 cursor-pointer">
+                                                    View <i class="fa-solid fa-arrow-right text-[9px]"></i>
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            <?php endforeach; ?>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php else: ?>
+                            <p class="text-xs text-stone-400 text-center py-6">No exams created yet.</p>
+                        <?php endif; ?>
+                    </div>
+
+                    <!-- Panel 2: Central Question Bank / Word Bank Repository with Usage Frequency -->
+                    <div id="panel_question_bank" class="space-y-3 hidden">
+                        <div class="p-2.5 bg-orange-50/70 border border-orange-200 rounded-xl text-[11px] text-orange-950 flex items-center justify-between">
+                            <span class="font-bold"><i class="fa-solid fa-database text-orange-600 mr-1"></i> Question Bank Repository</span>
+                            <span class="text-[10px] font-black text-orange-700 uppercase">Usage Tracking</span>
                         </div>
-                    <?php else: ?>
-                        <p class="text-xs text-stone-400 text-center py-6">No exams created yet.</p>
-                    <?php endif; ?>
+
+                        <?php if (!empty($bank_questions)): ?>
+                            <div class="space-y-2.5 max-h-[650px] overflow-y-auto pr-1 custom-scrollbar">
+                                <?php foreach ($bank_questions as $bq): ?>
+                                    <div class="p-3 border border-stone-200 rounded-xl bg-stone-50/50 hover:border-orange-400 hover:bg-orange-50/20 transition-all space-y-2">
+                                        <div class="flex items-center justify-between gap-1">
+                                            <span class="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-black px-2 py-0.5 rounded-full flex items-center gap-1">
+                                                <i class="fa-solid fa-repeat text-amber-700"></i> Used <?php echo intval($bq['usage_count']); ?>x in exams
+                                            </span>
+                                            <span class="text-[9px] bg-stone-200 text-stone-700 font-bold px-2 py-0.5 rounded uppercase">
+                                                <?php echo htmlspecialchars(str_replace('_', ' ', $bq['question_type'])); ?>
+                                            </span>
+                                        </div>
+                                        <p class="text-xs font-bold text-stone-800 leading-snug"><?php echo htmlspecialchars($bq['question_text']); ?></p>
+                                        <div class="flex items-center justify-between pt-1 border-t border-stone-100 text-[10px]">
+                                            <span class="text-emerald-700 font-bold truncate max-w-[150px]">
+                                                Key: <?php echo htmlspecialchars($bq['correct_answer']); ?>
+                                            </span>
+                                            <button type="button" onclick="importRecycledQuestion(<?php echo htmlspecialchars(json_encode($bq), ENT_QUOTES, 'UTF-8'); ?>)" class="bg-orange-600 hover:bg-orange-700 text-white font-extrabold px-2.5 py-1 rounded-lg transition-all shadow-2xs flex items-center gap-1 cursor-pointer">
+                                                <i class="fa-solid fa-plus text-[9px]"></i> Add to Form
+                                            </button>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        <?php else: ?>
+                            <p class="text-xs text-stone-400 text-center py-6">No questions accumulated in question bank yet.</p>
+                        <?php endif; ?>
+                    </div>
+
                 </div>
 
             </div>
@@ -364,8 +457,11 @@ unset($ex);
                 
             </div>
 
-            <div class="flex justify-between items-center pt-4 border-t border-stone-100">
+            <div class="flex justify-between items-center pt-4 border-t border-stone-100 flex-wrap gap-2">
                 <div class="flex items-center gap-2">
+                    <button id="modal_recycle_all_btn" type="button" class="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer">
+                        <i class="fa-solid fa-recycle text-xs"></i> Recycle All Questions
+                    </button>
                     <button id="modal_delete_btn" type="button" onclick="" class="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5">
                         <i class="fa-solid fa-trash-can text-xs"></i> Delete Exam
                     </button>
@@ -381,6 +477,64 @@ unset($ex);
         </div>
     </div>
 
+    <!-- Central Recycle Questions Modal (Browse by Exam / Bank with Usage Frequency) -->
+    <div id="recycle_modal" class="fixed inset-0 bg-stone-950/70 backdrop-blur-xs hidden items-center justify-center z-50 p-4">
+        <div class="bg-white border border-stone-200 rounded-2xl max-w-3xl w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto custom-scrollbar flex flex-col">
+            <!-- Modal Header -->
+            <div class="flex items-start justify-between border-b pb-3">
+                <div>
+                    <h3 class="text-base font-extrabold text-stone-800 flex items-center gap-2">
+                        <i class="fa-solid fa-recycle text-orange-600"></i> Recycle Questions from Past Exams & Bank
+                    </h3>
+                    <p class="text-xs text-stone-400 mt-0.5">Import past exam questions with verified answer keys, formulas, and track how many times each question has been used.</p>
+                </div>
+                <button type="button" onclick="closeRecycleModal()" class="w-8 h-8 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-500 font-bold flex items-center justify-center text-xs transition-all cursor-pointer">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                </button>
+            </div>
+
+            <!-- Controls: Search + Exam Filter -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-stone-50 p-3 rounded-xl border border-stone-200">
+                <div class="sm:col-span-2 relative">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-stone-400 text-xs"></i>
+                    <input type="text" id="recycle_search_input" oninput="filterRecycleQuestions()" placeholder="Search questions by topic, formula, or keywords..." class="w-full bg-white border border-stone-200 rounded-lg pl-8 pr-3 py-1.5 text-xs outline-none focus:border-orange-500 font-medium">
+                </div>
+                <div>
+                    <select id="recycle_exam_filter" onchange="filterRecycleQuestions()" class="w-full bg-white border border-stone-200 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-stone-700 outline-none focus:border-orange-500">
+                        <option value="all">All Past Exams & Bank</option>
+                        <?php foreach ($existing_exams as $ex): ?>
+                            <option value="<?php echo $ex['id']; ?>">Exam: <?php echo htmlspecialchars($ex['title']); ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Selection Action Header -->
+            <div class="flex items-center justify-between text-xs px-1">
+                <label class="flex items-center gap-2 font-bold text-stone-600 cursor-pointer">
+                    <input type="checkbox" id="recycle_select_all" onchange="toggleSelectAllRecycle(this.checked)" class="accent-orange-600 rounded">
+                    <span>Select All Visible</span>
+                </label>
+                <span id="recycle_selected_count" class="font-extrabold text-orange-600">0 questions selected</span>
+            </div>
+
+            <!-- Questions List Container -->
+            <div id="recycle_modal_items_container" class="space-y-3 overflow-y-auto max-h-[380px] pr-1 custom-scrollbar">
+                <!-- Populated dynamically via JS -->
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="flex items-center justify-between pt-3 border-t border-stone-100 mt-auto">
+                <button type="button" onclick="closeRecycleModal()" class="px-4 py-2 bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold text-xs rounded-xl transition-all cursor-pointer">
+                    Cancel
+                </button>
+                <button type="button" onclick="importSelectedRecycleQuestions()" class="px-5 py-2.5 bg-orange-600 hover:bg-orange-700 text-white font-extrabold text-xs rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer">
+                    <i class="fa-solid fa-cloud-arrow-down"></i> Import Selected Questions (<span id="btn_selected_badge">0</span>)
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Hidden form for deleting an exam from Saved Question Bank -->
     <form id="deleteExamForm" method="POST" action="create_exam.php" class="hidden">
         <?php echo csrfInputField(); ?>
@@ -390,6 +544,36 @@ unset($ex);
 
     <script>
         let questionCount = 0;
+        const allBankQuestions = <?php echo json_encode($bank_questions); ?>;
+        const allExistingExams = <?php echo json_encode($existing_exams); ?>;
+
+        function switchRightPanelTab(tab) {
+            const panelExams = document.getElementById('panel_saved_exams');
+            const panelBank = document.getElementById('panel_question_bank');
+            const btnExams = document.getElementById('tab_btn_saved_exams');
+            const btnBank = document.getElementById('tab_btn_question_bank');
+
+            if (tab === 'exams') {
+                panelExams.classList.remove('hidden');
+                panelBank.classList.add('hidden');
+                btnExams.className = 'text-xs font-black uppercase tracking-wider px-3 py-1.5 rounded-xl bg-orange-600 text-white shadow-xs transition-all cursor-pointer';
+                btnBank.className = 'text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-xl bg-stone-100 text-stone-600 hover:bg-stone-200 transition-all cursor-pointer';
+            } else {
+                panelExams.classList.add('hidden');
+                panelBank.classList.remove('hidden');
+                btnBank.className = 'text-xs font-black uppercase tracking-wider px-3 py-1.5 rounded-xl bg-orange-600 text-white shadow-xs transition-all cursor-pointer';
+                btnExams.className = 'text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-xl bg-stone-100 text-stone-600 hover:bg-stone-200 transition-all cursor-pointer';
+            }
+        }
+
+        function updateFormItemsCountBadge() {
+            const container = document.getElementById('questions_container');
+            const total = container ? container.querySelectorAll('[id^="q_block_"]').length : 0;
+            const badge = document.getElementById('form_items_count_badge');
+            if (badge) {
+                badge.innerText = `${total} Item${total === 1 ? '' : 's'}`;
+            }
+        }
 
         function toggleQualifyingFields(val) {
             const panel = document.getElementById('qualifying_config_panel');
@@ -448,6 +632,8 @@ unset($ex);
             `;
             
             container.appendChild(qBlock);
+            updateFormItemsCountBadge();
+            return questionCount;
         }
 
         function onQuestionTypeChanged(id, type) {
@@ -490,15 +676,93 @@ unset($ex);
         function removeQuestion(id) {
             const elem = document.getElementById(`q_block_${id}`);
             if (elem) elem.remove();
+            updateFormItemsCountBadge();
         }
 
-        // Add first question item by default
-        addQuestion();
+        // Import a single recycled question object into form
+        function importRecycledQuestion(q) {
+            // Check if there is only 1 blank initial question item
+            const container = document.getElementById('questions_container');
+            const blocks = container.querySelectorAll('[id^="q_block_"]');
+            let targetId = questionCount + 1;
 
+            if (blocks.length === 1) {
+                const firstInput = blocks[0].querySelector('input[name*="[text]"]');
+                if (firstInput && !firstInput.value.trim()) {
+                    // Reuse first empty slot
+                    const match = blocks[0].id.match(/q_block_(\d+)/);
+                    if (match) targetId = parseInt(match[1]);
+                } else {
+                    targetId = addQuestion();
+                }
+            } else {
+                targetId = addQuestion();
+            }
+
+            const qType = (q.question_type || 'multiple_choice').toLowerCase().replace('matching_type', 'matching');
+            const qBlock = document.getElementById(`q_block_${targetId}`);
+            if (!qBlock) return;
+
+            const textInput = qBlock.querySelector(`input[name="questions[${targetId}][text]"]`);
+            if (textInput) textInput.value = q.question_text || '';
+
+            const typeSelect = qBlock.querySelector(`select[name="questions[${targetId}][type]"]`);
+            if (typeSelect) {
+                typeSelect.value = qType;
+                onQuestionTypeChanged(targetId, qType);
+            }
+
+            const correctInput = qBlock.querySelector(`input[name="questions[${targetId}][correct]"]`);
+            if (correctInput) correctInput.value = q.correct_answer || '';
+
+            if (qType === 'multiple_choice') {
+                const optA = qBlock.querySelector(`input[name="questions[${targetId}][opt_a]"]`);
+                const optB = qBlock.querySelector(`input[name="questions[${targetId}][opt_b]"]`);
+                const optC = qBlock.querySelector(`input[name="questions[${targetId}][opt_c]"]`);
+                const optD = qBlock.querySelector(`input[name="questions[${targetId}][opt_d]"]`);
+                if (optA) optA.value = q.option_a || '';
+                if (optB) optB.value = q.option_b || '';
+                if (optC) optC.value = q.option_c || '';
+                if (optD) optD.value = q.option_d || '';
+            }
+
+            updateFormItemsCountBadge();
+            // Highlight imported block briefly
+            qBlock.classList.add('ring-2', 'ring-orange-500');
+            setTimeout(() => {
+                qBlock.classList.remove('ring-2', 'ring-orange-500');
+            }, 1200);
+        }
+
+        // Recycle all questions from an exam object
+        function recycleAllFromExam(exam) {
+            if (!exam || !exam.questions || exam.questions.length === 0) {
+                alert('No questions found in this exam to recycle.');
+                return;
+            }
+            if (confirm(`Recycle all ${exam.questions.length} questions from '${exam.title}' into your current exam paper?`)) {
+                exam.questions.forEach(q => {
+                    importRecycledQuestion(q);
+                });
+                alert(`Successfully imported ${exam.questions.length} question(s) from '${exam.title}'!`);
+            }
+        }
+
+        // Recycle all questions from modal preview
+        let currentModalExam = null;
         function openExamPreviewModal(exam) {
+            currentModalExam = exam;
             document.getElementById('modal_exam_badge').innerText = exam.specialization || 'Civil Engineering';
             document.getElementById('modal_exam_title').innerText = exam.title;
             document.getElementById('modal_exam_subtitle').innerText = `${exam.subject} | ${exam.total_items || 5} Questions | ${exam.time_limit || 60} mins`;
+
+            const recycleBtn = document.getElementById('modal_recycle_all_btn');
+            if (recycleBtn) {
+                recycleBtn.onclick = function() {
+                    recycleAllFromExam(exam);
+                    closeExamPreviewModal();
+                };
+            }
 
             const delBtn = document.getElementById('modal_delete_btn');
             if (delBtn) {
@@ -558,7 +822,12 @@ unset($ex);
                     qItem.innerHTML = `
                         <div class="flex items-center justify-between">
                             <span class="text-xs font-black uppercase text-orange-600">Question Item #${idx + 1}</span>
-                            <span class="text-[10px] bg-stone-200 text-stone-700 font-bold px-2 py-0.5 rounded uppercase">${(q.question_type || 'multiple_choice').replace('_', ' ')}</span>
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] bg-stone-200 text-stone-700 font-bold px-2 py-0.5 rounded uppercase">${(q.question_type || 'multiple_choice').replace('_', ' ')}</span>
+                                <button type="button" onclick="importRecycledQuestion(${JSON.stringify(q).replace(/"/g, '&quot;')}); closeExamPreviewModal();" class="text-[10px] bg-orange-600 text-white font-bold px-2.5 py-1 rounded hover:bg-orange-700 transition-colors flex items-center gap-1">
+                                    <i class="fa-solid fa-plus text-[8px]"></i> Recycle This
+                                </button>
+                            </div>
                         </div>
                         <h5 class="text-xs font-bold text-stone-800 leading-relaxed">${q.question_text}</h5>
                         ${optionsHtml}
@@ -585,6 +854,196 @@ unset($ex);
                 document.getElementById('deleteExamForm').submit();
             }
         }
+
+        // Recycle Modal Functions
+        let selectedRecycleItems = new Set();
+
+        function openRecycleModal() {
+            renderRecycleQuestions();
+            document.getElementById('recycle_modal').classList.remove('hidden');
+            document.getElementById('recycle_modal').classList.add('flex');
+        }
+
+        function closeRecycleModal() {
+            document.getElementById('recycle_modal').classList.add('hidden');
+            document.getElementById('recycle_modal').classList.remove('flex');
+        }
+
+        function getUnifiedRecycleList() {
+            // Combine bank questions and questions from existing exams with usage metadata
+            const items = [];
+            const seenKeys = new Set();
+
+            allBankQuestions.forEach(bq => {
+                const key = (bq.question_text || '').trim().toLowerCase();
+                seenKeys.add(key);
+                items.push({
+                    id: bq.sample_id,
+                    question_text: bq.question_text,
+                    question_type: bq.question_type,
+                    option_a: bq.option_a,
+                    option_b: bq.option_b,
+                    option_c: bq.option_c,
+                    option_d: bq.option_d,
+                    correct_answer: bq.correct_answer,
+                    formula_latex: bq.formula_latex,
+                    points: bq.points || 1,
+                    usage_count: parseInt(bq.usage_count) || 1,
+                    source_title: bq.latest_exam_title || 'Question Bank',
+                    exam_id: null
+                });
+            });
+
+            allExistingExams.forEach(ex => {
+                if (ex.questions && ex.questions.length > 0) {
+                    ex.questions.forEach(q => {
+                        const key = (q.question_text || '').trim().toLowerCase();
+                        items.push({
+                            id: q.id,
+                            question_text: q.question_text,
+                            question_type: q.question_type,
+                            option_a: q.option_a,
+                            option_b: q.option_b,
+                            option_c: q.option_c,
+                            option_d: q.option_d,
+                            correct_answer: q.correct_answer,
+                            formula_latex: q.formula_latex,
+                            points: q.points || 1,
+                            usage_count: 1,
+                            source_title: ex.title,
+                            exam_id: ex.id
+                        });
+                    });
+                }
+            });
+
+            return items;
+        }
+
+        let currentFilteredRecycleItems = [];
+
+        function filterRecycleQuestions() {
+            const query = (document.getElementById('recycle_search_input').value || '').trim().toLowerCase();
+            const examFilter = document.getElementById('recycle_exam_filter').value;
+            const allItems = getUnifiedRecycleList();
+
+            currentFilteredRecycleItems = allItems.filter(item => {
+                const matchQuery = !query || 
+                    (item.question_text && item.question_text.toLowerCase().includes(query)) ||
+                    (item.source_title && item.source_title.toLowerCase().includes(query)) ||
+                    (item.correct_answer && item.correct_answer.toLowerCase().includes(query));
+
+                let matchExam = true;
+                if (examFilter !== 'all') {
+                    matchExam = item.exam_id == examFilter;
+                }
+                return matchQuery && matchExam;
+            });
+
+            renderRecycleItemsList(currentFilteredRecycleItems);
+        }
+
+        function renderRecycleQuestions() {
+            currentFilteredRecycleItems = getUnifiedRecycleList();
+            renderRecycleItemsList(currentFilteredRecycleItems);
+        }
+
+        function renderRecycleItemsList(items) {
+            const container = document.getElementById('recycle_modal_items_container');
+            container.innerHTML = '';
+            selectedRecycleItems.clear();
+            updateRecycleSelectedBadge();
+
+            if (!items || items.length === 0) {
+                container.innerHTML = '<p class="text-xs text-stone-400 text-center py-8">No past questions matched your filter criteria.</p>';
+                return;
+            }
+
+            items.forEach((item, idx) => {
+                const card = document.createElement('div');
+                card.className = "p-3.5 border border-stone-200 rounded-xl bg-stone-50/60 hover:bg-orange-50/20 hover:border-orange-300 transition-all flex items-start gap-3 group";
+                
+                card.innerHTML = `
+                    <input type="checkbox" onchange="toggleRecycleItem(${idx}, this.checked)" class="recycle-checkbox mt-1 accent-orange-600 rounded cursor-pointer">
+                    <div class="flex-1 space-y-1.5">
+                        <div class="flex items-center justify-between flex-wrap gap-1">
+                            <div class="flex items-center gap-1.5">
+                                <span class="bg-amber-100 text-amber-900 border border-amber-300 text-[9px] font-black px-2 py-0.5 rounded-full">
+                                    <i class="fa-solid fa-repeat text-amber-700"></i> Used ${item.usage_count}x
+                                </span>
+                                <span class="bg-stone-200 text-stone-700 text-[9px] font-bold px-2 py-0.5 rounded uppercase">
+                                    ${(item.question_type || 'multiple_choice').replace('_', ' ')}
+                                </span>
+                            </div>
+                            <span class="text-[10px] text-stone-400 font-semibold truncate max-w-[200px]">
+                                ${item.source_title}
+                            </span>
+                        </div>
+                        <p class="text-xs font-bold text-stone-800 leading-relaxed">${item.question_text}</p>
+                        <div class="flex items-center justify-between pt-1 border-t border-stone-100 text-[10px]">
+                            <span class="text-emerald-700 font-bold">
+                                Key: ${item.correct_answer}
+                            </span>
+                            <button type="button" onclick="importRecycledQuestion(${JSON.stringify(item).replace(/"/g, '&quot;')}); closeRecycleModal();" class="text-orange-600 hover:text-orange-700 font-extrabold flex items-center gap-1">
+                                <i class="fa-solid fa-plus text-[9px]"></i> Add this item
+                            </button>
+                        </div>
+                    </div>
+                `;
+
+                container.appendChild(card);
+            });
+        }
+
+        function toggleRecycleItem(idx, checked) {
+            if (checked) {
+                selectedRecycleItems.add(idx);
+            } else {
+                selectedRecycleItems.delete(idx);
+            }
+            updateRecycleSelectedBadge();
+        }
+
+        function toggleSelectAllRecycle(checked) {
+            const checkboxes = document.querySelectorAll('.recycle-checkbox');
+            checkboxes.forEach((cb, idx) => {
+                cb.checked = checked;
+                if (checked) {
+                    selectedRecycleItems.add(idx);
+                } else {
+                    selectedRecycleItems.delete(idx);
+                }
+            });
+            updateRecycleSelectedBadge();
+        }
+
+        function updateRecycleSelectedBadge() {
+            const count = selectedRecycleItems.size;
+            document.getElementById('recycle_selected_count').innerText = `${count} question${count === 1 ? '' : 's'} selected`;
+            document.getElementById('btn_selected_badge').innerText = count;
+        }
+
+        function importSelectedRecycleQuestions() {
+            if (selectedRecycleItems.size === 0) {
+                alert('Please select at least one question to recycle.');
+                return;
+            }
+
+            let imported = 0;
+            selectedRecycleItems.forEach(idx => {
+                const item = currentFilteredRecycleItems[idx];
+                if (item) {
+                    importRecycledQuestion(item);
+                    imported++;
+                }
+            });
+
+            closeRecycleModal();
+            alert(`Successfully recycled ${imported} question(s) into your current exam!`);
+        }
+
+        // Initialize first blank question
+        addQuestion();
     </script>
 </body>
 </html>

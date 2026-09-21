@@ -140,10 +140,10 @@ foreach ($questions as $q) {
                 $pts = floatval($q['points'] ?? 1);
             ?>
                 <div class="question-block space-y-2 pb-4 border-b border-stone-100 last:border-0">
-                    <div class="flex items-start justify-between gap-3">
-                        <div class="flex items-start gap-2 font-bold text-xs sm:text-sm text-stone-900 leading-relaxed">
-                            <span class="text-orange-600 font-extrabold"><?php echo $qNum; ?>.</span>
-                            <div>
+                    <div class="flex items-start justify-between gap-4">
+                        <div class="flex items-start gap-2.5 font-bold text-xs sm:text-sm text-stone-900 leading-relaxed flex-1">
+                            <span class="text-orange-600 font-extrabold text-base"><?php echo $qNum; ?>.</span>
+                            <div class="space-y-1">
                                 <span><?php echo nl2br(htmlspecialchars($q['question_text'])); ?></span>
                                 <?php if (!empty($q['formula_latex'])): ?>
                                     <div class="mt-1.5 p-2 bg-stone-100 rounded text-xs font-mono font-bold text-stone-800">
@@ -152,35 +152,54 @@ foreach ($questions as $q) {
                                 <?php endif; ?>
                             </div>
                         </div>
-                        <span class="text-[10px] font-bold text-stone-400 bg-stone-100 px-2 py-0.5 rounded flex-shrink-0">
-                            <?php echo $pts; ?> <?php echo $pts > 1 ? 'pts' : 'pt'; ?>
-                        </span>
+
+                        <!-- Enlarged Student Answer Writing Box -->
+                        <div class="flex items-center gap-3 flex-shrink-0">
+                            <div class="text-center">
+                                <span class="text-[9px] font-black uppercase tracking-wider text-stone-500 block mb-0.5">Answer</span>
+                                <div class="w-14 h-12 border-2 border-stone-900 rounded-xl bg-white flex items-center justify-center font-black text-base text-stone-900 shadow-2xs">
+                                    <span class="teacher-answer-text text-emerald-700 <?php echo $show_answers ? '' : 'hidden'; ?>">
+                                        <?php 
+                                            $shortAns = trim($q['correct_answer'] ?? '');
+                                            if (preg_match('/^([A-D])\b/i', $shortAns, $sm)) {
+                                                echo strtoupper($sm[1]);
+                                            } else {
+                                                echo htmlspecialchars(mb_substr($shortAns, 0, 4));
+                                            }
+                                        ?>
+                                    </span>
+                                </div>
+                            </div>
+                            <span class="text-[10px] font-bold text-stone-400 bg-stone-100 px-2.5 py-1 rounded-lg">
+                                <?php echo $pts; ?> <?php echo $pts > 1 ? 'pts' : 'pt'; ?>
+                            </span>
+                        </div>
                     </div>
 
                     <!-- Multiple Choice Choices -->
                     <?php if ($qType === 'multiple_choice'): ?>
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-6 pt-1 text-xs font-medium text-stone-800">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-6 pt-2 text-xs font-medium text-stone-800">
                             <?php if (!empty($q['option_a'])): ?>
-                                <div class="flex items-center gap-2">
-                                    <span class="font-bold text-stone-500">(A)</span>
+                                <div class="flex items-center gap-2 p-2 rounded-lg border border-stone-200 bg-stone-50/40">
+                                    <span class="font-extrabold text-stone-700 bg-white border border-stone-300 w-6 h-6 rounded flex items-center justify-center text-xs">(A)</span>
                                     <span><?php echo htmlspecialchars($q['option_a']); ?></span>
                                 </div>
                             <?php endif; ?>
                             <?php if (!empty($q['option_b'])): ?>
-                                <div class="flex items-center gap-2">
-                                    <span class="font-bold text-stone-500">(B)</span>
+                                <div class="flex items-center gap-2 p-2 rounded-lg border border-stone-200 bg-stone-50/40">
+                                    <span class="font-extrabold text-stone-700 bg-white border border-stone-300 w-6 h-6 rounded flex items-center justify-center text-xs">(B)</span>
                                     <span><?php echo htmlspecialchars($q['option_b']); ?></span>
                                 </div>
                             <?php endif; ?>
                             <?php if (!empty($q['option_c'])): ?>
-                                <div class="flex items-center gap-2">
-                                    <span class="font-bold text-stone-500">(C)</span>
+                                <div class="flex items-center gap-2 p-2 rounded-lg border border-stone-200 bg-stone-50/40">
+                                    <span class="font-extrabold text-stone-700 bg-white border border-stone-300 w-6 h-6 rounded flex items-center justify-center text-xs">(C)</span>
                                     <span><?php echo htmlspecialchars($q['option_c']); ?></span>
                                 </div>
                             <?php endif; ?>
                             <?php if (!empty($q['option_d'])): ?>
-                                <div class="flex items-center gap-2">
-                                    <span class="font-bold text-stone-500">(D)</span>
+                                <div class="flex items-center gap-2 p-2 rounded-lg border border-stone-200 bg-stone-50/40">
+                                    <span class="font-extrabold text-stone-700 bg-white border border-stone-300 w-6 h-6 rounded flex items-center justify-center text-xs">(D)</span>
                                     <span><?php echo htmlspecialchars($q['option_d']); ?></span>
                                 </div>
                             <?php endif; ?>
@@ -188,27 +207,49 @@ foreach ($questions as $q) {
 
                     <!-- True / False Choices -->
                     <?php elseif ($qType === 'true_false'): ?>
-                        <div class="flex items-center gap-6 pl-6 pt-1 text-xs font-bold text-stone-800">
-                            <span class="flex items-center gap-2">
-                                <span class="w-4 h-4 rounded-full border-2 border-stone-400 inline-block"></span> True
+                        <div class="flex items-center gap-6 pl-6 pt-2 text-xs font-bold text-stone-800">
+                            <span class="flex items-center gap-2 p-2 rounded-lg border border-stone-200 bg-stone-50/40 px-4">
+                                <span class="w-4 h-4 rounded-full border-2 border-stone-700 inline-block"></span> True
                             </span>
-                            <span class="flex items-center gap-2">
-                                <span class="w-4 h-4 rounded-full border-2 border-stone-400 inline-block"></span> False
+                            <span class="flex items-center gap-2 p-2 rounded-lg border border-stone-200 bg-stone-50/40 px-4">
+                                <span class="w-4 h-4 rounded-full border-2 border-stone-700 inline-block"></span> False
                             </span>
                         </div>
 
                     <!-- Identification / Fill in Blank Blank Line -->
                     <?php elseif ($qType === 'identification' || $qType === 'fill_blank'): ?>
-                        <div class="pl-6 pt-1 text-xs">
-                            <span class="text-stone-400 font-semibold mr-2">Answer:</span>
-                            <span class="inline-block border-b border-stone-800 w-64"></span>
+                        <div class="pl-6 pt-2 text-xs">
+                            <span class="text-stone-500 font-bold uppercase text-[10px] block mb-1">Answer Box:</span>
+                            <div class="w-full max-w-lg h-12 border-2 border-stone-900 rounded-xl bg-white p-3 flex items-center text-xs font-bold text-stone-800">
+                                <span class="teacher-answer-text text-emerald-700 <?php echo $show_answers ? '' : 'hidden'; ?>">
+                                    <?php echo htmlspecialchars($q['correct_answer']); ?>
+                                </span>
+                            </div>
                         </div>
 
                     <!-- Problem Solving / Math Formula Work Area -->
                     <?php elseif ($qType === 'problem_solving' || $qType === 'math_formula'): ?>
-                        <div class="pl-6 pt-2 text-xs">
-                            <div class="border border-dashed border-stone-300 rounded-lg p-4 h-24 bg-stone-50/50 flex items-start text-stone-400 text-[11px] italic">
-                                Show complete solution and final boxed answer here:
+                        <div class="pl-6 pt-2 text-xs space-y-2">
+                            <div class="flex items-center justify-between">
+                                <span class="text-stone-600 font-bold uppercase text-[10px]">Show complete step-by-step solution:</span>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[10px] font-black uppercase text-stone-700">Final Boxed Answer:</span>
+                                    <div class="w-32 h-12 border-2 border-stone-900 rounded-xl bg-white flex items-center justify-center font-black text-sm text-stone-900 shadow-2xs">
+                                        <span class="teacher-answer-text text-emerald-700 <?php echo $show_answers ? '' : 'hidden'; ?>">
+                                            <?php echo htmlspecialchars($q['correct_answer']); ?>
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="border-2 border-dashed border-stone-400 rounded-xl p-4 min-h-[160px] bg-stone-50/40 flex items-start text-stone-400 text-xs italic">
+                                <?php if ($show_answers && !empty($q['explanation'])): ?>
+                                    <div class="teacher-answer-text text-emerald-900 font-normal not-italic space-y-1 w-full <?php echo $show_answers ? '' : 'hidden'; ?>">
+                                        <strong class="font-bold text-emerald-800">Step-by-step Derivation:</strong>
+                                        <p class="whitespace-pre-wrap font-mono text-[11px]"><?php echo htmlspecialchars($q['explanation']); ?></p>
+                                    </div>
+                                <?php else: ?>
+                                    Space for mathematical derivation, free-body diagram, formulas, and units...
+                                <?php endif; ?>
                             </div>
                         </div>
                     <?php endif; ?>
@@ -239,6 +280,13 @@ foreach ($questions as $q) {
     <script>
         function toggleAnswerKeys(show) {
             document.querySelectorAll('.answer-key-box').forEach(el => {
+                if (show) {
+                    el.classList.remove('hidden');
+                } else {
+                    el.classList.add('hidden');
+                }
+            });
+            document.querySelectorAll('.teacher-answer-text').forEach(el => {
                 if (show) {
                     el.classList.remove('hidden');
                 } else {

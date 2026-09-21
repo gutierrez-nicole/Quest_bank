@@ -110,9 +110,214 @@ $fail_rate = $total_published > 0 ? min(100.0, round(($fail / $total_published) 
 $avg_percentage = floatval($stats['avg_percentage'] ?? 0.0);
 $max_percentage = floatval($stats['max_percentage'] ?? 0.0);
 
+$total_students = count(array_unique(array_filter(array_column($submissions, 'student_id'))));
+if ($total_students === 0) {
+    $total_students = $total_submissions;
+}
+
 $stmtExams = $pdo->prepare("SELECT DISTINCT exam_title FROM exam_submissions WHERE teacher_id = ?");
 $stmtExams->execute([$teacher_id]);
 $exam_options = $stmtExams->fetchAll(PDO::FETCH_COLUMN);
+
+// Active analysis exam for Question Analytics & Performance Matrix
+$active_analysis_exam = $_GET['analysis_exam'] ?? ($selected_exam !== 'all' ? $selected_exam : ($exam_options[0] ?? null));
+
+$item_analytics = [];
+$matrix_students = [];
+$matrix_questions = [];
+
+if (!empty($active_analysis_exam)) {
+    // 1. Fetch Question Analytics from submission_answers
+    $stmtQAnalytics = $pdo->prepare("
+        SELECT 
+            sa.question_id,
+            COALESCE(eq.question_text, CONCAT('Question #', sa.question_id)) AS question_text,
+            COALESCE(eq.question_type, 'standard') AS question_type,
+            COALESCE(eq.correct_answer, sa.correct_answer, 'N/A') AS correct_answer,
+            COUNT(sa.id) AS total_attempts,
+            SUM(CASE WHEN sa.evaluation_status = 'correct' OR sa.awarded_points >= sa.max_points THEN 1 ELSE 0 END) AS correct_count,
+            SUM(CASE WHEN sa.evaluation_status IN ('incorrect', 'unanswered') OR (sa.awarded_points = 0 AND sa.evaluation_status != 'correct') THEN 1 ELSE 0 END) AS incorrect_count,
+            SUM(CASE WHEN sa.evaluation_status = 'requires_review' OR sa.requires_review = 1 THEN 1 ELSE 0 END) AS review_count,
+            AVG(sa.awarded_points) AS avg_score,
+            MAX(sa.max_points) AS max_points
+        FROM submission_answers sa
+        JOIN exam_submissions es ON sa.submission_id = es.id
+        LEFT JOIN exam_questions eq ON sa.question_id = eq.id
+        WHERE es.teacher_id = ? AND es.exam_title = ?
+        GROUP BY sa.question_id
+        ORDER BY sa.question_id ASC
+    ");
+    $stmtQAnalytics->execute([$teacher_id, $active_analysis_exam]);
+    $rawQAnalytics = $stmtQAnalytics->fetchAll(PDO::FETCH_ASSOC);
+
+    if (!empty($rawQAnalytics)) {
+        foreach ($rawQAnalytics as $idx => $row) {
+            $qNum = $idx + 1;
+            $tot = intval($row['total_attempts'] ?? 0);
+            $corr = intval($row['correct_count'] ?? 0);
+            $incorr = intval($row['incorrect_count'] ?? 0);
+            $accuracy = $tot > 0 ? round(($corr / $tot) * 100, 1) : 0.0;
+            $row['question_num'] = $qNum;
+            $row['accuracy_pct'] = $accuracy;
+            $item_analytics[$row['question_id']] = $row;
+            $matrix_questions[$row['question_id']] = [
+                'num' => $qNum,
+                'id' => $row['question_id'],
+                'text' => $row['question_text'],
+                'type' => $row['question_type'],
+                'correct_answer' => $row['correct_answer'],
+                'correct_count' => $corr,
+                'incorrect_count' => $incorr,
+                'total_attempts' => $tot
+            ];
+        }
+    }
+
+    // 2. Fetch Student-by-Question Matrix Answers
+    $stmtMatrix = $pdo->prepare("
+        SELECT 
+            es.id AS submission_id,
+            es.student_id,
+            COALESCE(u.fullname, CONCAT('Student #', es.student_id)) AS student_name,
+            sd.section AS student_section,
+            es.total_score,
+            es.total_possible_score,
+            es.percentage,
+            es.status AS pass_fail_status,
+            sa.question_id,
+            sa.student_answer,
+            sa.correct_answer,
+            sa.awarded_points,
+            sa.max_points,
+            sa.evaluation_status,
+            sa.requires_review
+        FROM exam_submissions es
+        JOIN submission_answers sa ON es.id = sa.submission_id
+        LEFT JOIN users u ON es.student_id = u.id
+        LEFT JOIN student_details sd ON es.student_id = sd.user_id
+        WHERE es.teacher_id = ? AND es.exam_title = ?
+        ORDER BY u.fullname ASC, es.id ASC, sa.question_id ASC
+    ");
+    $stmtMatrix->execute([$teacher_id, $active_analysis_exam]);
+    $rawMatrix = $stmtMatrix->fetchAll(PDO::FETCH_ASSOC);
+
+    if (!empty($rawMatrix)) {
+        foreach ($rawMatrix as $m) {
+            $subId = $m['submission_id'];
+            if (!isset($matrix_students[$subId])) {
+                $matrix_students[$subId] = [
+                    'submission_id' => $subId,
+                    'student_id' => $m['student_id'],
+                    'student_name' => $m['student_name'],
+                    'student_section' => $m['student_section'] ?? 'N/A',
+                    'total_score' => $m['total_score'],
+                    'total_possible_score' => $m['total_possible_score'],
+                    'percentage' => $m['percentage'],
+                    'status' => $m['pass_fail_status'],
+                    'answers' => []
+                ];
+            }
+            $matrix_students[$subId]['answers'][$m['question_id']] = [
+                'student_answer' => $m['student_answer'],
+                'correct_answer' => $m['correct_answer'],
+                'awarded_points' => $m['awarded_points'],
+                'max_points' => $m['max_points'],
+                'evaluation_status' => $m['evaluation_status'],
+                'requires_review' => $m['requires_review']
+            ];
+        }
+    }
+
+    // Fallback: If submission_answers is empty, parse evaluation_result JSON from exam_submissions
+    if (empty($item_analytics)) {
+        $stmtSubJson = $pdo->prepare("
+            SELECT es.id, es.student_id, COALESCE(u.fullname, CONCAT('Student #', es.student_id)) as student_name,
+                   sd.section as student_section, es.total_score, es.total_possible_score, es.percentage, es.status,
+                   es.evaluation_result
+            FROM exam_submissions es
+            LEFT JOIN users u ON es.student_id = u.id
+            LEFT JOIN student_details sd ON es.student_id = sd.user_id
+            WHERE es.teacher_id = ? AND es.exam_title = ?
+            ORDER BY u.fullname ASC, es.id ASC
+        ");
+        $stmtSubJson->execute([$teacher_id, $active_analysis_exam]);
+        $jsonSubs = $stmtSubJson->fetchAll(PDO::FETCH_ASSOC);
+
+        $tempQMap = [];
+        foreach ($jsonSubs as $s) {
+            $parsed = !empty($s['evaluation_result']) ? (is_array($s['evaluation_result']) ? $s['evaluation_result'] : json_decode($s['evaluation_result'], true)) : [];
+            if (!is_array($parsed)) continue;
+
+            $subId = $s['id'];
+            $matrix_students[$subId] = [
+                'submission_id' => $subId,
+                'student_id' => $s['student_id'],
+                'student_name' => $s['student_name'],
+                'student_section' => $s['student_section'] ?? 'N/A',
+                'total_score' => $s['total_score'],
+                'total_possible_score' => $s['total_possible_score'],
+                'percentage' => $s['percentage'],
+                'status' => $s['status'],
+                'answers' => []
+            ];
+
+            foreach ($parsed as $pIdx => $pItem) {
+                $qId = $pItem['question_id'] ?? ($pIdx + 1);
+                $isCorrect = ($pItem['evaluation_status'] ?? '') === 'correct' || (floatval($pItem['awarded_points'] ?? 0) > 0);
+                
+                if (!isset($tempQMap[$qId])) {
+                    $tempQMap[$qId] = [
+                        'question_id' => $qId,
+                        'question_text' => $pItem['question_text'] ?? "Question #{$qId}",
+                        'question_type' => $pItem['question_type'] ?? 'standard',
+                        'correct_answer' => $pItem['stored_correct_answer'] ?? $pItem['correct_answer'] ?? 'N/A',
+                        'total_attempts' => 0,
+                        'correct_count' => 0,
+                        'incorrect_count' => 0,
+                        'review_count' => 0,
+                        'avg_score' => 0,
+                        'max_points' => floatval($pItem['maximum_points'] ?? 1)
+                    ];
+                }
+                $tempQMap[$qId]['total_attempts']++;
+                if ($isCorrect) {
+                    $tempQMap[$qId]['correct_count']++;
+                } else {
+                    $tempQMap[$qId]['incorrect_count']++;
+                }
+
+                $matrix_students[$subId]['answers'][$qId] = [
+                    'student_answer' => $pItem['student_answer'] ?? '',
+                    'correct_answer' => $pItem['stored_correct_answer'] ?? $pItem['correct_answer'] ?? '',
+                    'awarded_points' => $pItem['awarded_points'] ?? 0,
+                    'max_points' => $pItem['maximum_points'] ?? 1,
+                    'evaluation_status' => $isCorrect ? 'correct' : 'incorrect',
+                    'requires_review' => !empty($pItem['requires_review'])
+                ];
+            }
+        }
+
+        $cnt = 1;
+        foreach ($tempQMap as $qId => $qInfo) {
+            $tot = $qInfo['total_attempts'];
+            $corr = $qInfo['correct_count'];
+            $qInfo['question_num'] = $cnt;
+            $qInfo['accuracy_pct'] = $tot > 0 ? round(($corr / $tot) * 100, 1) : 0.0;
+            $item_analytics[$qId] = $qInfo;
+            $matrix_questions[$qId] = [
+                'num' => $cnt,
+                'id' => $qId,
+                'text' => $qInfo['question_text'],
+                'type' => $qInfo['question_type'],
+                'correct_answer' => $qInfo['correct_answer'],
+                'correct_count' => $corr,
+                'incorrect_count' => $qInfo['incorrect_count'],
+                'total_attempts' => $tot
+            ];
+            $cnt++;
+        }
+    }
+}
 
 $success_msg = "";
 $error_msg = "";
@@ -289,6 +494,213 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['publish_entire_exam']
                 <p class="text-[10px] font-bold uppercase text-stone-400">Highest Score</p>
                 <p class="text-2xl font-black text-emerald-600 mt-1"><?php echo number_format($max_percentage, 1); ?>%</p>
             </div>
+        </div>
+
+        <!-- Requirement 7: Question-by-Question Item Analysis (All Questions) -->
+        <div class="bg-white border border-stone-200 rounded-2xl p-6 shadow-sm space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-stone-100 pb-4">
+                <div>
+                    <h3 class="text-sm font-extrabold uppercase tracking-wider text-stone-800 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-column text-orange-600"></i> Question-by-Question Item Analysis (All Questions)
+                    </h3>
+                    <p class="text-xs text-stone-400 mt-0.5">Statistical breakdown showing how many students answered each question correctly vs incorrectly.</p>
+                </div>
+                
+                <?php if (!empty($exam_options)): ?>
+                    <form method="GET" action="reports.php" class="flex items-center gap-2">
+                        <?php if ($selected_exam !== 'all'): ?><input type="hidden" name="exam_title" value="<?php echo htmlspecialchars($selected_exam); ?>"><?php endif; ?>
+                        <label class="text-[10px] font-bold uppercase text-stone-400">Exam:</label>
+                        <select name="analysis_exam" onchange="this.form.submit()" class="bg-stone-50 border border-stone-200 text-xs font-bold rounded-xl px-3 py-1.5 outline-none focus:border-orange-500 text-stone-800 max-w-xs truncate shadow-xs">
+                            <?php foreach ($exam_options as $ex): ?>
+                                <option value="<?php echo htmlspecialchars($ex); ?>" <?php echo $active_analysis_exam === $ex ? 'selected' : ''; ?>>
+                                    <?php echo htmlspecialchars($ex); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </form>
+                <?php endif; ?>
+            </div>
+
+            <?php if (!empty($item_analytics)): ?>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs border-collapse">
+                        <thead>
+                            <tr class="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase font-bold text-[10px]">
+                                <th class="p-3 w-12 text-center">Item</th>
+                                <th class="p-3 min-w-[200px]">Question Preview</th>
+                                <th class="p-3">Type</th>
+                                <th class="p-3">Answer Key</th>
+                                <th class="p-3 text-center">Correct (Got Right)</th>
+                                <th class="p-3 text-center">Incorrect (Got Wrong)</th>
+                                <th class="p-3 text-center min-w-[140px]">Accuracy Progress</th>
+                                <th class="p-3 text-center">Item Difficulty</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-stone-100 font-medium text-stone-700">
+                            <?php foreach ($item_analytics as $q): ?>
+                                <?php 
+                                    $acc = floatval($q['accuracy_pct'] ?? 0.0);
+                                    $isHigh = $acc >= 75.0;
+                                    $isMid = $acc >= 50.0 && $acc < 75.0;
+                                    $diffLabel = $isHigh ? 'Mastered / Easy' : ($isMid ? 'Moderate' : 'Challenging / Needs Review');
+                                    $diffBadge = $isHigh ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : ($isMid ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-rose-100 text-rose-800 border-rose-200');
+                                ?>
+                                <tr class="hover:bg-stone-50/50 transition-all">
+                                    <td class="p-3 text-center font-black text-stone-800">
+                                        <span class="w-7 h-7 rounded-lg bg-stone-100 text-stone-700 flex items-center justify-center font-mono mx-auto text-xs">
+                                            Q<?php echo $q['question_num']; ?>
+                                        </span>
+                                    </td>
+                                    <td class="p-3">
+                                        <p class="font-bold text-stone-800 line-clamp-2"><?php echo htmlspecialchars($q['question_text']); ?></p>
+                                    </td>
+                                    <td class="p-3">
+                                        <span class="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-stone-100 text-stone-600 border border-stone-200">
+                                            <?php echo htmlspecialchars(str_replace('_', ' ', $q['question_type'])); ?>
+                                        </span>
+                                    </td>
+                                    <td class="p-3">
+                                        <span class="px-2 py-1 rounded-md text-[11px] font-mono font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                            <?php echo htmlspecialchars($q['correct_answer']); ?>
+                                        </span>
+                                    </td>
+                                    <td class="p-3 text-center">
+                                        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                            <i class="fa-solid fa-check text-emerald-600 text-[10px]"></i> <?php echo $q['correct_count']; ?> (<?php echo $acc; ?>%)
+                                        </span>
+                                    </td>
+                                    <td class="p-3 text-center">
+                                        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-rose-100 text-rose-800 border border-rose-200">
+                                            <i class="fa-solid fa-xmark text-rose-600 text-[10px]"></i> <?php echo $q['incorrect_count']; ?> (<?php echo round(100.0 - $acc, 1); ?>%)
+                                        </span>
+                                    </td>
+                                    <td class="p-3 text-center">
+                                        <div class="w-full bg-stone-100 rounded-full h-2.5 overflow-hidden flex shadow-inner">
+                                            <div class="bg-emerald-500 h-2.5 transition-all" style="width: <?php echo $acc; ?>%"></div>
+                                            <div class="bg-rose-400 h-2.5 transition-all" style="width: <?php echo 100.0 - $acc; ?>%"></div>
+                                        </div>
+                                        <span class="text-[9px] font-bold text-stone-400 mt-1 block"><?php echo $q['correct_count']; ?> of <?php echo $q['total_attempts']; ?> passed</span>
+                                    </td>
+                                    <td class="p-3 text-center">
+                                        <span class="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase border <?php echo $diffBadge; ?>">
+                                            <?php echo $diffLabel; ?>
+                                        </span>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php else: ?>
+                <div class="text-center py-8 text-stone-400">
+                    <i class="fa-solid fa-chart-column text-3xl mb-2 text-stone-300"></i>
+                    <p class="text-xs font-bold">No question-level analytics recorded for this exam yet.</p>
+                </div>
+            <?php endif; ?>
+        </div>
+
+        <!-- Requirement 4: Student-by-Question Performance Matrix -->
+        <div class="bg-white border border-stone-200 rounded-2xl p-6 shadow-sm space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-stone-100 pb-4">
+                <div>
+                    <h3 class="text-sm font-extrabold uppercase tracking-wider text-stone-800 flex items-center gap-2">
+                        <i class="fa-solid fa-table-cells text-emerald-600"></i> Student-by-Question Performance Matrix
+                    </h3>
+                    <p class="text-xs text-stone-400 mt-0.5">Item response comparative matrix: Compare student answers against each question number.</p>
+                </div>
+                
+                <div class="flex items-center gap-3 text-xs font-bold">
+                    <span class="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[10px]">
+                        <i class="fa-solid fa-circle-check"></i> Correct
+                    </span>
+                    <span class="inline-flex items-center gap-1 text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200 text-[10px]">
+                        <i class="fa-solid fa-circle-xmark"></i> Incorrect
+                    </span>
+                </div>
+            </div>
+
+            <?php if (!empty($matrix_students) && !empty($matrix_questions)): ?>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs border-collapse">
+                        <thead>
+                            <tr class="bg-stone-50 border-b border-stone-200 text-stone-500 uppercase font-bold text-[10px]">
+                                <th class="p-3 sticky left-0 bg-stone-50 z-10 min-w-[160px] border-r border-stone-200">Student Name</th>
+                                <th class="p-3 text-center min-w-[70px] border-r border-stone-200">Score</th>
+                                <?php foreach ($matrix_questions as $mq): ?>
+                                    <th class="p-3 text-center min-w-[90px]" title="<?php echo htmlspecialchars($mq['text']); ?> (Key: <?php echo htmlspecialchars($mq['correct_answer']); ?>)">
+                                        <div class="font-black text-stone-800">Q<?php echo $mq['num']; ?></div>
+                                        <div class="text-[9px] font-normal text-stone-400 truncate max-w-[80px]">Key: <?php echo htmlspecialchars($mq['correct_answer']); ?></div>
+                                    </th>
+                                <?php endforeach; ?>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-stone-100 font-medium text-stone-700">
+                            <?php foreach ($matrix_students as $mSub): ?>
+                                <tr class="hover:bg-stone-50/50 transition-all">
+                                    <td class="p-3 sticky left-0 bg-white hover:bg-stone-50 z-10 font-bold text-stone-800 border-r border-stone-200 shadow-2xs">
+                                        <div class="font-extrabold"><?php echo htmlspecialchars($mSub['student_name']); ?></div>
+                                        <div class="text-[10px] text-stone-400 font-medium">Sec: <?php echo htmlspecialchars($mSub['student_section']); ?></div>
+                                    </td>
+                                    <td class="p-3 text-center font-mono font-bold border-r border-stone-200">
+                                        <div><?php echo $mSub['total_score']; ?> / <?php echo $mSub['total_possible_score'] ?: count($matrix_questions); ?></div>
+                                        <div class="text-[10px] font-black <?php echo $mSub['percentage'] >= 75 ? 'text-emerald-600' : 'text-rose-600'; ?>"><?php echo number_format($mSub['percentage'], 1); ?>%</div>
+                                    </td>
+                                    <?php foreach ($matrix_questions as $qId => $mq): ?>
+                                        <?php 
+                                            $stAns = $mSub['answers'][$qId] ?? null;
+                                            $hasAnswer = ($stAns !== null);
+                                            $isCorrect = $hasAnswer && ($stAns['evaluation_status'] === 'correct' || (floatval($stAns['awarded_points']) > 0 && floatval($stAns['awarded_points']) >= floatval($stAns['max_points'])));
+                                        ?>
+                                        <td class="p-2.5 text-center">
+                                            <?php if (!$hasAnswer): ?>
+                                                <span class="text-stone-300 font-bold text-[10px]">-</span>
+                                            <?php elseif ($isCorrect): ?>
+                                                <div class="inline-flex flex-col items-center justify-center p-1.5 rounded-lg bg-emerald-50 border border-emerald-200 w-full" title="Student Answer: <?php echo htmlspecialchars($stAns['student_answer']); ?> | Key: <?php echo htmlspecialchars($stAns['correct_answer']); ?>">
+                                                    <span class="text-emerald-700 font-black text-xs flex items-center gap-1">
+                                                        <i class="fa-solid fa-circle-check text-emerald-600"></i> Correct
+                                                    </span>
+                                                    <span class="text-[10px] text-emerald-800 font-medium truncate max-w-[80px]" title="<?php echo htmlspecialchars($stAns['student_answer']); ?>">
+                                                        <?php echo htmlspecialchars($stAns['student_answer'] ?: '✓'); ?>
+                                                    </span>
+                                                </div>
+                                            <?php else: ?>
+                                                <div class="inline-flex flex-col items-center justify-center p-1.5 rounded-lg bg-rose-50 border border-rose-200 w-full" title="Student Answer: <?php echo htmlspecialchars($stAns['student_answer']); ?> | Key: <?php echo htmlspecialchars($stAns['correct_answer']); ?>">
+                                                    <span class="text-rose-700 font-black text-xs flex items-center gap-1">
+                                                        <i class="fa-solid fa-circle-xmark text-rose-600"></i> Incorrect
+                                                    </span>
+                                                    <span class="text-[10px] text-rose-800 font-medium truncate max-w-[80px]" title="<?php echo htmlspecialchars($stAns['student_answer']); ?>">
+                                                        <?php echo htmlspecialchars($stAns['student_answer'] ?: '✗'); ?>
+                                                    </span>
+                                                </div>
+                                            <?php endif; ?>
+                                        </td>
+                                    <?php endforeach; ?>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                        <tfoot>
+                            <tr class="bg-stone-100 border-t-2 border-stone-300 text-stone-800 font-bold text-xs">
+                                <td class="p-3 sticky left-0 bg-stone-100 z-10 border-r border-stone-200">
+                                    <div class="font-black text-xs uppercase text-stone-700">Class Item Summary</div>
+                                    <div class="text-[10px] text-stone-500 font-normal">Passed vs Failed Count</div>
+                                </td>
+                                <td class="p-3 text-center border-r border-stone-200 font-mono text-stone-500">-</td>
+                                <?php foreach ($matrix_questions as $mq): ?>
+                                    <td class="p-2.5 text-center">
+                                        <div class="text-emerald-700 font-black text-[11px]"><?php echo $mq['correct_count']; ?> Correct</div>
+                                        <div class="text-rose-600 font-bold text-[10px]"><?php echo $mq['incorrect_count']; ?> Wrong</div>
+                                    </td>
+                                <?php endforeach; ?>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            <?php else: ?>
+                <div class="text-center py-8 text-stone-400">
+                    <i class="fa-solid fa-table-cells text-3xl mb-2 text-stone-300"></i>
+                    <p class="text-xs font-bold">No student response matrix available for this exam yet.</p>
+                </div>
+            <?php endif; ?>
         </div>
 
         <div class="bg-white border border-stone-200 rounded-2xl p-6 shadow-sm space-y-4">

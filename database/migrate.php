@@ -47,6 +47,7 @@ addColumn($pdo, 'lesson_materials', 'extracted_at', "DATETIME DEFAULT NULL");
 addColumn($pdo, 'lesson_materials', 'mime_type', "VARCHAR(100) DEFAULT NULL");
 addColumn($pdo, 'lesson_materials', 'original_filename', "VARCHAR(255) DEFAULT NULL");
 addColumn($pdo, 'lesson_materials', 'stored_filename', "VARCHAR(255) DEFAULT NULL");
+addColumn($pdo, 'lesson_materials', 'deleted_at', "DATETIME DEFAULT NULL");
 
 echo "\n--- exam_questions ---\n";
 try {

@@ -905,7 +905,7 @@ class GroqService {
                              . "Do NOT invent facts outside the lesson content. "
                              . "Format response strictly as a JSON array of objects without markdown code blocks. "
                              . "Each object MUST have: \"question\" (string), \"type\" (string), \"opt_a\" (string or null), \"opt_b\" (string or null), \"opt_c\" (string or null), \"opt_d\" (string or null), "
-                             . "\"correct_answer\" (string), \"difficulty\" (string: 'easy', 'medium', or 'hard'), \"formula_latex\" (string or null), \"matching_pairs\" (object or null), \"explanation\" (string: for problem solving and calculation items, provide complete step-by-step mathematical solution with given values, formula, and units), \"points\" (int), "
+                             . "\"correct_answer\" (string: for multiple_choice questions, MUST start with the option letter like 'A. [Option text]' or 'A' matching opt_a, opt_b, opt_c, or opt_d), \"difficulty\" (string: 'easy', 'medium', or 'hard'), \"formula_latex\" (string or null), \"matching_pairs\" (object or null), \"explanation\" (string: for problem solving and calculation items, provide complete step-by-step mathematical solution with given values, formula, and units), \"points\" (int), "
                              . "\"source_lesson_ids\" (array of integers, e.g. [" . implode(',', $chunkLessonIds) . "]), \"source_topic\" (string), \"source_academic_period\" (string), \"source_confidence\" (string: 'high', 'medium', or 'review_required').";
 
                 $payload = [
@@ -1192,7 +1192,7 @@ class GroqService {
                                   . "Do NOT invent facts outside the lesson content. "
                                   . "Format response strictly as a JSON array of objects without markdown code blocks. "
                                   . "Each object MUST have: \"question\" (string), \"type\" (string), \"opt_a\" (string or null), \"opt_b\" (string or null), \"opt_c\" (string or null), \"opt_d\" (string or null), "
-                                  . "\"correct_answer\" (string), \"difficulty\" (string), \"formula_latex\" (string or null), \"matching_pairs\" (object or null), \"explanation\" (string), \"points\" (int), "
+                                   . "\"correct_answer\" (string: for multiple_choice questions, MUST start with the option letter like 'A. [Option text]' or 'A' matching opt_a, opt_b, opt_c, or opt_d), \"difficulty\" (string), \"formula_latex\" (string or null), \"matching_pairs\" (object or null), \"explanation\" (string), \"points\" (int), "
                                   . "\"source_lesson_ids\" (array of integers, e.g. [" . implode(',', $targetChunkLessonIds) . "]), \"source_topic\" (string), \"source_academic_period\" (string), \"source_confidence\" (string: 'high', 'medium', or 'review_required').";
 
                     $refillPayload = [
@@ -1529,7 +1529,7 @@ class GroqService {
                 . "Format response strictly as a JSON array of objects without markdown fences or code blocks. "
                 . "Each object MUST have: \"question\" (string), \"type\" (string), "
                 . "\"opt_a\" (string or null), \"opt_b\" (string or null), \"opt_c\" (string or null), \"opt_d\" (string or null), "
-                . "\"correct_answer\" (string), \"difficulty\" (string: 'easy', 'medium', or 'hard'), \"formula_latex\" (string or null), \"matching_pairs\" (object or null), "
+                . "\"correct_answer\" (string: for multiple_choice questions, MUST start with the option letter like 'A. [Option text]' or 'A' matching opt_a, opt_b, opt_c, or opt_d), \"difficulty\" (string: 'easy', 'medium', or 'hard'), \"formula_latex\" (string or null), \"matching_pairs\" (object or null), "
                 . "and \"explanation\" (string: for problem solving and calculation items, provide complete step-by-step mathematical solution with given values, formula, and units), "
                 . "\"source_lesson_ids\" (array of integers, e.g. [12]), \"source_topic\" (string), \"source_academic_period\" (string), \"source_confidence\" (string: 'high', 'medium', or 'review_required').";
 
