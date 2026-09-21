@@ -193,7 +193,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_material'])) {
     validateCSRFToken();
     try {
         $delete_id = intval($_POST['delete_id'] ?? 0);
-        $stmtFindMaterial = $pdo->prepare("SELECT file_path, title FROM lesson_materials WHERE id = ? AND teacher_id = ? AND deleted_at IS NULL");
+        $stmtFindMaterial = $pdo->prepare("SELECT file_path, title, teacher_id FROM lesson_materials WHERE id = ? AND (teacher_id = ? OR is_demo = 1 OR teacher_id IN (SELECT id FROM users WHERE role = 'admin')) AND deleted_at IS NULL");
         $stmtFindMaterial->execute([$delete_id, getCurrentUserId()]);
         $material = $stmtFindMaterial->fetch(PDO::FETCH_ASSOC);
 
@@ -213,8 +213,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_material'])) {
 $materials = [];
 try {
     ensureLessonMaterialsSchema($pdo);
-    $stmtMaterials = $pdo->prepare("SELECT * FROM lesson_materials WHERE teacher_id = ? AND deleted_at IS NULL ORDER BY id DESC");
-    $stmtMaterials->execute([getCurrentUserId()]);
+    $stmtMaterials = $pdo->prepare("SELECT * FROM lesson_materials WHERE (teacher_id = ? OR is_demo = 1 OR teacher_id IN (SELECT id FROM users WHERE role = 'admin')) AND deleted_at IS NULL ORDER BY (teacher_id = ?) DESC, id DESC");
+    $stmtMaterials->execute([getCurrentUserId(), getCurrentUserId()]);
     $materials = $stmtMaterials->fetchAll(PDO::FETCH_ASSOC) ?: [];
 } catch (Throwable $e) {
     error_log("Failed querying lesson_materials: " . $e->getMessage());

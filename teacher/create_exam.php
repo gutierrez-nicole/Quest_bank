@@ -11,16 +11,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_exam'])) {
     validateCSRFToken();
     $delete_exam_id = intval($_POST['delete_exam_id'] ?? 0);
     if ($delete_exam_id > 0) {
-        $stmtCheck = $pdo->prepare("SELECT id, title FROM exams WHERE id = ? AND teacher_id = ?");
-        $stmtCheck->execute([$delete_exam_id, $_SESSION['user_id']]);
+        $stmtCheck = $pdo->prepare("SELECT id, title, teacher_id FROM exams WHERE id = ?");
+        $stmtCheck->execute([$delete_exam_id]);
         $examToDelete = $stmtCheck->fetch(PDO::FETCH_ASSOC);
-        if ($examToDelete) {
-            $stmtDel = $pdo->prepare("DELETE FROM exams WHERE id = ? AND teacher_id = ?");
-            $stmtDel->execute([$delete_exam_id, $_SESSION['user_id']]);
+        if ($examToDelete && ($examToDelete['teacher_id'] == $_SESSION['user_id'] || ($_SESSION['role'] ?? '') === 'admin')) {
+            $stmtDel = $pdo->prepare("DELETE FROM exams WHERE id = ?");
+            $stmtDel->execute([$delete_exam_id]);
             logActivity("Deleted exam '{$examToDelete['title']}' (ID: {$delete_exam_id}) from question bank.");
             $success_msg = "Exam '{$examToDelete['title']}' deleted successfully.";
         } else {
-            $error_msg = "Unauthorized: Exam not found or does not belong to your account.";
+            $error_msg = "Unauthorized: You can only delete exams created by your account.";
         }
     } else {
         $error_msg = "Invalid exam ID for deletion.";
@@ -123,8 +123,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_exam'])) {
     }
 }
 
-$stmtExams = $pdo->prepare("SELECT * FROM exams WHERE teacher_id = ? ORDER BY id DESC");
-$stmtExams->execute([$_SESSION['user_id']]);
+$stmtExams = $pdo->prepare("
+    SELECT e.*, u.fullname as teacher_name 
+    FROM exams e 
+    LEFT JOIN users u ON e.teacher_id = u.id 
+    WHERE e.teacher_id = ? OR e.teacher_id IN (SELECT id FROM users WHERE role IN ('teacher', 'admin')) OR e.is_demo = 1
+    ORDER BY (e.teacher_id = ?) DESC, e.id DESC
+");
+$stmtExams->execute([$_SESSION['user_id'], $_SESSION['user_id']]);
 $existing_exams = $stmtExams->fetchAll(PDO::FETCH_ASSOC);
 
 $qStmt = $pdo->prepare("SELECT * FROM exam_questions WHERE exam_id = ? ORDER BY id ASC");
@@ -154,7 +160,7 @@ try {
             MAX(e.title) as latest_exam_title
         FROM exam_questions q
         JOIN exams e ON q.exam_id = e.id
-        WHERE e.teacher_id = ?
+        WHERE e.teacher_id = ? OR e.teacher_id IN (SELECT id FROM users WHERE role IN ('teacher', 'admin')) OR e.is_demo = 1
         GROUP BY q.question_text, q.question_type
         ORDER BY usage_count DESC, sample_id DESC
     ");

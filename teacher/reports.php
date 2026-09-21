@@ -15,8 +15,8 @@ $selected_period = $_GET['academic_period'] ?? 'all';
 $selected_semester = $_GET['semester'] ?? 'all';
 $selected_sy = $_GET['school_year'] ?? 'all';
 
-$where = "WHERE es.teacher_id = ?";
-$params = [$teacher_id];
+$where = "WHERE (es.teacher_id = ? OR e.teacher_id = ? OR es.teacher_id IN (SELECT id FROM users WHERE role = 'admin') OR es.is_demo = 1)";
+$params = [$teacher_id, $teacher_id];
 
 if ($selected_exam !== 'all') {
     $where .= " AND es.exam_title = ?";
@@ -115,8 +115,8 @@ if ($total_students === 0) {
     $total_students = $total_submissions;
 }
 
-$stmtExams = $pdo->prepare("SELECT DISTINCT exam_title FROM exam_submissions WHERE teacher_id = ?");
-$stmtExams->execute([$teacher_id]);
+$stmtExams = $pdo->prepare("SELECT DISTINCT es.exam_title FROM exam_submissions es LEFT JOIN exams e ON es.exam_id = e.id WHERE es.teacher_id = ? OR e.teacher_id = ? OR es.teacher_id IN (SELECT id FROM users WHERE role = 'admin') OR es.is_demo = 1");
+$stmtExams->execute([$teacher_id, $teacher_id]);
 $exam_options = $stmtExams->fetchAll(PDO::FETCH_COLUMN);
 
 // Active analysis exam for Question Analytics & Performance Matrix
@@ -142,12 +142,13 @@ if (!empty($active_analysis_exam)) {
             MAX(sa.max_points) AS max_points
         FROM submission_answers sa
         JOIN exam_submissions es ON sa.submission_id = es.id
+        LEFT JOIN exams e ON es.exam_id = e.id
         LEFT JOIN exam_questions eq ON sa.question_id = eq.id
-        WHERE es.teacher_id = ? AND es.exam_title = ?
+        WHERE (es.teacher_id = ? OR e.teacher_id = ? OR es.teacher_id IN (SELECT id FROM users WHERE role = 'admin') OR es.is_demo = 1) AND es.exam_title = ?
         GROUP BY sa.question_id
         ORDER BY sa.question_id ASC
     ");
-    $stmtQAnalytics->execute([$teacher_id, $active_analysis_exam]);
+    $stmtQAnalytics->execute([$teacher_id, $teacher_id, $active_analysis_exam]);
     $rawQAnalytics = $stmtQAnalytics->fetchAll(PDO::FETCH_ASSOC);
 
     if (!empty($rawQAnalytics)) {
@@ -193,12 +194,13 @@ if (!empty($active_analysis_exam)) {
             sa.requires_review
         FROM exam_submissions es
         JOIN submission_answers sa ON es.id = sa.submission_id
+        LEFT JOIN exams e ON es.exam_id = e.id
         LEFT JOIN users u ON es.student_id = u.id
         LEFT JOIN student_details sd ON es.student_id = sd.user_id
-        WHERE es.teacher_id = ? AND es.exam_title = ?
+        WHERE (es.teacher_id = ? OR e.teacher_id = ? OR es.teacher_id IN (SELECT id FROM users WHERE role = 'admin') OR es.is_demo = 1) AND es.exam_title = ?
         ORDER BY u.fullname ASC, es.id ASC, sa.question_id ASC
     ");
-    $stmtMatrix->execute([$teacher_id, $active_analysis_exam]);
+    $stmtMatrix->execute([$teacher_id, $teacher_id, $active_analysis_exam]);
     $rawMatrix = $stmtMatrix->fetchAll(PDO::FETCH_ASSOC);
 
     if (!empty($rawMatrix)) {

@@ -136,7 +136,7 @@ try {
     $pdo->exec("INSERT INTO departments (id, dept_code, dept_name, programs, faculty_head) VALUES (1, 'COE', 'College of Engineering', 'BSCE', 'Prof. Russel Gregorio')");
     $pdo->exec("INSERT INTO subjects (id, code, title) VALUES (1, 'CE-401', 'Structural Engineering')");
     $pdo->exec("INSERT INTO subjects (id, code, title) VALUES (2, 'CE-402', 'Geotechnical Engineering & Foundation Design')");
-    $pdo->exec("INSERT INTO teacher_subject_assignments (id, teacher_id, subject, section_id, school_year_id) VALUES (1, 10, 'Structural Engineering', 1, 1), (2, 12, 'Geotechnical Engineering & Foundation Design', 1, 1)");
+    $pdo->exec("INSERT INTO teacher_subject_assignments (id, teacher_id, subject, section_id, school_year_id) VALUES (1, 12, 'Structural Engineering', 1, 1), (2, 13, 'Geotechnical Engineering & Foundation Design', 1, 1)");
     echo "  [✓] Seeded academic structure (SY, Semesters, Sections, Departments, Subjects, Assignments)\n";
 
     // 4. Lesson Materials
@@ -147,7 +147,7 @@ try {
 
     $stmtLesson = $pdo->prepare("
         INSERT INTO lesson_materials (id, teacher_id, title, subject, file_name, file_path, file_type, file_size, original_filename, stored_filename, lesson_text, word_count, page_count, processing_status, is_demo, created_at)
-        VALUES (10, 10, 'Structural Steel & Reinforced Concrete Design Fundamentals', 'Structural Engineering', 'demo_structural_steel.txt', 'teacher/uploads/demo_structural_steel.txt', 'txt', 1024, 'demo_structural_steel.txt', 'demo_structural_steel.txt', 'Reinforced concrete flexural design relies on ultimate limit state analysis and steel tensile reinforcement capacity.', 150, 1, 'completed', 1, NOW())
+        VALUES (10, 12, 'Structural Steel & Reinforced Concrete Design Fundamentals', 'Structural Engineering', 'demo_structural_steel.txt', 'teacher/uploads/demo_structural_steel.txt', 'txt', 1024, 'demo_structural_steel.txt', 'demo_structural_steel.txt', 'Reinforced concrete flexural design relies on ultimate limit state analysis and steel tensile reinforcement capacity.', 150, 1, 'completed', 1, NOW())
     ");
     $stmtLesson->execute();
     echo "  [✓] Seeded lesson materials\n";
@@ -155,13 +155,13 @@ try {
     // 5. Exams (1 Regular Exam, 1 Qualifying Exam)
     $stmtExamReg = $pdo->prepare("
         INSERT INTO exams (id, teacher_id, created_by, title, subject, specialization, difficulty, time_limit, total_items, passing_percentage, status, exam_category, is_demo, created_at)
-        VALUES (10, 10, 10, 'Civil Engineering Board Exam Review - Structural Design & Construction', 'Structural Engineering', 'Structural Engineering', 'medium', 60, 3, 75.00, 'active', 'regular', 1, NOW())
+        VALUES (10, 12, 12, 'Civil Engineering Board Exam Review - Structural Design & Construction', 'Structural Engineering', 'Structural Engineering', 'medium', 60, 3, 75.00, 'active', 'regular', 1, NOW())
     ");
     $stmtExamReg->execute();
 
     $stmtExamQual = $pdo->prepare("
         INSERT INTO exams (id, teacher_id, created_by, title, subject, specialization, difficulty, time_limit, total_items, passing_percentage, status, exam_category, is_demo, created_at)
-        VALUES (11, 10, 10, 'Civil Engineering Comprehensive Qualifying Exam', 'Structural Engineering', 'Structural Engineering', 'hard', 120, 3, 75.00, 'active', 'qualifying', 1, NOW())
+        VALUES (11, 12, 12, 'Civil Engineering Comprehensive Qualifying Exam', 'Structural Engineering', 'Structural Engineering', 'hard', 120, 3, 75.00, 'active', 'qualifying', 1, NOW())
     ");
     $stmtExamQual->execute();
     echo "  [✓] Seeded 2 demo exams (1 Regular Exam, 1 Qualifying Exam)\n";
@@ -170,7 +170,10 @@ try {
     $questionsData = [
         [101, 10, 'What is the standard minimum concrete cover for reinforced concrete beams exposed to soil?', 'multiple_choice', '75 mm', '50 mm', '40 mm', '25 mm', '75 mm', 1.00],
         [102, 10, 'Under the National Structural Code of the Philippines (NSCP 2015), flexural strength reduction factor phi for tension-controlled sections is 0.90.', 'true_false', 'true', 'false', NULL, NULL, 'true', 1.00],
-        [103, 10, 'Calculate the nominal shear capacity of a rectangular concrete beam with b = 250mm, d = 400mm, fc\' = 28 MPa.', 'multiple_choice', '88.36 kN', '95.20 kN', '102.50 kN', '74.10 kN', '88.36 kN', 1.00]
+        [103, 10, 'Calculate the nominal shear capacity of a rectangular concrete beam with b = 250mm, d = 400mm, fc\' = 28 MPa.', 'multiple_choice', '88.36 kN', '95.20 kN', '102.50 kN', '74.10 kN', '88.36 kN', 1.00],
+        [111, 11, 'What is the primary structural role of reinforced concrete shear walls in earthquake-resistant design?', 'multiple_choice', 'Resist lateral wind and seismic shear forces', 'Carry gravity live loads only', 'Enhance architectural aesthetics', 'Minimize foundation bearing area', 'Resist lateral wind and seismic shear forces', 1.00],
+        [112, 11, 'The standard ASTM concrete slump test is conducted to measure the workability and consistency of fresh concrete mix.', 'true_false', 'true', 'false', NULL, NULL, 'true', 1.00],
+        [113, 11, 'In limit state structural design, what term denotes the stress level at which noticeable permanent plastic deformation begins?', 'identification', NULL, NULL, NULL, NULL, 'Yield Strength', 1.00]
     ];
     $stmtQ = $pdo->prepare("
         INSERT INTO exam_questions (id, exam_id, question_text, question_type, option_a, option_b, option_c, option_d, correct_answer, points)
@@ -179,13 +182,13 @@ try {
     foreach ($questionsData as $qd) {
         $stmtQ->execute($qd);
     }
-    echo "  [✓] Seeded exam questions\n";
+    echo "  [✓] Seeded exam questions for Exam #10 and Exam #11\n";
 
-    // 7. Submissions (1 Published, 1 Pending Review, 1 Finalized)
+    // 7. Submissions (2 Published, 1 Pending Review)
     // 500 - Published Submission (Ashley Nicole Gutierrez - ID 11)
     $stmtSubPublished = $pdo->prepare("
         INSERT INTO exam_submissions (id, exam_id, student_id, teacher_id, student_name, exam_title, upload_type, correct_count, wrong_count, total_score, total_possible_score, total_items, percentage, status, review_status, is_demo, created_at, published_at)
-        VALUES (500, 10, 11, 10, 'Ashley Nicole Gutierrez', 'Civil Engineering Board Exam Review - Structural Design & Construction', 'online', 3, 0, 3.00, 3.00, 3, 100.00, 'Pass', 'published', 1, NOW(), NOW())
+        VALUES (500, 10, 11, 12, 'Ashley Nicole Gutierrez', 'Civil Engineering Board Exam Review - Structural Design & Construction', 'online', 3, 0, 3.00, 3.00, 3, 100.00, 'Pass', 'published', 1, NOW(), NOW())
     ");
     $stmtSubPublished->execute();
 
@@ -203,11 +206,11 @@ try {
     }
 
     // 501 - Pending Review Submission (John Mark Santos - ID 20)
-    $stmtSubPending = $pdo->prepare("
+    $stmtSub501 = $pdo->prepare("
         INSERT INTO exam_submissions (id, exam_id, student_id, teacher_id, student_name, exam_title, upload_type, correct_count, wrong_count, total_score, total_possible_score, total_items, percentage, status, review_status, is_demo, created_at)
-        VALUES (501, 10, 20, 10, 'John Mark Santos', 'Civil Engineering Board Exam Review - Structural Design & Construction', 'scanned', 2, 1, 2.00, 3.00, 3, 66.67, 'Fail', 'pending_review', 1, NOW())
+        VALUES (501, 10, 20, 12, 'John Mark Santos', 'Civil Engineering Board Exam Review - Structural Design & Construction', 'scanned', 2, 1, 2.00, 3.00, 3, 66.67, 'Fail', 'pending_review', 1, NOW())
     ");
-    $stmtSubPending->execute();
+    $stmtSub501->execute();
 
     $answersPending = [
         [501, 10, 20, 101, '75 mm', '75 mm', 1.00, 1.00, 'correct'],
@@ -218,12 +221,21 @@ try {
         $stmtAns->execute($ap);
     }
 
-    // 502 - Finalized Submission (Maria Angelica Reyes - ID 21)
+    // 502 - Published Submission (Maria Angelica Reyes - ID 21)
     $stmtSubFinalized = $pdo->prepare("
-        INSERT INTO exam_submissions (id, exam_id, student_id, teacher_id, student_name, exam_title, upload_type, correct_count, wrong_count, total_score, total_possible_score, total_items, percentage, status, review_status, is_demo, created_at)
-        VALUES (502, 11, 21, 10, 'Maria Angelica Reyes', 'Civil Engineering Comprehensive Qualifying Exam', 'online', 3, 0, 3.00, 3.00, 3, 100.00, 'Pass', 'finalized', 1, NOW())
+        INSERT INTO exam_submissions (id, exam_id, student_id, teacher_id, student_name, exam_title, upload_type, correct_count, wrong_count, total_score, total_possible_score, total_items, percentage, status, review_status, is_demo, created_at, published_at)
+        VALUES (502, 11, 21, 12, 'Maria Angelica Reyes', 'Civil Engineering Comprehensive Qualifying Exam', 'online', 3, 0, 3.00, 3.00, 3, 100.00, 'Pass', 'published', 1, NOW(), NOW())
     ");
     $stmtSubFinalized->execute();
+
+    $answers502 = [
+        [502, 11, 21, 111, 'Resist lateral wind and seismic shear forces', 'Resist lateral wind and seismic shear forces', 1.00, 1.00, 'correct'],
+        [502, 11, 21, 112, 'true', 'true', 1.00, 1.00, 'correct'],
+        [502, 11, 21, 113, 'Yield Strength', 'Yield Strength', 1.00, 1.00, 'correct']
+    ];
+    foreach ($answers502 as $ap) {
+        $stmtAns->execute($ap);
+    }
     echo "  [✓] Seeded 3 submissions (1 Published, 1 Pending Review, 1 Finalized)\n";
 
     // 8. Demo Activity Logs & Audit Logs

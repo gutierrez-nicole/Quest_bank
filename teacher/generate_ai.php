@@ -35,7 +35,7 @@ try {
                COALESCE(academic_period, 'general') AS academic_period,
                semester, school_year, year_level, program, processing_status
         FROM lesson_materials 
-        WHERE teacher_id = ? AND deleted_at IS NULL
+        WHERE (teacher_id = ? OR is_demo = 1 OR teacher_id IN (SELECT id FROM users WHERE role = 'admin')) AND deleted_at IS NULL
         ORDER BY FIELD(COALESCE(academic_period,'general'), 'general','prelim','midterm','finals'), id DESC
     ");
     $stmtMaterials->execute([$teacher_id]);

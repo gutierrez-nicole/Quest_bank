@@ -37,6 +37,18 @@ $msgType = 'danger';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     validateCSRFToken();
+
+    if (isset($_POST['skip_reset_demo'])) {
+        $stmtUpd = $pdo->prepare("UPDATE users SET force_password_reset = 0 WHERE id = ?");
+        $stmtUpd->execute([$userId]);
+        regenerateSecureSession();
+        SessionManagementService::trackSession($userId);
+        if ($user['role'] === 'student') header("Location: student/dashboard.php");
+        elseif ($user['role'] === 'teacher') header("Location: teacher/dashboard.php");
+        elseif ($user['role'] === 'admin') header("Location: admin/dashboard.php");
+        exit();
+    }
+
     $currentPass = $_POST['current_password'] ?? '';
     $newPass = $_POST['new_password'] ?? '';
     $confirmPass = $_POST['confirm_password'] ?? '';
@@ -119,7 +131,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <input type="password" name="confirm_password" class="form-control" minlength="8" required>
                 </div>
                 <button type="submit" class="btn btn-warning w-100 font-weight-bold mb-2"><i class="fas fa-lock me-1"></i>Update Password & Continue</button>
-                <a href="/index.php?action=logout" class="btn btn-outline-secondary w-100 text-center text-muted border-0 small"><i class="fas fa-sign-out-alt me-1"></i>Cancel & Log Out</a>
+                <button type="submit" name="skip_reset_demo" value="1" class="btn btn-outline-secondary w-100 font-weight-bold mb-2 small"><i class="fas fa-forward me-1"></i>Skip for Demo / Continue with Current Password</button>
+                <a href="index.php?action=logout" class="btn btn-link w-100 text-center text-muted border-0 small text-decoration-none"><i class="fas fa-sign-out-alt me-1"></i>Cancel & Log Out</a>
             </form>
         </div>
     </div>

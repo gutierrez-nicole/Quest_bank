@@ -16,13 +16,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['restore_lesson'])) {
     validateCSRFToken();
     $lesson_id = intval($_POST['lesson_id'] ?? 0);
     if ($lesson_id > 0) {
-        $stmtFind = $pdo->prepare("SELECT title FROM lesson_materials WHERE id = ? AND teacher_id = ? AND deleted_at IS NOT NULL");
+        $stmtFind = $pdo->prepare("SELECT title FROM lesson_materials WHERE id = ? AND (teacher_id = ? OR is_demo = 1 OR teacher_id IN (SELECT id FROM users WHERE role = 'admin')) AND deleted_at IS NOT NULL");
         $stmtFind->execute([$lesson_id, $teacher_id]);
         $lesson = $stmtFind->fetch(PDO::FETCH_ASSOC);
 
         if ($lesson) {
-            $stmtRestore = $pdo->prepare("UPDATE lesson_materials SET deleted_at = NULL WHERE id = ? AND teacher_id = ?");
-            $stmtRestore->execute([$lesson_id, $teacher_id]);
+            $stmtRestore = $pdo->prepare("UPDATE lesson_materials SET deleted_at = NULL WHERE id = ?");
+            $stmtRestore->execute([$lesson_id]);
             logActivity("Restored deleted lesson material '{$lesson['title']}' (ID: {$lesson_id}).");
             $success_msg = "Lesson material '{$lesson['title']}' was successfully restored! It is now accessible in Upload Lessons and Exam Generation.";
         } else {
@@ -37,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['restore_lesson'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['restore_all_lessons'])) {
     validateCSRFToken();
     try {
-        $stmtRestoreAll = $pdo->prepare("UPDATE lesson_materials SET deleted_at = NULL WHERE teacher_id = ? AND deleted_at IS NOT NULL");
+        $stmtRestoreAll = $pdo->prepare("UPDATE lesson_materials SET deleted_at = NULL WHERE (teacher_id = ? OR is_demo = 1 OR teacher_id IN (SELECT id FROM users WHERE role = 'admin')) AND deleted_at IS NOT NULL");
         $stmtRestoreAll->execute([$teacher_id]);
         $restoredCount = $stmtRestoreAll->rowCount();
         if ($restoredCount > 0) {
@@ -56,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['permanent_delete_less
     validateCSRFToken();
     $lesson_id = intval($_POST['lesson_id'] ?? 0);
     if ($lesson_id > 0) {
-        $stmtFind = $pdo->prepare("SELECT title, file_path FROM lesson_materials WHERE id = ? AND teacher_id = ? AND deleted_at IS NOT NULL");
+        $stmtFind = $pdo->prepare("SELECT title, file_path FROM lesson_materials WHERE id = ? AND (teacher_id = ? OR is_demo = 1 OR teacher_id IN (SELECT id FROM users WHERE role = 'admin')) AND deleted_at IS NOT NULL");
         $stmtFind->execute([$lesson_id, $teacher_id]);
         $lesson = $stmtFind->fetch(PDO::FETCH_ASSOC);
 
@@ -67,8 +67,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['permanent_delete_less
                     @unlink($full_path);
                 }
             }
-            $stmtDel = $pdo->prepare("DELETE FROM lesson_materials WHERE id = ? AND teacher_id = ?");
-            $stmtDel->execute([$lesson_id, $teacher_id]);
+            $stmtDel = $pdo->prepare("DELETE FROM lesson_materials WHERE id = ?");
+            $stmtDel->execute([$lesson_id]);
             logActivity("Permanently deleted lesson material '{$lesson['title']}' (ID: {$lesson_id}).");
             $success_msg = "Lesson material '{$lesson['title']}' was permanently removed.";
         } else {
@@ -175,14 +175,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['restore_lessons_json'
 // Fetch deleted lessons (Recycle Bin)
 $stmtDeleted = $pdo->prepare("
     SELECT * FROM lesson_materials 
-    WHERE teacher_id = ? AND deleted_at IS NOT NULL 
+    WHERE (teacher_id = ? OR is_demo = 1 OR teacher_id IN (SELECT id FROM users WHERE role = 'admin')) AND deleted_at IS NOT NULL 
     ORDER BY deleted_at DESC
 ");
 $stmtDeleted->execute([$teacher_id]);
 $deletedLessons = $stmtDeleted->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
 // Fetch counts for summary cards
-$stmtCountActive = $pdo->prepare("SELECT COUNT(*) FROM lesson_materials WHERE teacher_id = ? AND deleted_at IS NULL");
+$stmtCountActive = $pdo->prepare("SELECT COUNT(*) FROM lesson_materials WHERE (teacher_id = ? OR is_demo = 1 OR teacher_id IN (SELECT id FROM users WHERE role = 'admin')) AND deleted_at IS NULL");
 $stmtCountActive->execute([$teacher_id]);
 $activeCount = (int)$stmtCountActive->fetchColumn();
 
