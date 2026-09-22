@@ -130,7 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
                 $submittedAnswers = $parsedOcr['answers'];
 
                 if (!empty($_POST['corrected_ocr_text'])) {
-                    $correctedText = trim(sanitizeInput($_POST['corrected_ocr_text']));
+                    $correctedText = trim($_POST['corrected_ocr_text']);
                     $parsedCorr = AnswerSheetParser::parseAnswerSheet($correctedText, $examQuestions);
                     $submittedAnswers = $parsedCorr['answers'];
                 }
@@ -139,9 +139,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
                     $pageCount = max(count($processedFileEntries), intval($ocrRes['page_count'] ?? 1));
                     $fileMeta = [
                         'ocr_text' => $ocrText,
+                        'corrected_ocr_text' => $correctedText ?? null,
+                        'extraction_mode' => $ocrRes['extraction_mode'] ?? 'unknown',
+                        'pages' => $ocrRes['pages'] ?? [],
+                        'ocr_error' => $ocrRes['error'] ?? null,
                         'ocr_confidence' => $ocrRes['confidence'],
                         'ocr_status' => $ocrRes['status'],
-                        'suggested_manual_review' => ($ocrRes['confidence'] < 75.0 || $parsedOcr['requires_review']) ? 1 : 0,
+                        'suggested_manual_review' => (!empty($ocrRes['suggested_manual_review']) || (($parsedCorr ?? $parsedOcr)['requires_review'])) ? 1 : 0,
                         'page_count' => $pageCount,
                         'file_path' => 'uploads/ocr_sheets/' . basename($processedFileEntries[0]['path']),
                         'original_filename' => (count($processedFileEntries) > 1) 

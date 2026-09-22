@@ -28,7 +28,7 @@ class AnswerSheetParser {
 
         foreach ($lines as $line) {
             $lineClean = trim($line);
-            if (empty($lineClean)) continue;
+            if ($lineClean === '' || preg_match('/^--- Page \d+ ---$/', $lineClean)) continue;
 
             if (preg_match($pattern, $lineClean, $matches)) {
                 $num = intval($matches[1]);

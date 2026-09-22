@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../database.php';
+require_once __DIR__ . '/StudentResultService.php';
 require_once __DIR__ . '/../../includes/security.php';
 
 class AuthorizationService {
@@ -99,7 +100,7 @@ class AuthorizationService {
         }
 
         if ($role === 'student') {
-            $stmt = $pdo->prepare("SELECT id FROM exam_submissions WHERE id = ? AND student_id = ? AND review_status = 'published'");
+            $stmt = $pdo->prepare("SELECT es.id FROM exam_submissions es WHERE es.id = ? AND es.student_id = ? AND " . StudentResultService::publishedSql());
             $stmt->execute([$submissionId, $userId]);
             return ($stmt->fetchColumn() !== false);
         }

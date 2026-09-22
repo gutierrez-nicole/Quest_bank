@@ -10,9 +10,12 @@ class EvaluationService {
 
     public static function evaluateAndSaveSubmission($examId, $studentId, array $submittedAnswers, $uploadType = 'online', $ocrResult = null, $fileInfo = []) {
         $fileMeta = [
+            'extraction_mode' => $ocrResult['extraction_mode'] ?? 'not_applicable',
+            'pages' => $ocrResult['pages'] ?? [],
+            'ocr_error' => $ocrResult['error'] ?? null,
             'ocr_text' => $ocrResult['text'] ?? ($ocrResult['ocr_text'] ?? null),
-            'ocr_confidence' => $ocrResult['confidence'] ?? 100.00,
-            'ocr_status' => $ocrResult['status'] ?? 'completed',
+            'ocr_confidence' => $ocrResult['confidence'] ?? null,
+            'ocr_status' => $ocrResult['status'] ?? 'pending',
             'suggested_manual_review' => !empty($ocrResult['suggested_manual_review']) ? 1 : 0,
             'page_count' => $ocrResult['page_count'] ?? 1,
             'file_path' => $fileInfo['file_path'] ?? null,

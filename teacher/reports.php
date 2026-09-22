@@ -3,8 +3,106 @@ require_once __DIR__ . '/../app/bootstrap.php';
 
 AuthService::enforceRole('teacher');
 $pdo = getDBConnection();
+$publishedSql = StudentResultService::publishedSql();
 
 $teacher_id = $_SESSION['user_id'];
+
+$success_msg = $_SESSION['report_success'] ?? '';
+unset($_SESSION['report_success']);
+$error_msg = "";
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_review_status'])) {
+    validateCSRFToken();
+    $submission_id = intval($_POST['submission_id'] ?? 0);
+    $new_status = $_POST['new_review_status'] ?? '';
+    $remarks = trim(sanitizeInput($_POST['teacher_remarks'] ?? ''));
+
+    if ($submission_id > 0) {
+        try {
+            AuthorizationService::enforceSubmissionAccess($teacher_id, $submission_id);
+            if (!empty($_POST['confirm_ocr_review'])) ResultWorkflowService::acknowledgeOcrReview($submission_id, $teacher_id, $remarks);
+            $wfRes = ResultWorkflowService::transitionStatus($submission_id, $new_status, $teacher_id, $remarks);
+
+            $success_msg = "Submission #{$submission_id} review status updated to " . ucfirst(str_replace('_', ' ', $wfRes['new_status'])) . "!";
+        } catch (Exception $e) {
+            $error_msg = "Workflow Error: " . $e->getMessage();
+        }
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['override_item_score'])) {
+    validateCSRFToken();
+    $submission_id = intval($_POST['submission_id'] ?? 0);
+    $question_id = intval($_POST['question_id'] ?? 0);
+    $new_points = floatval($_POST['new_points'] ?? 0);
+    $reason = trim(sanitizeInput($_POST['override_reason'] ?? ''));
+    $new_answer = isset($_POST['new_answer']) ? trim($_POST['new_answer']) : null;
+    if ($new_answer === '') $new_answer = null; // An omitted optional correction preserves the student's answer.
+
+    if ($submission_id > 0 && $question_id > 0) {
+        try {
+            $res = ResultWorkflowService::overrideScore($submission_id, $question_id, $new_points, $teacher_id, $reason, $new_answer);
+            $success_msg = "Item #{$question_id} score overridden to {$new_points} pts! Recalculated Total: {$res['recalculated_total_score']} ({$res['recalculated_percentage']}%)";
+        } catch (Exception $e) {
+            $error_msg = "Item Override Error: " . $e->getMessage();
+        }
+    } else {
+        $error_msg = "Item Override Error: Invalid submission ID or question ID provided.";
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rerun_ocr_ai'])) {
+    validateCSRFToken();
+    $submission_id = intval($_POST['submission_id'] ?? 0);
+    if ($submission_id > 0) {
+        try {
+            $res = ResultWorkflowService::reprocessOcr($submission_id, $teacher_id, "Teacher requested OCR reprocessing via Reports interface");
+            $success_msg = "Re-ran OCR evaluation using production scoring engine for submission #{$submission_id}! Recalculated Score: {$res['new_total']} / {$res['total_possible']} ({$res['percentage']}%) - {$res['status']}";
+        } catch (Exception $e) {
+            $error_msg = "OCR Reprocessing Error: " . $e->getMessage();
+        }
+    } else {
+        $error_msg = "OCR Reprocessing Error: Invalid submission ID.";
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_publish'])) {
+    validateCSRFToken();
+    $sub_ids = $_POST['submission_ids'] ?? [];
+    if (is_array($sub_ids) && !empty($sub_ids)) {
+        $sub_ids = array_map('intval', $sub_ids);
+        $res = ResultWorkflowService::bulkPublishSubmissions($sub_ids, $teacher_id, 'Bulk published by teacher');
+        $success_msg = "Successfully published {$res['published_count']} submission(s)!";
+        if (!empty($res['errors'])) {
+            $error_msg = "Notice during bulk publish: " . implode('; ', $res['errors']);
+        }
+    } else {
+        $error_msg = "No submissions selected for bulk publication.";
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['publish_entire_exam'])) {
+    validateCSRFToken();
+    $exam_id = intval($_POST['exam_id'] ?? 0);
+    if ($exam_id > 0) {
+        try {
+            $res = ResultWorkflowService::publishEntireExam($exam_id, $teacher_id, 'Published entire exam by teacher');
+            $success_msg = "Successfully published all {$res['published_count']} submission(s) for Exam #{$exam_id}!";
+            if (!empty($res['errors'])) {
+                $error_msg = "Notice during exam publication: " . implode('; ', $res['errors']);
+            }
+        } catch (Exception $e) {
+            $error_msg = "Exam Publication Error: " . $e->getMessage();
+        }
+    } else {
+        $error_msg = "Invalid exam ID specified for publication.";
+    }
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $success_msg !== '' && $error_msg === '') {
+    $_SESSION['report_success'] = $success_msg;
+    header('Location: reports.php');
+    exit;
+}
 
 $selected_exam = $_GET['exam_title'] ?? 'all';
 $selected_category = $_GET['exam_category'] ?? 'all';
@@ -15,7 +113,7 @@ $selected_period = $_GET['academic_period'] ?? 'all';
 $selected_semester = $_GET['semester'] ?? 'all';
 $selected_sy = $_GET['school_year'] ?? 'all';
 
-$where = "WHERE (es.teacher_id = ? OR e.teacher_id = ? OR es.teacher_id IN (SELECT id FROM users WHERE role = 'admin') OR es.is_demo = 1)";
+$where = "WHERE (es.teacher_id = ? OR e.teacher_id = ?)";
 $params = [$teacher_id, $teacher_id];
 
 if ($selected_exam !== 'all') {
@@ -34,49 +132,44 @@ if ($selected_qual_status !== 'all') {
 }
 
 if ($selected_subject !== 'all') {
-    $where .= " AND (e.subject = ? OR es.subject = ?)";
-    $params[] = $selected_subject;
+    $where .= " AND e.subject = ?";
     $params[] = $selected_subject;
 }
 
 if ($selected_section !== 'all') {
-    $where .= " AND (es.section = ? OR sd.section = ?)";
-    $params[] = $selected_section;
+    $where .= " AND sd.section = ?";
     $params[] = $selected_section;
 }
 
 if ($selected_period !== 'all') {
-    $where .= " AND (e.academic_period = ? OR e.covered_periods LIKE ?)";
-    $params[] = $selected_period;
-    $params[] = "%" . $selected_period . "%";
+    $where .= " AND " . StudentResultService::termSql() . " = ?";
+    $params[] = StudentResultService::normalizeTerm($selected_period) ?? '__unknown__';
 }
 
 if ($selected_semester !== 'all') {
-    $where .= " AND (e.semester = ? OR EXISTS (SELECT 1 FROM lesson_materials lm WHERE lm.exam_id = e.id AND lm.semester = ?))";
-    $params[] = $selected_semester;
+    $where .= " AND EXISTS (SELECT 1 FROM exam_schedules sch JOIN semesters sem ON sem.id = sch.semester_id WHERE sch.exam_id = e.id AND sem.semester_name = ?)";
     $params[] = $selected_semester;
 }
 
 if ($selected_sy !== 'all') {
-    $where .= " AND (e.school_year = ? OR EXISTS (SELECT 1 FROM lesson_materials lm WHERE lm.exam_id = e.id AND lm.school_year = ?))";
-    $params[] = $selected_sy;
+    $where .= " AND EXISTS (SELECT 1 FROM exam_schedules sch JOIN semesters sem ON sem.id = sch.semester_id JOIN school_years sy ON sy.id = sem.school_year_id WHERE sch.exam_id = e.id AND sy.school_year = ?)";
     $params[] = $selected_sy;
 }
 
 $stmtStats = $pdo->prepare("
     SELECT 
         COUNT(DISTINCT es.id) as total_submissions,
-        SUM(CASE WHEN es.review_status = 'published' THEN 1 ELSE 0 END) as total_published,
+        SUM(CASE WHEN {$publishedSql} THEN 1 ELSE 0 END) as total_published,
         SUM(CASE WHEN es.review_status IN ('pending_review', 'draft') THEN 1 ELSE 0 END) as pending_review,
-        SUM(CASE WHEN es.review_status = 'published' AND DATE(es.published_at) = CURRENT_DATE() THEN 1 ELSE 0 END) as published_today,
-        SUM(CASE WHEN es.review_status = 'published' AND (es.status = 'Pass' OR es.percentage >= 75) THEN 1 ELSE 0 END) as total_pass,
-        SUM(CASE WHEN es.review_status = 'published' AND (es.status = 'Fail' OR es.percentage < 75) THEN 1 ELSE 0 END) as total_fail,
-        SUM(CASE WHEN es.review_status = 'published' AND es.qualification_status = 'qualified' THEN 1 ELSE 0 END) as total_qualified,
-        SUM(CASE WHEN es.review_status = 'published' AND es.qualification_status = 'not_qualified' THEN 1 ELSE 0 END) as total_not_qualified,
+        SUM(CASE WHEN {$publishedSql} AND DATE(es.published_at) = CURRENT_DATE() THEN 1 ELSE 0 END) as published_today,
+        SUM(CASE WHEN {$publishedSql} AND es.status = 'Pass' THEN 1 ELSE 0 END) as total_pass,
+        SUM(CASE WHEN {$publishedSql} AND es.status = 'Fail' THEN 1 ELSE 0 END) as total_fail,
+        SUM(CASE WHEN {$publishedSql} AND es.qualification_status = 'qualified' THEN 1 ELSE 0 END) as total_qualified,
+        SUM(CASE WHEN {$publishedSql} AND es.qualification_status = 'not_qualified' THEN 1 ELSE 0 END) as total_not_qualified,
         SUM(CASE WHEN es.qualification_status = 'pending' THEN 1 ELSE 0 END) as total_pending_qual,
-        AVG(CASE WHEN es.review_status = 'published' THEN es.percentage ELSE NULL END) as avg_percentage,
-        MAX(CASE WHEN es.review_status = 'published' THEN es.percentage ELSE NULL END) as max_percentage,
-        MIN(CASE WHEN es.review_status = 'published' THEN es.percentage ELSE NULL END) as min_percentage
+        AVG(CASE WHEN {$publishedSql} THEN es.percentage ELSE NULL END) as avg_percentage,
+        MAX(CASE WHEN {$publishedSql} THEN es.percentage ELSE NULL END) as max_percentage,
+        MIN(CASE WHEN {$publishedSql} THEN es.percentage ELSE NULL END) as min_percentage
     FROM exam_submissions es
     LEFT JOIN exams e ON es.exam_id = e.id
     LEFT JOIN student_details sd ON es.student_id = sd.user_id
@@ -98,6 +191,12 @@ $stmtList->execute($params);
 
 $stats = $stmtStats->fetch(PDO::FETCH_ASSOC);
 $submissions = $stmtList->fetchAll(PDO::FETCH_ASSOC);
+foreach ($submissions as &$submission) {
+    $items = ResultWorkflowService::itemResults((int)$submission['id']);
+    if ($items) $submission['evaluation_result'] = json_encode($items);
+}
+unset($submission);
+
 
 $total_submissions = intval($stats['total_submissions'] ?? 0);
 $total_published = intval($stats['total_published'] ?? 0);
@@ -115,7 +214,7 @@ if ($total_students === 0) {
     $total_students = $total_submissions;
 }
 
-$stmtExams = $pdo->prepare("SELECT DISTINCT es.exam_title FROM exam_submissions es LEFT JOIN exams e ON es.exam_id = e.id WHERE es.teacher_id = ? OR e.teacher_id = ? OR es.teacher_id IN (SELECT id FROM users WHERE role = 'admin') OR es.is_demo = 1");
+$stmtExams = $pdo->prepare("SELECT DISTINCT es.exam_title FROM exam_submissions es LEFT JOIN exams e ON es.exam_id = e.id WHERE es.teacher_id = ? OR e.teacher_id = ?");
 $stmtExams->execute([$teacher_id, $teacher_id]);
 $exam_options = $stmtExams->fetchAll(PDO::FETCH_COLUMN);
 
@@ -133,7 +232,7 @@ if (!empty($active_analysis_exam)) {
             sa.question_id,
             COALESCE(eq.question_text, CONCAT('Question #', sa.question_id)) AS question_text,
             COALESCE(eq.question_type, 'standard') AS question_type,
-            COALESCE(eq.correct_answer, sa.correct_answer, 'N/A') AS correct_answer,
+            COALESCE(MAX(eq.correct_answer), MAX(sa.correct_answer), 'N/A') AS correct_answer,
             COUNT(sa.id) AS total_attempts,
             SUM(CASE WHEN sa.evaluation_status = 'correct' OR sa.awarded_points >= sa.max_points THEN 1 ELSE 0 END) AS correct_count,
             SUM(CASE WHEN sa.evaluation_status IN ('incorrect', 'unanswered') OR (sa.awarded_points = 0 AND sa.evaluation_status != 'correct') THEN 1 ELSE 0 END) AS incorrect_count,
@@ -144,7 +243,7 @@ if (!empty($active_analysis_exam)) {
         JOIN exam_submissions es ON sa.submission_id = es.id
         LEFT JOIN exams e ON es.exam_id = e.id
         LEFT JOIN exam_questions eq ON sa.question_id = eq.id
-        WHERE (es.teacher_id = ? OR e.teacher_id = ? OR es.teacher_id IN (SELECT id FROM users WHERE role = 'admin') OR es.is_demo = 1) AND es.exam_title = ?
+        WHERE (es.teacher_id = ? OR e.teacher_id = ?) AND es.exam_title = ?
         GROUP BY sa.question_id
         ORDER BY sa.question_id ASC
     ");
@@ -197,7 +296,7 @@ if (!empty($active_analysis_exam)) {
         LEFT JOIN exams e ON es.exam_id = e.id
         LEFT JOIN users u ON es.student_id = u.id
         LEFT JOIN student_details sd ON es.student_id = sd.user_id
-        WHERE (es.teacher_id = ? OR e.teacher_id = ? OR es.teacher_id IN (SELECT id FROM users WHERE role = 'admin') OR es.is_demo = 1) AND es.exam_title = ?
+        WHERE (es.teacher_id = ? OR e.teacher_id = ?) AND es.exam_title = ?
         ORDER BY u.fullname ASC, es.id ASC, sa.question_id ASC
     ");
     $stmtMatrix->execute([$teacher_id, $teacher_id, $active_analysis_exam]);
@@ -321,94 +420,6 @@ if (!empty($active_analysis_exam)) {
     }
 }
 
-$success_msg = "";
-$error_msg = "";
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_review_status'])) {
-    validateCSRFToken();
-    $submission_id = intval($_POST['submission_id'] ?? 0);
-    $new_status = $_POST['new_review_status'] ?? '';
-    $remarks = trim(sanitizeInput($_POST['teacher_remarks'] ?? ''));
-
-    if ($submission_id > 0) {
-        try {
-            AuthorizationService::enforceSubmissionAccess($teacher_id, $submission_id);
-            $wfRes = ResultWorkflowService::transitionStatus($submission_id, $new_status, $teacher_id, $remarks);
-
-            $success_msg = "Submission #{$submission_id} review status updated to " . ucfirst(str_replace('_', ' ', $wfRes['new_status'])) . "!";
-        } catch (Exception $e) {
-            $error_msg = "Workflow Error: " . $e->getMessage();
-        }
-    }
-}
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['override_item_score'])) {
-    validateCSRFToken();
-    $submission_id = intval($_POST['submission_id'] ?? 0);
-    $question_id = intval($_POST['question_id'] ?? 0);
-    $new_points = floatval($_POST['new_points'] ?? 0);
-    $reason = trim(sanitizeInput($_POST['override_reason'] ?? ''));
-    $new_answer = isset($_POST['new_answer']) ? trim(sanitizeInput($_POST['new_answer'])) : null;
-
-    if ($submission_id > 0 && $question_id > 0) {
-        try {
-            $res = ResultWorkflowService::overrideScore($submission_id, $question_id, $new_points, $teacher_id, $reason, $new_answer);
-            $success_msg = "Item #{$question_id} score overridden to {$new_points} pts! Recalculated Total: {$res['recalculated_total_score']} ({$res['recalculated_percentage']}%)";
-        } catch (Exception $e) {
-            $error_msg = "Item Override Error: " . $e->getMessage();
-        }
-    } else {
-        $error_msg = "Item Override Error: Invalid submission ID or question ID provided.";
-    }
-}
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['rerun_ocr_ai'])) {
-    validateCSRFToken();
-    $submission_id = intval($_POST['submission_id'] ?? 0);
-    if ($submission_id > 0) {
-        try {
-            $res = ResultWorkflowService::reprocessOcr($submission_id, $teacher_id, "Teacher requested OCR reprocessing via Reports interface");
-            $success_msg = "Re-ran OCR evaluation using production scoring engine for submission #{$submission_id}! Recalculated Score: {$res['new_total']} / {$res['total_possible']} ({$res['percentage']}%) - {$res['status']}";
-        } catch (Exception $e) {
-            $error_msg = "OCR Reprocessing Error: " . $e->getMessage();
-        }
-    } else {
-        $error_msg = "OCR Reprocessing Error: Invalid submission ID.";
-    }
-}
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_publish'])) {
-    validateCSRFToken();
-    $sub_ids = $_POST['submission_ids'] ?? [];
-    if (is_array($sub_ids) && !empty($sub_ids)) {
-        $sub_ids = array_map('intval', $sub_ids);
-        $res = ResultWorkflowService::bulkPublishSubmissions($sub_ids, $teacher_id, 'Bulk published by teacher');
-        $success_msg = "Successfully published {$res['published_count']} submission(s)!";
-        if (!empty($res['errors'])) {
-            $error_msg = "Notice during bulk publish: " . implode('; ', $res['errors']);
-        }
-    } else {
-        $error_msg = "No submissions selected for bulk publication.";
-    }
-}
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['publish_entire_exam'])) {
-    validateCSRFToken();
-    $exam_id = intval($_POST['exam_id'] ?? 0);
-    if ($exam_id > 0) {
-        try {
-            $res = ResultWorkflowService::publishEntireExam($exam_id, $teacher_id, 'Published entire exam by teacher');
-            $success_msg = "Successfully published all {$res['published_count']} submission(s) for Exam #{$exam_id}!";
-            if (!empty($res['errors'])) {
-                $error_msg = "Notice during exam publication: " . implode('; ', $res['errors']);
-            }
-        } catch (Exception $e) {
-            $error_msg = "Exam Publication Error: " . $e->getMessage();
-        }
-    } else {
-        $error_msg = "Invalid exam ID specified for publication.";
-    }
-}
 ?>
 
 <!DOCTYPE html>
@@ -473,8 +484,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['publish_entire_exam']
 
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             <div class="bg-white p-4 border border-stone-200 rounded-2xl shadow-sm text-center">
-                <p class="text-[10px] font-bold uppercase text-stone-400">Total Scanned</p>
-                <p class="text-2xl font-black text-stone-800 mt-1"><?php echo $total_students; ?></p>
+                <p class="text-[10px] font-bold uppercase text-stone-400">Total Submissions</p>
+                <p class="text-2xl font-black text-stone-800 mt-1"><?php echo $total_submissions; ?></p>
             </div>
             <div class="bg-emerald-50 p-4 border border-emerald-100 rounded-2xl shadow-sm text-center">
                 <p class="text-[10px] font-bold uppercase text-emerald-700">Passed</p>
@@ -668,7 +679,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['publish_entire_exam']
                                             <?php else: ?>
                                                 <div class="inline-flex flex-col items-center justify-center p-1.5 rounded-lg bg-rose-50 border border-rose-200 w-full" title="Student Answer: <?php echo htmlspecialchars($stAns['student_answer']); ?> | Key: <?php echo htmlspecialchars($stAns['correct_answer']); ?>">
                                                     <span class="text-rose-700 font-black text-xs flex items-center gap-1">
-                                                        <i class="fa-solid fa-circle-xmark text-rose-600"></i> Incorrect
+                                                        <i class="fa-solid fa-circle-xmark text-rose-600"></i> <?php echo !empty($stAns['requires_review']) ? 'Review Needed' : ((float)$stAns['awarded_points'] > 0 ? 'Partial Credit' : 'Incorrect'); ?>
                                                     </span>
                                                     <span class="text-[10px] text-rose-800 font-medium truncate max-w-[80px]" title="<?php echo htmlspecialchars($stAns['student_answer']); ?>">
                                                         <?php echo htmlspecialchars($stAns['student_answer'] ?: '✗'); ?>
@@ -877,6 +888,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['publish_entire_exam']
                 </div>
 
                 <div class="space-y-1">
+                    <label class="block text-xs text-stone-700"><input type="checkbox" id="confirm_ocr_review" name="confirm_ocr_review" value="1"> I checked the extracted answers against the original sheet and resolved all item reviews (remarks required).</label>
                     <label class="text-xs font-bold text-stone-700">Update Review Workflow State</label>
                     <select name="new_review_status" id="modal_review_status" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs font-bold text-stone-800 outline-none focus:border-orange-500">
                         <option value="pending_review">Pending Review</option>
@@ -935,19 +947,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['publish_entire_exam']
     </div>
 
     <script>
+        function escapeReviewText(value) {
+            const element = document.createElement('span');
+            element.textContent = String(value ?? '');
+            return element.innerHTML;
+        }
         function openReviewModal(sub) {
+            document.getElementById('confirm_ocr_review').checked = false;
             document.getElementById('modal_submission_id').value = sub.id;
             document.getElementById('override_modal_submission_id').value = sub.id;
             document.getElementById('modal_title').innerText = "Review Submission #" + sub.id + " (" + sub.student_name + ")";
             document.getElementById('modal_subtitle').innerText = "Exam: " + sub.exam_title + " | Score: " + sub.correct_count + "/" + sub.total_items;
             document.getElementById('modal_ocr_text').innerText = sub.ocr_text || "No raw OCR text recorded";
-            document.getElementById('modal_ocr_confidence').innerText = (sub.ocr_confidence || 85.0) + "%";
+            document.getElementById('modal_ocr_confidence').innerText = sub.upload_type === 'online' ? 'Not applicable (typed answer)' : (!sub.ocr_text || sub.ocr_confidence === null || sub.ocr_confidence === undefined ? 'Unavailable' : Number(sub.ocr_confidence).toFixed(2) + '%');
             document.getElementById('modal_teacher_remarks').value = sub.teacher_remarks || '';
             document.getElementById('modal_review_status').value = sub.review_status || 'pending_review';
 
             const scoreBadge = document.getElementById('modal_score_badge');
             if (scoreBadge) {
-                scoreBadge.innerText = `Score: ${sub.total_score || sub.correct_count} / ${sub.total_possible_score || sub.total_items} (${sub.percentage}%)`;
+                scoreBadge.innerText = `Score: ${sub.total_score ?? sub.correct_count} / ${sub.total_possible_score ?? sub.total_items} (${sub.percentage}%)`;
             }
 
             // Render detailed Student Answers Breakdown & Remarks
@@ -969,13 +987,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['publish_entire_exam']
                 evalResults.forEach((item, idx) => {
                     const row = document.createElement('div');
                     const isCorrect = item.evaluation_status === 'correct' || (item.awarded_points > 0 && item.awarded_points >= item.maximum_points);
-                    const isReview = item.requires_review || item.evaluation_status === 'requires_review';
+                    const isReview = Number(item.requires_review) === 1 || item.evaluation_status === 'requires_review';
                     
                     let remarkBadge = '';
                     if (isCorrect) {
                         remarkBadge = `<span class="bg-emerald-100 text-emerald-800 font-extrabold px-2 py-0.5 rounded-full text-[10px] flex items-center gap-1 border border-emerald-200"><i class="fa-solid fa-circle-check text-emerald-600"></i> Correct (+${item.awarded_points || 1} pt)</span>`;
                     } else if (isReview) {
                         remarkBadge = `<span class="bg-amber-100 text-amber-800 font-extrabold px-2 py-0.5 rounded-full text-[10px] flex items-center gap-1 border border-amber-200"><i class="fa-solid fa-triangle-exclamation text-amber-600"></i> Review Needed (${item.awarded_points || 0}/${item.maximum_points || 1} pt)</span>`;
+                    } else if (Number(item.awarded_points) > 0) {
+                        remarkBadge = `<span class="text-amber-800 font-extrabold">Partial credit (${Number(item.awarded_points)}/${Number(item.maximum_points)} pt)</span>`;
                     } else {
                         remarkBadge = `<span class="bg-rose-100 text-rose-800 font-extrabold px-2 py-0.5 rounded-full text-[10px] flex items-center gap-1 border border-rose-200"><i class="fa-solid fa-circle-xmark text-rose-600"></i> Incorrect (0/${item.maximum_points || 1} pt)</span>`;
                     }
@@ -986,30 +1006,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['publish_entire_exam']
                             <span class="font-extrabold text-stone-800 text-[11px]">Item #${idx + 1} (QID: ${item.question_id || idx + 1})</span>
                             <div class="flex items-center gap-2">
                                 ${remarkBadge}
-                                <button type="button" onclick="selectItemForOverride(${item.question_id || (idx + 1)}, '${item.student_answer || ''}', ${item.maximum_points || 1})" class="text-[10px] text-orange-600 hover:text-orange-800 font-bold underline cursor-pointer">
+                                <button type="button" data-override-item="true" class="text-[10px] text-orange-600 hover:text-orange-800 font-bold underline cursor-pointer">
                                     Override
                                 </button>
                             </div>
                         </div>
-                        ${item.question_text ? `<p class="text-[11px] font-medium text-stone-700">${item.question_text}</p>` : ''}
+                        ${item.question_text ? `<p class="text-[11px] font-medium text-stone-700">${escapeReviewText(item.question_text)}</p>` : ''}
                         <div class="grid grid-cols-2 gap-2 text-[11px]">
                             <div class="p-1.5 rounded bg-white border border-stone-200 font-medium text-stone-700 truncate">
                                 <span class="text-stone-400 font-bold mr-1">Student Answer:</span>
-                                <strong class="${isCorrect ? 'text-emerald-700 font-black' : 'text-rose-700 font-black'}">${item.student_answer ? item.student_answer : '(No answer recorded)'}</strong>
+                                <strong class="${isCorrect ? 'text-emerald-700 font-black' : 'text-rose-700 font-black'}">${escapeReviewText(item.student_answer || '(No answer recorded)')}</strong>
                             </div>
                             <div class="p-1.5 rounded bg-white border border-stone-200 font-medium text-stone-700 truncate">
                                 <span class="text-stone-400 font-bold mr-1">Correct Key:</span>
-                                <strong class="text-emerald-800 font-black">${item.stored_correct_answer || item.correct_answer || 'N/A'}</strong>
+                                <strong class="text-emerald-800 font-black">${escapeReviewText(item.stored_correct_answer || item.correct_answer || 'N/A')}</strong>
                             </div>
                         </div>
                         ${item.explanation ? `
                             <div class="p-2 rounded-lg bg-amber-50 border border-amber-200/70 text-[11px] text-amber-950">
                                 <span class="text-amber-800 font-bold flex items-center gap-1 mb-0.5"><i class="fa-solid fa-lightbulb text-amber-600"></i> Step-by-Step Solution / Explanation:</span>
-                                <div class="font-mono text-[10.5px] leading-relaxed text-stone-700 whitespace-pre-wrap">${item.explanation}</div>
+                                <div class="font-mono text-[10.5px] leading-relaxed text-stone-700 whitespace-pre-wrap">${escapeReviewText(item.explanation)}</div>
                             </div>
                         ` : ''}
-                        ${item.evaluation_reason ? `<p class="text-[10px] text-stone-500 font-medium italic">${item.evaluation_reason}</p>` : ''}
+                        ${item.evaluation_reason ? `<p class="text-[10px] text-stone-500 font-medium italic">${escapeReviewText(item.evaluation_reason)}</p>` : ''}
                     `;
+                    row.querySelector('[data-override-item]').addEventListener('click', () => selectItemForOverride(item.question_id, item.student_answer || '', item.maximum_points ?? 1));
                     answersContainer.appendChild(row);
                 });
             } else {

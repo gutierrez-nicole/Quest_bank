@@ -1,0 +1,63 @@
+PASS: Numeric normalization "4.5"
+PASS: Numeric normalization "4.50"
+PASS: Numeric normalization "x = 4.5"
+PASS: Numeric normalization " 4.5 "
+PASS: Numeric normalization "<p>4.50<\/p>"
+PASS: Numeric normalization "4.5e0"
+PASS: Reject wrong/ambiguous "14.5"
+PASS: Reject wrong/ambiguous "4.51"
+PASS: Reject wrong/ambiguous "-4.5"
+PASS: Reject wrong/ambiguous "4.5 or 14.5"
+PASS: Reject wrong/ambiguous "NaN"
+PASS: Reject wrong/ambiguous "1e999"
+PASS: Rubric requires teacher review
+PASS: Partial-credit work requires teacher review
+PASS: Adjacent large integers do not collapse through float rounding
+PASS: Tiny nonzero value does not match zero
+PASS: Exact decimal and scientific normalization
+PASS: Explicit configured numeric tolerance respected
+PASS: Letter response matches option-text key
+PASS: No numeric normalization of option letters
+PASS: Term alias final
+PASS: Term alias Final
+PASS: Term alias FINALS
+PASS: Term alias finals
+PASS: Create exam through existing service
+PASS: Typed submission stored
+PASS: Typed answer has no OCR confidence
+PASS: Answer and reference explanation remain separate
+PASS: Stored numeric points are correct
+PASS: Finalized private until publication
+PASS: Another teacher cannot publish
+PASS: Published result in All Terms
+PASS: Published result in Finals
+PASS: Final alias returns Finals
+PASS: Published resolved record accessible to its student
+PASS: Legacy published record with unresolved item is private everywhere
+PASS: No cross-term contamination
+PASS: Cross-student results denied
+PASS: Average, completed count and pass rate match records
+PASS: Subject mastery is 100 percent
+PASS: Perfect subject excluded from weak classification
+PASS: Ambiguous worked solution preserved for review
+PASS: Pending review excluded from results and analytics
+PASS: Cannot publish pending review
+PASS: Partial override is not mislabeled fully correct
+PASS: Override preserves submitted work
+PASS: Override refreshes grading snapshot
+PASS: Reviewed result published successfully
+PASS: Uncertain OCR blocks finalization
+PASS: Human OCR review does not fabricate confidence
+PASS: Unassigned student denied exam access
+PASS: Active qualifying exam available
+PASS: Archived qualifying exam is unavailable
+PASS: Archived exam retains answers and published history
+PASS: Archived parent excluded from active dashboard query
+PASS: OCR parser preserves answer and ignores internal page marker
+PASS: 80 percent stays failed when exam requires 90 percent
+PASS: All three populated term filters have exclusive membership
+PASS: Mixed-score average is 76 percent
+PASS: Mixed-score passing rate respects configured thresholds
+PASS: Weak subject has actual 40 percent mastery without duplicating perfect subject
+PASS: Known two-student class average equals 80 percent
+Completed 62 checks. Fixtures retained in isolated database only.

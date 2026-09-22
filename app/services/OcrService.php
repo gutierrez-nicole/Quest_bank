@@ -20,7 +20,7 @@ class OcrService {
                 'extraction_mode' => 'image_ocr',
                 'text' => '',
                 'ocr_text' => '',
-                'confidence' => 0.00,
+                'confidence' => null,
                 'suggested_manual_review' => true,
                 'error' => 'No files provided for OCR processing.',
                 'ocr_error' => 'No files provided for OCR processing.',
@@ -56,7 +56,7 @@ class OcrService {
                 $errors[] = "Page {$pageNum}: " . $pageRes['error'];
             }
 
-            if ($pageRes['confidence'] !== null && $pageRes['confidence'] > 0) {
+            if ($pageRes['confidence'] !== null && $pageRes['confidence'] >= 0) {
                 $totalConfidence += $pageRes['confidence'];
                 $validConfidenceCount++;
             }
@@ -69,17 +69,19 @@ class OcrService {
             $allPagesData[] = [
                 'page' => $pageNum,
                 'path' => $path,
-                'confidence' => $pageRes['confidence'] ?? 0.00,
+                'confidence' => $pageRes['confidence'] ?? null,
+                'extraction_mode' => $pageRes['extraction_mode'] ?? 'unknown',
+                'text' => $pageRes['text'] ?? '',
                 'status' => $pageRes['status'] ?? 'completed'
             ];
         }
 
-        $avgConfidence = ($validConfidenceCount > 0) ? round($totalConfidence / $validConfidenceCount, 2) : 0.00;
+        $avgConfidence = ($validConfidenceCount === count($fileEntries)) ? round($totalConfidence / $validConfidenceCount, 2) : null;
         $cleanCombinedText = self::cleanOcrText($combinedText);
         $executionTime = round((microtime(true) - $startTime) * 1000, 2);
 
         $status = 'completed';
-        if (empty(trim($cleanCombinedText)) || $anyReviewRequired || ($avgConfidence < self::OCR_REVIEW_THRESHOLD)) {
+        if (empty(trim($cleanCombinedText)) || $anyReviewRequired || ($avgConfidence !== null && $avgConfidence < self::OCR_REVIEW_THRESHOLD)) {
             $status = 'manual_review_required';
             $anyReviewRequired = true;
         }
@@ -111,7 +113,7 @@ class OcrService {
                 'extraction_mode' => 'image_ocr',
                 'text' => '',
                 'ocr_text' => '',
-                'confidence' => 0.00,
+                'confidence' => null,
                 'suggested_manual_review' => true,
                 'error' => 'File not found on server.',
                 'ocr_error' => 'File not found on server.',
@@ -129,7 +131,7 @@ class OcrService {
                 'extraction_mode' => 'image_ocr',
                 'text' => '',
                 'ocr_text' => '',
-                'confidence' => 0.00,
+                'confidence' => null,
                 'suggested_manual_review' => true,
                 'error' => 'Uploaded answer sheet file is empty (0 bytes).',
                 'ocr_error' => 'Uploaded answer sheet file is empty (0 bytes).',
@@ -146,7 +148,7 @@ class OcrService {
                 'extraction_mode' => 'image_ocr',
                 'text' => '',
                 'ocr_text' => '',
-                'confidence' => 0.00,
+                'confidence' => null,
                 'suggested_manual_review' => true,
                 'error' => 'Uploaded answer sheet file exceeds maximum size limit of 20MB.',
                 'ocr_error' => 'Uploaded answer sheet file exceeds maximum size limit of 20MB.',
@@ -184,7 +186,7 @@ class OcrService {
                 'extraction_mode' => 'image_ocr',
                 'text' => '',
                 'ocr_text' => '',
-                'confidence' => 0.00,
+                'confidence' => null,
                 'suggested_manual_review' => true,
                 'error' => "Security check failed: File header magic bytes do not match valid PDF, PNG, or JPEG format.",
                 'ocr_error' => "Security check failed: File header magic bytes do not match valid PDF, PNG, or JPEG format.",
@@ -196,7 +198,7 @@ class OcrService {
 
         try {
             $extractedText = '';
-            $confidence = 0.00;
+            $confidence = null;
             $pageCount = 1;
             $status = 'completed';
             $extractionMode = ($fileExt === 'pdf') ? 'native_pdf_text' : 'image_ocr';
@@ -236,7 +238,7 @@ class OcrService {
                     'extraction_mode' => $extractionMode,
                     'text' => '',
                     'ocr_text' => '',
-                    'confidence' => 0.00,
+                    'confidence' => null,
                     'page_count' => $pageCount,
                     'pages' => $pagesData,
                     'suggested_manual_review' => true,
@@ -254,7 +256,7 @@ class OcrService {
                     'extraction_mode' => $extractionMode,
                     'text' => '',
                     'ocr_text' => '',
-                    'confidence' => 0.00,
+                    'confidence' => null,
                     'page_count' => $pageCount,
                     'pages' => $pagesData,
                     'suggested_manual_review' => true,
@@ -292,7 +294,7 @@ class OcrService {
                 'extraction_mode' => 'image_ocr',
                 'text' => '',
                 'ocr_text' => '',
-                'confidence' => 0.00,
+                'confidence' => null,
                 'suggested_manual_review' => true,
                 'error' => $e->getMessage(),
                 'ocr_error' => $e->getMessage(),
@@ -308,7 +310,7 @@ class OcrService {
         if (!$imageInfo) {
             return [
                 'text' => '',
-                'confidence' => 0.00,
+                'confidence' => null,
                 'status' => 'failed',
                 'suggested_manual_review' => true,
                 'error' => 'Corrupted or invalid image file.'
@@ -319,7 +321,7 @@ class OcrService {
         if ($width < 50 || $height < 50) {
             return [
                 'text' => '',
-                'confidence' => 0.00,
+                'confidence' => null,
                 'status' => 'failed',
                 'suggested_manual_review' => true,
                 'error' => 'Extremely low-resolution image file.'
@@ -336,7 +338,7 @@ class OcrService {
                 if ($isBlank) {
                     return [
                         'text' => '',
-                        'confidence' => 0.00,
+                        'confidence' => null,
                         'status' => 'completed',
                         'suggested_manual_review' => false,
                         'error' => 'Blank image page detected.'
@@ -392,9 +394,9 @@ class OcrService {
         if ($groqRes['success'] && !empty(trim($groqRes['text']))) {
             return [
                 'text' => $groqRes['text'],
-                'confidence' => 88.50,
-                'status' => 'completed',
-                'suggested_manual_review' => false,
+                'confidence' => null, // Vision provider returns text, not calibrated OCR confidence.
+                'status' => 'manual_review_required',
+                'suggested_manual_review' => true,
                 'error' => null
             ];
         }
@@ -402,7 +404,7 @@ class OcrService {
         
         return [
             'text' => '',
-            'confidence' => 0.00,
+            'confidence' => null,
             'status' => 'manual_review_required',
             'suggested_manual_review' => true,
             'error' => 'Unclear scan or OCR engine unavailable for automatic image parsing. Teacher manual review required.'
@@ -487,7 +489,12 @@ class OcrService {
             }
 
             $json = json_decode($response, true);
+            if (!empty($json['choices'][0]['message']['refusal'])) return ['success' => false, 'text' => ''];
             $extractedText = $json['choices'][0]['message']['content'] ?? '';
+            // Provider refusal prose is not text transcribed from the student's sheet.
+            if (preg_match('/^I(?:\x{2019}|\x27)?m sorry[, .].*(?:can(?:not|\x27t)|unable).*(?:assist|help)/iu', trim($extractedText))) {
+                return ['success' => false, 'text' => ''];
+            }
             if (!empty(trim($extractedText))) {
                 return ['success' => true, 'text' => trim($extractedText)];
             }
@@ -501,7 +508,7 @@ class OcrService {
     private static function parseTesseractTsv($tsvContent) {
         $lines = explode("\n", trim($tsvContent));
         if (count($lines) <= 1) {
-            return ['text' => '', 'confidence' => 0.00];
+            return ['text' => '', 'confidence' => null];
         }
 
         $header = explode("\t", array_shift($lines));
@@ -509,7 +516,7 @@ class OcrService {
         $textIdx = array_search('text', $header);
 
         if ($confIdx === false || $textIdx === false) {
-            return ['text' => '', 'confidence' => 0.00];
+            return ['text' => '', 'confidence' => null];
         }
 
         $words = [];
@@ -529,7 +536,7 @@ class OcrService {
         }
 
         if (empty($words)) {
-            return ['text' => '', 'confidence' => 0.00];
+            return ['text' => '', 'confidence' => null];
         }
 
         $avgConfidence = array_sum($confidences) / count($confidences);
@@ -545,7 +552,7 @@ class OcrService {
             return [
                 'text' => '',
                 'pages' => 1,
-                'confidence' => 0.00,
+                'confidence' => null,
                 'status' => 'failed',
                 'extraction_mode' => 'scanned_pdf_ocr',
                 'suggested_manual_review' => true,
@@ -557,7 +564,7 @@ class OcrService {
             return [
                 'text' => '',
                 'pages' => 1,
-                'confidence' => 0.00,
+                'confidence' => null,
                 'status' => 'failed',
                 'extraction_mode' => 'scanned_pdf_ocr',
                 'suggested_manual_review' => true,
@@ -590,7 +597,7 @@ class OcrService {
             return [
                 'text' => trim($extractedText),
                 'pages' => max(1, $pages),
-                'confidence' => 100.00, 
+                'confidence' => null, // Native PDF text extraction has no OCR confidence.
                 'status' => 'completed',
                 'extraction_mode' => 'native_pdf_text',
                 'suggested_manual_review' => false,
@@ -619,7 +626,7 @@ class OcrService {
                 foreach ($pageImages as $idx => $imgFile) {
                     $imgRes = self::processImageFile($imgFile, 'png');
                     $combinedText .= "\n--- Page " . ($idx + 1) . " ---\n" . $imgRes['text'];
-                    if ($imgRes['confidence'] > 0) {
+                    if ($imgRes['confidence'] !== null && $imgRes['confidence'] >= 0) {
                         $allConfidences[] = $imgRes['confidence'];
                     }
                     $pagesData[] = $imgRes;
@@ -627,14 +634,14 @@ class OcrService {
                 }
                 @rmdir($tmpDir);
 
-                $avgConf = !empty($allConfidences) ? array_sum($allConfidences) / count($allConfidences) : 0.00;
+                $avgConf = count($allConfidences) === count($pageImages) ? array_sum($allConfidences) / count($allConfidences) : null;
                 return [
                     'text' => trim($combinedText),
                     'pages' => count($pageImages),
-                    'confidence' => round($avgConf, 2),
+                    'confidence' => $avgConf !== null ? round($avgConf, 2) : null,
                     'status' => ($avgConf >= self::OCR_REVIEW_THRESHOLD) ? 'completed' : 'manual_review_required',
                     'extraction_mode' => 'scanned_pdf_ocr',
-                    'suggested_manual_review' => ($avgConf < self::OCR_REVIEW_THRESHOLD),
+                    'suggested_manual_review' => ($avgConf === null || $avgConf < self::OCR_REVIEW_THRESHOLD),
                     'pages_data' => $pagesData,
                     'error' => null
                 ];
@@ -645,7 +652,7 @@ class OcrService {
         return [
             'text' => '',
             'pages' => max(1, $pages),
-            'confidence' => 0.00,
+            'confidence' => null,
             'status' => 'manual_review_required',
             'extraction_mode' => 'scanned_pdf_ocr',
             'suggested_manual_review' => true,
@@ -654,26 +661,21 @@ class OcrService {
     }
 
     private static function isImageBlank($gdImg, $width, $height) {
-        $sampleCount = 100;
-        $luminances = [];
-        for ($i = 0; $i < $sampleCount; $i++) {
-            $x = rand(0, $width - 1);
-            $y = rand(0, $height - 1);
-            $rgb = imagecolorat($gdImg, $x, $y);
-            $r = ($rgb >> 16) & 0xFF;
-            $g = ($rgb >> 8) & 0xFF;
-            $b = $rgb & 0xFF;
-            $luminances[] = 0.299 * $r + 0.587 * $g + 0.114 * $b;
+        // Conservative deterministic check. Random sampling can miss a short answer entirely.
+        $thumb = imagecreatetruecolor(256, 256);
+        imagecopyresampled($thumb, $gdImg, 0, 0, 0, 0, 256, 256, $width, $height);
+        $minimum = 255.0;
+        $maximum = 0.0;
+        for ($y = 0; $y < 256; $y++) {
+            for ($x = 0; $x < 256; $x++) {
+                $rgb = imagecolorat($thumb, $x, $y);
+                $luminance = 0.299 * (($rgb >> 16) & 255) + 0.587 * (($rgb >> 8) & 255) + 0.114 * ($rgb & 255);
+                $minimum = min($minimum, $luminance);
+                $maximum = max($maximum, $luminance);
+                if ($maximum - $minimum > 4.0) return false;
+            }
         }
-
-        $mean = array_sum($luminances) / count($luminances);
-        $variance = 0.0;
-        foreach ($luminances as $l) {
-            $variance += pow($l - $mean, 2);
-        }
-        $stdDev = sqrt($variance / count($luminances));
-
-        return ($stdDev < 4.0);
+        return true;
     }
 
     private static function cleanOcrText($text) {

@@ -15,10 +15,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_exam'])) {
         $stmtCheck->execute([$delete_exam_id]);
         $examToDelete = $stmtCheck->fetch(PDO::FETCH_ASSOC);
         if ($examToDelete && ($examToDelete['teacher_id'] == $_SESSION['user_id'] || ($_SESSION['role'] ?? '') === 'admin')) {
-            $stmtDel = $pdo->prepare("DELETE FROM exams WHERE id = ?");
-            $stmtDel->execute([$delete_exam_id]);
-            logActivity("Deleted exam '{$examToDelete['title']}' (ID: {$delete_exam_id}) from question bank.");
-            $success_msg = "Exam '{$examToDelete['title']}' deleted successfully.";
+            ExamService::archiveExam($delete_exam_id, getCurrentUserId());
+            logActivity("Archived exam '{$examToDelete['title']}' (ID: {$delete_exam_id}) from active question bank; history preserved.");
+            $success_msg = "Exam '{$examToDelete['title']}' archived successfully. Completed student records are preserved.";
         } else {
             $error_msg = "Unauthorized: You can only delete exams created by your account.";
         }
@@ -63,6 +62,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_exam'])) {
                 $qualifying_unlock_date, $qualifying_deadline
             ]);
             $exam_id = $pdo->lastInsertId();
+            $examTerm = StudentResultService::normalizeTerm($exam_category) ?? StudentResultService::normalizeTerm($_POST['term'] ?? '');
+            if ($examTerm === null) throw new InvalidArgumentException('Select a valid examination term.');
+            $pdo->prepare("UPDATE exams SET term = ? WHERE id = ?")->execute([$examTerm, $exam_id]);
 
             
             $qStmt = $pdo->prepare("
@@ -127,7 +129,7 @@ $stmtExams = $pdo->prepare("
     SELECT e.*, u.fullname as teacher_name 
     FROM exams e 
     LEFT JOIN users u ON e.teacher_id = u.id 
-    WHERE e.teacher_id = ? OR e.teacher_id IN (SELECT id FROM users WHERE role IN ('teacher', 'admin')) OR e.is_demo = 1
+    WHERE e.status <> 'archived' AND (e.teacher_id = ? OR e.teacher_id IN (SELECT id FROM users WHERE role IN ('teacher', 'admin')) OR e.is_demo = 1)
     ORDER BY (e.teacher_id = ?) DESC, e.id DESC
 ");
 $stmtExams->execute([$_SESSION['user_id'], $_SESSION['user_id']]);
@@ -160,7 +162,7 @@ try {
             MAX(e.title) as latest_exam_title
         FROM exam_questions q
         JOIN exams e ON q.exam_id = e.id
-        WHERE e.teacher_id = ? OR e.teacher_id IN (SELECT id FROM users WHERE role IN ('teacher', 'admin')) OR e.is_demo = 1
+        WHERE e.status <> 'archived' AND (e.teacher_id = ? OR e.teacher_id IN (SELECT id FROM users WHERE role IN ('teacher', 'admin')) OR e.is_demo = 1)
         GROUP BY q.question_text, q.question_type
         ORDER BY usage_count DESC, sample_id DESC
     ");
@@ -252,6 +254,12 @@ try {
                             </div>
                         </div>
 
+                        <div class="space-y-1">
+                            <label class="text-xs font-bold text-stone-600">Examination Term</label>
+                            <select name="term" required class="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs">
+                                <option value="">Select term</option><option>Prelim</option><option>Midterm</option><option>Finals</option>
+                            </select>
+                        </div>
                         <div class="space-y-1">
                             <label class="text-xs font-bold text-stone-600">Exam Category</label>
                             <select name="exam_category" id="exam_category_select" onchange="toggleQualifyingFields(this.value)" class="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-xs outline-none focus:border-orange-500 font-semibold text-stone-800">
@@ -383,6 +391,7 @@ try {
                                                 <button type="button" onclick="event.stopPropagation(); recycleAllFromExam(<?php echo htmlspecialchars(json_encode($ex), ENT_QUOTES, 'UTF-8'); ?>)" class="text-[10px] text-orange-600 hover:text-orange-700 font-extrabold transition-colors flex items-center gap-0.5" title="Recycle all questions into current form">
                                                     <i class="fa-solid fa-recycle text-[9px]"></i> Recycle
                                                 </button>
+                                                <a href="print_exam.php?id=<?php echo $ex['id']; ?>&amp;download=1" onclick="event.stopPropagation();" class="text-[10px] text-emerald-700 font-bold" title="Download student examination PDF">Download PDF</a>
                                                 <a href="print_exam.php?id=<?php echo $ex['id']; ?>" target="_blank" onclick="event.stopPropagation();" class="text-[10px] text-stone-500 hover:text-orange-600 font-bold transition-colors flex items-center gap-1" title="Print Exam Paper">
                                                     <i class="fa-solid fa-print text-[9px]"></i> Print
                                                 </a>
@@ -471,6 +480,7 @@ try {
                     <button id="modal_delete_btn" type="button" onclick="" class="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5">
                         <i class="fa-solid fa-trash-can text-xs"></i> Delete Exam
                     </button>
+                    <a id="modal_download_btn" href="#" class="px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-xs rounded-xl">Download PDF</a>
                     <a id="modal_print_btn" href="#" target="_blank" class="px-4 py-2 bg-orange-50 hover:bg-orange-100 text-orange-600 border border-orange-200 font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5">
                         <i class="fa-solid fa-print text-xs"></i> Print Exam Paper
                     </a>
@@ -778,6 +788,7 @@ try {
             }
 
             const printBtn = document.getElementById('modal_print_btn');
+            document.getElementById('modal_download_btn').href = `print_exam.php?id=${exam.id}&download=1`;
             if (printBtn) {
                 printBtn.href = `print_exam.php?id=${exam.id}`;
             }
@@ -855,7 +866,7 @@ try {
         }
 
         function deleteExam(id, title) {
-            if (confirm(`Are you sure you want to delete '${title}' from your Saved Question Bank? This will remove the exam and its question items.`)) {
+            if (confirm(`Are you sure you want to delete '${title}' from your Saved Question Bank? This archives the exam and removes student availability. Completed attempts and question records are preserved.`)) {
                 document.getElementById('delete_exam_id').value = id;
                 document.getElementById('deleteExamForm').submit();
             }

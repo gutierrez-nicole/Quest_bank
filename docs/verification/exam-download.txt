@@ -1,0 +1,17 @@
+PASS: Student PDF generated
+PASS: Student copy excludes key, explanation and solution formula
+PASS: Teacher copy includes complete key and reference material
+PASS: Teacher copy clearly labeled
+PASS: Matching choices independently ordered
+PASS: Engineering notation retains readable meaning
+PASS: Choice and writing formats included
+PASS: Long exam paginates
+PASS: teacher login
+PASS: Owner receives an actual PDF attachment
+PASS: Owner can explicitly download teacher copy
+PASS: Print and download controls coexist
+PASS: student login
+PASS: student cannot download another teacher exam
+PASS: other_teacher login
+PASS: other_teacher cannot download another teacher exam
+Completed 16 download checks.

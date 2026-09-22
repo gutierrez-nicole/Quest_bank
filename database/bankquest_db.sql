@@ -302,7 +302,7 @@ CREATE TABLE `exam_submissions` (
   `status` varchar(20) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'Fail',
   `raw_ocr_data` text CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci,
   `ocr_text` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci,
-  `ocr_confidence` decimal(5,2) NOT NULL DEFAULT '0.00',
+  `ocr_confidence` decimal(5,2) DEFAULT NULL,
   `ocr_status` enum('pending','processing','completed','manual_review_required','failed') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'completed',
   `ocr_error` text CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci,
   `suggested_manual_review` tinyint(1) NOT NULL DEFAULT '0',

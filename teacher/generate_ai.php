@@ -648,6 +648,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
                                 $save_ai_model
                             ]);
                             $exam_id = $pdo->lastInsertId();
+                            $examTerm = StudentResultService::normalizeTerm($exam_category) ?? StudentResultService::normalizeTerm($_POST['term'] ?? '');
+                            if ($examTerm === null) throw new InvalidArgumentException('Select a valid examination term before saving.');
+                            $pdo->prepare("UPDATE exams SET term = ? WHERE id = ?")->execute([$examTerm, $exam_id]);
 
                             $qStmt = $pdo->prepare("
                                 INSERT INTO exam_questions 
@@ -1943,6 +1946,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_ai_exam'])) {
 
                             <div class="pt-4 border-t border-stone-100 flex justify-between items-center">
                                 <a href="generate_ai.php" class="text-xs font-bold text-stone-400 hover:text-stone-700">Discard Items</a>
+                                <label class="text-xs font-bold">Examination Term <select name="term" required class="border rounded p-2"><option value="">Select term</option><option>Prelim</option><option>Midterm</option><option>Finals</option></select></label>
                                 <button type="submit" name="save_ai_exam" class="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-6 py-3 rounded-xl shadow-md transition-all flex items-center gap-2">
                                     <i class="fa-solid fa-floppy-disk"></i> Save Exam to Question Bank
                                 </button>

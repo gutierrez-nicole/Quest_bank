@@ -113,6 +113,8 @@ addColumn($pdo, 'exam_submissions', 'original_ocr_text', "TEXT DEFAULT NULL");
 addColumn($pdo, 'exam_submissions', 'corrected_ocr_text', "TEXT DEFAULT NULL");
 addColumn($pdo, 'exam_submissions', 'extraction_mode', "VARCHAR(50) DEFAULT 'image_ocr'");
 addColumn($pdo, 'exam_submissions', 'ocr_confidence', "DECIMAL(5,2) DEFAULT NULL");
+// Unknown/not-applicable OCR confidence must be represented without fabricating a percentage.
+$pdo->exec("ALTER TABLE exam_submissions MODIFY COLUMN ocr_confidence DECIMAL(5,2) NULL DEFAULT NULL");
 addColumn($pdo, 'exam_submissions', 'ocr_status', "VARCHAR(30) DEFAULT 'pending'");
 addColumn($pdo, 'exam_submissions', 'ocr_error', "TEXT DEFAULT NULL");
 addColumn($pdo, 'exam_submissions', 'suggested_manual_review', "TINYINT(1) DEFAULT 0");

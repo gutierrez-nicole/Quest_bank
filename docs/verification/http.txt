@@ -1,0 +1,40 @@
+PASS: student normal login
+PASS: Student dashboard renders
+PASS: Private keys and explanations absent from student HTML
+PASS: Rendered average, passing rate, completed count and class average match mixed fixtures
+PASS: Authorized question AJAX succeeds
+PASS: Question AJAX excludes keys, solutions, formulas and pair associations
+PASS: Matching options independently ordered from prompts
+PASS: Submission without CSRF rejected
+PASS: Successful submission does not disclose an unpublished grade
+PASS: Unpublished answer breakdown remains inaccessible
+PASS: Student cannot enter teacher review
+PASS: Archived question fetch rejected
+PASS: Archived submission rejected
+PASS: Term page All renders
+PASS: CSV export All executes
+PASS: PDF transcript All executes
+PASS: Term page Finals renders
+PASS: CSV export Finals executes
+PASS: PDF transcript Finals executes
+PASS: Term page Prelim renders
+PASS: CSV export Prelim executes
+PASS: PDF transcript Prelim executes
+PASS: Term page Midterm renders
+PASS: CSV export Midterm executes
+PASS: PDF transcript Midterm executes
+PASS: teacher normal login
+PASS: PDF respects 90 percent threshold for the 80 percent result
+PASS: Teacher published average agrees with finalized class records
+PASS: Teacher report query /teacher/reports.php
+PASS: Teacher report query /teacher/reports.php?academic_period=finals
+PASS: Teacher report query /teacher/reports.php?subject=Audit%20Mathematics
+PASS: Teacher report query /teacher/reports.php?semester=1st%20Semester
+PASS: Teacher report query /teacher/reports.php?school_year=2026-2027
+PASS: Real image upload handled
+PASS: Real OCR raw text persisted
+PASS: Real OCR parsed answer stored and graded
+PASS: Vision OCR confidence stays unavailable and needs review
+PASS: Real rerun saves fresh OCR provenance and remains pending
+PASS: OCR rerun recomputes qualifying outcome before publication
+Completed 39 HTTP checks.

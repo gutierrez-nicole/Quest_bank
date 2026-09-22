@@ -3,6 +3,25 @@
 require_once __DIR__ . '/../database.php';
 
 class ExamService {
+    public static function matchingOptions(array $pairs): array {
+        $options = array_values(array_unique(array_values($pairs), SORT_REGULAR));
+        // Sort independently of the key's association order: no answer mapping crosses the boundary.
+        sort($options, SORT_STRING);
+        return $options;
+    }
+
+    public static function assertStudentCanAttempt($studentId, $examId): void {
+        $eligibility = self::checkStudentEligibility($studentId, $examId);
+        if (empty($eligibility['eligible'])) throw new LogicException($eligibility['reason'] ?? 'Exam unavailable.');
+    }
+
+    public static function archiveExam($examId, $actorId): void {
+        require_once __DIR__ . '/AuthorizationService.php';
+        if (!AuthorizationService::canManageExam($actorId, $examId)) throw new LogicException('You cannot archive this exam.');
+        getDBConnection()->prepare("UPDATE exams SET status = 'archived' WHERE id = ?")->execute([$examId]);
+        logActivity("Archived exam #{$examId}; questions, assignments and completed results retained.", $actorId);
+    }
+
 
     public static function getExamsByTeacher($teacherId) {
         $pdo = getDBConnection();
@@ -78,7 +97,16 @@ class ExamService {
             return ['eligible' => false, 'reason' => 'This examination is currently inactive.'];
         }
 
-        
+        $studentStmt = $pdo->prepare("SELECT role, status FROM users WHERE id = ?");
+        $studentStmt->execute([$studentId]);
+        $student = $studentStmt->fetch();
+        if (!$student || $student['role'] !== 'student' || $student['status'] !== 'active') return ['eligible' => false, 'reason' => 'An active student account is required.'];
+        foreach (['available_from' => false, 'available_until' => true] as $field => $expired) {
+            if (!empty($exam[$field]) && ($expired ? time() > strtotime($exam[$field]) : time() < strtotime($exam[$field]))) return ['eligible' => false, 'reason' => 'This exam is outside its availability period.'];
+        }
+        $eligibleIds = array_map('intval', array_column(self::getEligibleStudentsForExam($pdo, $examId, $exam['teacher_id']), 'id'));
+        if (!in_array((int)$studentId, $eligibleIds, true)) return ['eligible' => false, 'reason' => 'This exam is not assigned to your student account or section.'];
+
         $stmtAtt = $pdo->prepare("SELECT COUNT(*) FROM exam_submissions WHERE student_id = ? AND exam_id = ?");
         $stmtAtt->execute([$studentId, $examId]);
         $attemptCount = intval($stmtAtt->fetchColumn());
@@ -153,7 +181,9 @@ class ExamService {
             ];
         }
 
-        return ['eligible' => true, 'attempt_count' => $attemptCount, 'remaining_attempts' => 999];
+        $maxAttempts = max(1, (int)($exam['max_attempts'] ?? 1));
+        if ($attemptCount >= $maxAttempts) return ['eligible' => false, 'reason' => 'You have reached the maximum allowed attempts.'];
+        return ['eligible' => true, 'attempt_count' => $attemptCount, 'remaining_attempts' => $maxAttempts - $attemptCount];
     }
 
     public static function getEligibleStudentsForExam($pdo, $examId, $teacherId) {

@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../database.php';
 require_once __DIR__ . '/../../includes/security.php';
 require_once __DIR__ . '/AuthorizationService.php';
+require_once __DIR__ . '/StudentResultService.php';
 
 class ResultWorkflowService {
 
@@ -15,6 +16,49 @@ class ResultWorkflowService {
         'archived'       => []
     ];
 
+    private static function ocrNeedsConfirmation(array $sub): bool {
+        if (($sub['upload_type'] ?? '') === 'online') return false;
+        $log = json_decode($sub['teacher_override_log'] ?? '{}', true) ?: [];
+        if (!empty($log['ocr_confirmed'])) return false;
+        $confidence = $sub['ocr_confidence'];
+        return trim($sub['ocr_text'] ?? '') === '' || ($confidence !== null && (float)$confidence < 75.0)
+            || ($confidence === null && ($sub['extraction_mode'] ?? '') !== 'native_pdf_text')
+            || ($sub['ocr_status'] ?? '') !== 'completed';
+    }
+
+    public static function itemResults(int $submissionId): array {
+        $stmt = getDBConnection()->prepare("SELECT sa.*, sa.correct_answer AS stored_correct_answer,
+            sa.max_points AS maximum_points, q.question_text, q.question_type, q.explanation
+            FROM submission_answers sa LEFT JOIN exam_questions q ON q.id = sa.question_id
+            WHERE sa.submission_id = ? ORDER BY sa.question_id");
+        $stmt->execute([$submissionId]);
+        return $stmt->fetchAll();
+    }
+
+    public static function acknowledgeOcrReview(int $submissionId, int $actorId, string $reason): void {
+        if (!AuthorizationService::canReviewSubmission($actorId, $submissionId)) throw new LogicException('Unauthorized OCR review.');
+        if (trim($reason) === '') throw new InvalidArgumentException('Remarks are required to confirm the extracted answers against the original sheet.');
+        $pdo = getDBConnection();
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare("SELECT * FROM exam_submissions WHERE id = ? FOR UPDATE");
+            $stmt->execute([$submissionId]);
+            $sub = $stmt->fetch();
+            if (!$sub || !in_array($sub['review_status'], ['pending_review', 'reviewed'], true)) throw new LogicException('OCR confirmation requires an open review.');
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM submission_answers WHERE submission_id = ? AND (requires_review = 1 OR evaluation_status = 'requires_review')");
+            $stmt->execute([$submissionId]);
+            if ($stmt->fetchColumn() > 0) throw new LogicException('Resolve item reviews before confirming OCR.');
+            $pdo->prepare("UPDATE exam_submissions SET suggested_manual_review = 0, teacher_override_log = JSON_SET(COALESCE(teacher_override_log, JSON_OBJECT()), '$.ocr_confirmed', 1), teacher_remarks = ?, reviewed_by = ?, reviewed_at = NOW() WHERE id = ?")
+                ->execute([$reason, $actorId, $submissionId]);
+            $pdo->prepare("INSERT INTO submission_status_history (submission_id, previous_status, new_status, actor_id, remarks, created_at) VALUES (?, ?, ?, ?, ?, NOW())")
+                ->execute([$submissionId, $sub['review_status'], $sub['review_status'], $actorId, 'OCR text checked against source: '.$reason]);
+            $pdo->commit();
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $e;
+        }
+    }
+
     public static function assertReadyForPublication(int $submissionId): void {
         $pdo = getDBConnection();
         $stmt = $pdo->prepare("SELECT * FROM exam_submissions WHERE id = ?");
@@ -25,18 +69,13 @@ class ResultWorkflowService {
             throw new LogicException("Publication rejected: Submission #{$submissionId} not found.");
         }
 
-        $ocrConf = floatval($sub['ocr_confidence'] ?? 100.00);
         $manualRev = intval($sub['suggested_manual_review'] ?? 0);
 
-        $stmtAns = $pdo->prepare("SELECT COUNT(*) FROM submission_answers WHERE submission_id = ? AND requires_review = 1");
+        $stmtAns = $pdo->prepare("SELECT COUNT(*) FROM submission_answers WHERE submission_id = ? AND (requires_review = 1 OR evaluation_status = 'requires_review')");
         $stmtAns->execute([$submissionId]);
         $unresolvedItems = intval($stmtAns->fetchColumn());
 
-        if ($ocrConf < 75.00) {
-            throw new LogicException("Publication rejected: Submission #{$submissionId} has low OCR confidence (" . number_format($ocrConf, 1) . "% < 75.0%).");
-        }
-
-        if ($manualRev === 1) {
+        if ($manualRev === 1 || self::ocrNeedsConfirmation($sub)) {
             throw new LogicException("Publication rejected: Submission #{$submissionId} is flagged for manual teacher review.");
         }
 
@@ -96,15 +135,14 @@ class ResultWorkflowService {
 
         
         if ($targetStatus === 'finalized') {
-            $ocrConf = floatval($sub['ocr_confidence'] ?? 100.00);
             $manualRev = intval($sub['suggested_manual_review'] ?? 0);
 
             
-            $stmtAns = $pdo->prepare("SELECT COUNT(*) FROM submission_answers WHERE submission_id = ? AND requires_review = 1");
+            $stmtAns = $pdo->prepare("SELECT COUNT(*) FROM submission_answers WHERE submission_id = ? AND (requires_review = 1 OR evaluation_status = 'requires_review')");
             $stmtAns->execute([$submissionId]);
             $unresolvedItems = intval($stmtAns->fetchColumn());
 
-            if ($ocrConf < 75.00 || $manualRev === 1 || $unresolvedItems > 0) {
+            if ($manualRev === 1 || $unresolvedItems > 0 || self::ocrNeedsConfirmation($sub)) {
                 throw new LogicException("Cannot finalize submission: Contains unresolved low-confidence OCR flags or item review requirements.");
             }
         }
@@ -281,7 +319,7 @@ class ResultWorkflowService {
             throw new Exception("Submission #{$submissionId} not found.");
         }
 
-        if (in_array($sub['review_status'], ['finalized', 'published'])) {
+        if (in_array($sub['review_status'], ['finalized', 'published', 'archived'])) {
             throw new LogicException("Cannot override scores on finalized or published results without an administrative reopen workflow.");
         }
 
@@ -307,7 +345,7 @@ class ResultWorkflowService {
         $oldPoints = floatval($ans['awarded_points']);
         $oldAnswer = $ans['student_answer'];
         $updatedAnswer = ($newAnswer !== null) ? trim($newAnswer) : $oldAnswer;
-        $evalStatus = ($newPoints > 0) ? 'correct' : 'incorrect';
+        $evalStatus = ($newPoints > 0 && $newPoints >= $maxPoints) ? 'correct' : ($newPoints > 0 ? 'partial' : 'incorrect');
 
         $pdo->beginTransaction();
 
@@ -349,7 +387,7 @@ class ResultWorkflowService {
             $stmtSum = $pdo->prepare("
                 SELECT SUM(awarded_points) as total_awarded, SUM(max_points) as total_possible,
                        SUM(CASE WHEN evaluation_status = 'correct' THEN 1 ELSE 0 END) as correct_cnt,
-                       SUM(CASE WHEN evaluation_status = 'incorrect' OR evaluation_status = 'unanswered' THEN 1 ELSE 0 END) as wrong_cnt
+                       SUM(CASE WHEN evaluation_status IN ('incorrect', 'unanswered', 'partial') THEN 1 ELSE 0 END) as wrong_cnt
                 FROM submission_answers WHERE submission_id = ?
             ");
             $stmtSum->execute([$submissionId]);
@@ -378,6 +416,8 @@ class ResultWorkflowService {
                 WHERE id = ?
             ");
             $stmtUpdSub->execute([$newTotalAwarded, $newPercentage, $newStatus, $newQualStatus, intval($tot['correct_cnt']), intval($tot['wrong_cnt']), $submissionId]);
+            $pdo->prepare("UPDATE exam_submissions SET evaluation_result = ? WHERE id = ?")->execute([json_encode(self::itemResults((int)$submissionId)), $submissionId]);
+
 
             $pdo->commit();
 
@@ -441,69 +481,31 @@ class ResultWorkflowService {
         }
 
         
-        $filePath = $sub['file_path'] ?? null;
-        $ocrText = $sub['ocr_text'] ?? '';
-        $submittedAnswers = [];
-
-        if (!empty($filePath)) {
-            $baseDir = defined('BASE_PATH') ? BASE_PATH : dirname(__DIR__, 2);
-            $absPath = (strpos($filePath, '/') === 0) ? $filePath : $baseDir . '/' . ltrim($filePath, '/');
-            if (!file_exists($absPath)) {
-                throw new Exception("Original answer sheet file not found at '{$filePath}'. Cannot re-run OCR without original file.");
-            }
-            if (file_exists(__DIR__ . '/OcrService.php')) {
-                require_once __DIR__ . '/OcrService.php';
-                if (method_exists('OcrService', 'processAnswerSheet')) {
-                    $ocrResult = OcrService::processAnswerSheet($absPath, count($questions));
-                    if (isset($ocrResult['success']) && !empty($ocrResult['raw_text'])) {
-                        $ocrText = $ocrResult['raw_text'];
-                        if (isset($ocrResult['answers']) && is_array($ocrResult['answers'])) {
-                            $qIdx = 0;
-                            foreach ($questions as $q) {
-                                $qId = $q['id'];
-                                if (isset($ocrResult['answers'][$qIdx + 1])) {
-                                    $submittedAnswers[$qId] = $ocrResult['answers'][$qIdx + 1];
-                                }
-                                $qIdx++;
-                            }
-                        }
-                    }
-                }
-            }
+        require_once __DIR__ . '/OcrService.php';
+        require_once __DIR__ . '/AnswerSheetParser.php';
+        $baseDir = defined('BASE_PATH') ? BASE_PATH : dirname(__DIR__, 2);
+        $filePath = $sub['file_path'] ?? '';
+        if ($filePath === '') throw new LogicException('No original sheet is recorded for this submission.');
+        $pages = json_decode($sub['per_page_ocr_metadata'] ?? '[]', true) ?: [];
+        $files = [];
+        foreach ($pages as $page) {
+            if (!empty($page['path'])) $files[] = ['path' => $page['path'], 'ext' => pathinfo($page['path'], PATHINFO_EXTENSION)];
         }
-
-        
+        if (!$files) $files[] = ['path' => $filePath, 'ext' => pathinfo($filePath, PATHINFO_EXTENSION)];
+        foreach ($files as &$file) {
+            if (!str_starts_with($file['path'], '/')) $file['path'] = $baseDir . '/' . ltrim($file['path'], '/');
+            if (!is_file($file['path'])) throw new LogicException('Original sheet file is unavailable; existing answer records were preserved.');
+        }
+        unset($file);
+        $ocrResult = OcrService::processMultipleAnswerSheets($files);
+        if (empty($ocrResult['success']) || trim($ocrResult['text'] ?? '') === '') throw new LogicException('OCR produced no readable text; existing answer records were preserved.');
+        $ocrText = $ocrResult['text'];
+        $parsed = AnswerSheetParser::parseAnswerSheet($ocrText, $questions);
+        $submittedAnswers = $parsed['answers'];
         $stmtOldAns = $pdo->prepare("SELECT question_id, student_answer, awarded_points, max_points, evaluation_status FROM submission_answers WHERE submission_id = ?");
         $stmtOldAns->execute([$submissionId]);
         $previousItemScoresList = $stmtOldAns->fetchAll(PDO::FETCH_ASSOC);
 
-        foreach ($previousItemScoresList as $oldAns) {
-            if (!isset($submittedAnswers[$oldAns['question_id']])) {
-                $submittedAnswers[$oldAns['question_id']] = $oldAns['student_answer'];
-            }
-        }
-
-        
-        if (!empty($ocrText)) {
-            if (file_exists(__DIR__ . '/AnswerSheetParser.php')) {
-                require_once __DIR__ . '/AnswerSheetParser.php';
-                if (method_exists('AnswerSheetParser', 'extractAnswersFromText')) {
-                    $parsedFromText = AnswerSheetParser::extractAnswersFromText($ocrText, count($questions));
-                    $qIdx = 0;
-                    foreach ($questions as $q) {
-                        $qId = $q['id'];
-                        if (!isset($submittedAnswers[$qId]) || $submittedAnswers[$qId] === '') {
-                            if (isset($parsedFromText[$qIdx + 1])) {
-                                $submittedAnswers[$qId] = $parsedFromText[$qIdx + 1];
-                            }
-                        }
-                        $qIdx++;
-                    }
-                }
-            }
-        }
-
-        
         require_once __DIR__ . '/ExamScoringService.php';
 
         $totalAwardedPoints = 0.00;
@@ -533,12 +535,16 @@ class ResultWorkflowService {
             $newItemScores[] = $itemEval;
         }
 
-        $stmtExam = $pdo->prepare("SELECT passing_percentage FROM exams WHERE id = ?");
+        $stmtExam = $pdo->prepare("SELECT passing_percentage, exam_category, qualifying_passing_percentage FROM exams WHERE id = ?");
         $stmtExam->execute([$examId]);
-        $passPct = floatval($stmtExam->fetchColumn() ?: 75.00);
+        $examInfo = $stmtExam->fetch(PDO::FETCH_ASSOC);
+        $passPct = floatval($examInfo['passing_percentage'] ?? 75.00);
 
         $newPercentage = ($totalPossiblePoints > 0) ? round(($totalAwardedPoints / $totalPossiblePoints) * 100, 2) : 0.00;
         $newPassOrFail = ($newPercentage >= $passPct) ? 'Pass' : 'Fail';
+        $qualificationStatus = ($examInfo['exam_category'] ?? '') === 'qualifying'
+            ? ($newPercentage >= (float)($examInfo['qualifying_passing_percentage'] ?? 75) ? 'qualified' : 'not_qualified')
+            : 'pending';
 
         $pdo->beginTransaction();
 
@@ -622,6 +628,9 @@ class ResultWorkflowService {
                 $submissionId
             ]);
 
+            $pdo->prepare("UPDATE exam_submissions SET ocr_text = ?, teacher_override_log = JSON_REMOVE(COALESCE(teacher_override_log, JSON_OBJECT()), '$.ocr_confirmed'), corrected_ocr_text = NULL, ocr_confidence = ?, ocr_status = ?, extraction_mode = ?, per_page_ocr_metadata = ?, suggested_manual_review = ?, review_status = 'pending_review', qualification_status = ?, published_at = NULL WHERE id = ?")
+                ->execute([$ocrText, $ocrResult['confidence'], $ocrResult['status'], $ocrResult['extraction_mode'], json_encode($ocrResult['pages'] ?? []),
+                    (int)(!empty($ocrResult['suggested_manual_review']) || $parsed['requires_review']), $qualificationStatus, $submissionId]);
             $pdo->commit();
 
             logActivity("OCR Reprocessed for Submission #{$submissionId} by User #{$actorId}. Score: {$sub['total_score']} -> {$totalAwardedPoints} ({$newPercentage}%)", $actorId);
@@ -662,7 +671,7 @@ class ResultWorkflowService {
             return ['allowed' => false, 'error' => 'Unauthorized: Cannot access another student\'s exam result.'];
         }
 
-        if ($sub['review_status'] !== 'published') {
+        if (!AuthorizationService::canViewSubmission($currentStudentId, $submissionId)) {
             return ['allowed' => false, 'error' => 'Exam result is pending teacher review and is not yet available.'];
         }
 

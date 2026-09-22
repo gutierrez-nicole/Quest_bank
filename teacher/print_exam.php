@@ -9,6 +9,7 @@ $exam_id = intval($_GET['id'] ?? $_GET['exam_id'] ?? 0);
 $show_answers = isset($_GET['with_answers']) && $_GET['with_answers'] == '1';
 
 if ($exam_id <= 0) {
+    http_response_code(400);
     die("Invalid Exam ID.");
 }
 
@@ -17,12 +18,22 @@ $stmt->execute([$exam_id, $teacher_id]);
 $exam = $stmt->fetch(PDO::FETCH_ASSOC);
 
 if (!$exam) {
+    http_response_code(403);
     die("Unauthorized: Exam not found or does not belong to your account.");
 }
 
 $qStmt = $pdo->prepare("SELECT * FROM exam_questions WHERE exam_id = ? ORDER BY id ASC");
 $qStmt->execute([$exam_id]);
 $questions = $qStmt->fetchAll(PDO::FETCH_ASSOC);
+
+if (($_GET['download'] ?? '') === '1') {
+    require_once __DIR__ . '/../app/services/ExamPaperPdf.php';
+    $pdf = ExamPaperPdf::build($exam, $questions, $show_answers);
+    $filename = trim(substr(preg_replace('/[^A-Za-z0-9_-]+/', '-', $exam['title']), 0, 90), '-') ?: 'examination';
+    header('Cache-Control: private, no-store');
+    $pdf->Output('D', $filename . ($show_answers ? '-answer-key' : '-exam') . '.pdf');
+    exit;
+}
 
 $totalPoints = 0;
 foreach ($questions as $q) {
@@ -75,7 +86,10 @@ foreach ($questions as $q) {
             </div>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
+            <a id="downloadPdf" href="print_exam.php?id=<?php echo $exam_id; ?>&amp;download=1<?php echo $show_answers ? '&amp;with_answers=1' : ''; ?>" class="bg-emerald-700 hover:bg-emerald-600 text-white font-extrabold text-xs px-4 py-2 rounded-xl">
+                <i class="fa-solid fa-download"></i> Download PDF
+            </a>
             <label class="flex items-center gap-2 text-xs font-bold bg-stone-800 hover:bg-stone-700 px-3 py-2 rounded-xl cursor-pointer transition-all">
                 <input type="checkbox" id="toggleAnswers" <?php echo $show_answers ? 'checked' : ''; ?> onchange="toggleAnswerKeys(this.checked)" class="accent-orange-500 rounded">
                 <span>Teacher Answer Key Mode</span>
@@ -279,6 +293,9 @@ foreach ($questions as $q) {
 
     <script>
         function toggleAnswerKeys(show) {
+            const downloadUrl = new URL(document.getElementById('downloadPdf').href);
+            downloadUrl.searchParams.set('with_answers', show ? '1' : '0');
+            document.getElementById('downloadPdf').href = downloadUrl.toString();
             document.querySelectorAll('.answer-key-box').forEach(el => {
                 if (show) {
                     el.classList.remove('hidden');

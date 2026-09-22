@@ -28,58 +28,11 @@ $selected_term = trim($_GET['term'] ?? 'All');
 $single_id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
 try {
-    $where = ["es.review_status = 'published'"];
-    $params = [];
-
+    $results = StudentResultService::results((int)$student_id, $single_id > 0 ? null : $selected_term);
     if ($single_id > 0) {
-        $stmtCheck = $pdo->prepare("SELECT student_id, review_status FROM exam_submissions WHERE id = ?");
-        $stmtCheck->execute([$single_id]);
-        $subRecord = $stmtCheck->fetch(PDO::FETCH_ASSOC);
-
-        if (!$subRecord) {
-            renderErrorPage(404, "Exam submission record #{$single_id} does not exist.");
-        }
-
-        if (intval($subRecord['student_id']) !== intval($student_id) || $subRecord['review_status'] !== 'published') {
-            renderErrorPage(403, "Access Denied: You do not have authorization to view or export submission record #{$single_id}.");
-        }
-
-        $where[] = "es.id = ? AND es.student_id = ?";
-        $params[] = $single_id;
-        $params[] = $student_id;
-    } else {
-        $where[] = "es.student_id = ?";
-        $params[] = $student_id;
-
-        if (!empty($selected_term) && $selected_term !== 'All') {
-            $where[] = "(es.term = ? OR e.term = ?)";
-            $params[] = $selected_term;
-            $params[] = $selected_term;
-        }
+        $results = array_values(array_filter($results, fn($r) => (int)$r['id'] === $single_id));
+        if (!$results) renderErrorPage(403, 'This published result is not available to your account.');
     }
-
-    $whereSql = implode(' AND ', $where);
-
-    $sql = "
-        SELECT 
-            es.id,
-            COALESCE(e.title, es.exam_title, 'Examination') as title,
-            COALESCE(e.subject, 'General Subject') as subject,
-            COALESCE(es.term, 'N/A') as term,
-            COALESCE(es.correct_count, es.total_score, 0) as score,
-            es.total_items,
-            es.percentage,
-            es.status,
-            es.created_at
-        FROM exam_submissions es
-        LEFT JOIN exams e ON es.exam_id = e.id
-        WHERE {$whereSql}
-        ORDER BY es.created_at DESC
-    ";
-
-    $stmt = $pdo->prepare($sql);
-    $stmt->execute($params);
-    $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
 }catch (PDOException $e) {
     $results = [];
 }
@@ -90,7 +43,8 @@ foreach ($results as $r) {
     $total_pct += (float)$r['percentage'];
 }
 $avg_gpa = $total_exams > 0 ? round($total_pct / $total_exams, 1) : 0.0;
-$overall_status = $avg_gpa >= 75.0 ? 'PASSED (SATISFACTORY)' : 'NEEDS IMPROVEMENT';
+$passed_exams = count(array_filter($results, fn($r) => $r['status'] === 'Pass'));
+$overall_status = $passed_exams . ' / ' . $total_exams . ' EXAMS PASSED';
 
 if (!class_exists('TranscriptPDF')) {
     class TranscriptPDF extends FPDF {
@@ -124,8 +78,8 @@ if (!class_exists('TranscriptPDF')) {
             $this->SetY(-18);
             $this->SetFont('Arial', 'I', 8);
             $this->SetTextColor(168, 162, 158);
-            $this->Cell(0, 4, 'This transcript is automatically generated and verified by the QuestBank AI Assessment Engine.', 0, 1, 'C');
-            $this->Cell(0, 4, 'Official Document Hash: QB-CERT-2026-' . strtoupper(md5('PAGE_' . $this->PageNo())), 0, 0, 'C');
+            $this->Cell(0, 4, 'Generated from published examination results recorded in QuestBank.', 0, 1, 'C');
+            $this->Cell(0, 4, 'Page ' . $this->PageNo(), 0, 0, 'C');
         }
     }
 }
@@ -191,7 +145,7 @@ foreach ($results as $row) {
     $pdf->Cell(25, 7, number_format($row['percentage'], 1) . '%', 1, 0, 'C', $fill);
     
     
-    if ($row['status'] === 'Pass' || $row['percentage'] >= 75) {
+    if ($row['status'] === 'Pass') {
         $pdf->SetTextColor(21, 128, 61); 
         $pdf->Cell(30, 7, 'PASSED', 1, 1, 'C', $fill);
     } else {
@@ -215,8 +169,8 @@ $pdf->SetXY(20, $summaryY + 3);
 $pdf->SetFont('Arial', 'B', 7.5);
 $pdf->SetTextColor(120, 113, 108);
 $pdf->Cell(50, 4, 'CUMULATIVE AVERAGE GRADE:', 0, 0, 'L');
-$pdf->Cell(60, 4, 'OVERALL ACADEMIC OUTCOME:', 0, 0, 'L');
-$pdf->Cell(50, 4, 'EVALUATION ENGINE:', 0, 1, 'L');
+$pdf->Cell(60, 4, 'PUBLISHED EXAM OUTCOMES:', 0, 0, 'L');
+$pdf->Cell(50, 4, 'RECORD SOURCE:', 0, 1, 'L');
 
 $pdf->SetX(20);
 $pdf->SetFont('Arial', 'B', 11);
@@ -229,7 +183,7 @@ $pdf->Cell(60, 6, $overall_status, 0, 0, 'L');
 
 $pdf->SetFont('Arial', 'B', 8.5);
 $pdf->SetTextColor(109, 40, 217); 
-$pdf->Cell(50, 6, 'Groq Llama-3 AI Vision Engine', 0, 1, 'L');
+$pdf->Cell(50, 6, 'Published exam records', 0, 1, 'L');
 
 $pdf->SetY(230);
 $pdf->SetFont('Arial', 'B', 8);
@@ -243,6 +197,6 @@ $pdf->SetFont('Arial', 'B', 8.5);
 $pdf->SetTextColor(28, 25, 23);
 $pdf->Cell(85, 4, 'ACADEMIC DEPARTMENT REGISTRAR', 0, 0, 'C');
 $pdf->Cell(10, 4, '', 0, 0);
-$pdf->Cell(85, 4, 'QUESTBANK AUTOMATED AI EVALUATOR', 0, 1, 'C');
+$pdf->Cell(85, 4, 'QUESTBANK EXAMINATION RECORD', 0, 1, 'C');
 
 $pdf->Output('I', 'QuestBank_Official_Transcript.pdf');

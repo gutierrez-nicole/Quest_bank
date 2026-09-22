@@ -1,0 +1,21 @@
+{
+    "nullable_migration": "PASS",
+    "historical_rows_unchanged": {
+        "exams": {
+            "count": 2,
+            "sha256": "0a841a001f68cc16143f050f4448c553488311475354dce04f7b7288be4987f1"
+        },
+        "exam_questions": {
+            "count": 6,
+            "sha256": "1cc069c46a5680583d866c20ea7220971a7f2a5d54d49c0a8b0647c314599a60"
+        },
+        "exam_submissions": {
+            "count": 3,
+            "sha256": "d405679fabd75c732ea936a412fcb733f0af27f60e178d1b5dcfa58b519f4586"
+        },
+        "submission_answers": {
+            "count": 9,
+            "sha256": "9c9c7fcc4fdf67b7356a7531a4b3674be9294ccb5aecae68ecd671be8e4793b3"
+        }
+    }
+}

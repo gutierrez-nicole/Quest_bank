@@ -1,0 +1,22 @@
+=== TEST SUITE: LESSON UPLOAD & EXTRACTION FIXES ===
+
+Test 1: Testing LessonExtractionService::ensureSchema...
+  [PASS] Columns present: 25 columns found.
+
+Test 2: Testing TXT Extraction...
+  Result: {"success":true,"word_count":11,"page_count":1,"execution_time_ms":11.93,"text_snippet":"Civil Engineering Principles: Prestressed concrete members and structural analysis for bridges."}
+  [PASS] TXT Extracted successfully!
+
+Test 3: Testing DOCX Extraction...
+  Result: {"success":true,"word_count":8,"page_count":1,"execution_time_ms":5.33,"text_snippet":"Structural Dynamics and Earthquake Engineering Seismic Response Analysis"}
+  [PASS] DOCX Extracted successfully!
+
+Test 4: Testing PDF Extraction...
+  Result: {"success":true,"word_count":8,"page_count":1,"execution_time_ms":5.72,"text_snippet":"Geotechnical Engineering Soil Mechanics and Foundation Settlement Analysis"}
+  [PASS] PDF Extracted successfully!
+
+Test 5: Testing Edge Cases (0-byte file, missing file)...
+  Empty file result: {"success":false,"error":"File is empty (0 bytes)."}
+  [PASS] Graceful error handled without throwing!
+
+=== ALL 5 TESTS PASSED WITH 0 CRASHES! ===

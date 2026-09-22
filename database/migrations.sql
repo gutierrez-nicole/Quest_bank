@@ -186,3 +186,6 @@ CREATE TABLE IF NOT EXISTS `audit_logs` (
   `ip_address` VARCHAR(45) DEFAULT NULL,
   `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Preserve existing values; allow truthful missing/non-OCR confidence for future submissions.
+ALTER TABLE exam_submissions MODIFY COLUMN ocr_confidence DECIMAL(5,2) NULL DEFAULT NULL;

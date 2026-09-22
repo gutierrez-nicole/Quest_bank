@@ -9,43 +9,9 @@ $selected_term = trim($_GET['term'] ?? 'All');
 $selected_subject = trim($_GET['subject'] ?? 'all');
 
 try {
-    $where = ["es.student_id = ?", "es.review_status = 'published'"];
-    $params = [$student_id];
-
-    if (!empty($selected_term) && $selected_term !== 'All') {
-        $where[] = "(es.term = ? OR e.academic_period = ?)";
-        $params[] = $selected_term;
-        $params[] = $selected_term;
-    }
-
-    if (!empty($selected_subject) && $selected_subject !== 'all') {
-        $where[] = "(COALESCE(e.subject, 'Civil Engineering') = ? OR es.subject = ?)";
-        $params[] = $selected_subject;
-        $params[] = $selected_subject;
-    }
-
-    $whereClause = implode(" AND ", $where);
-
-    $stmt = $pdo->prepare("
-        SELECT 
-            es.id AS submission_id,
-            COALESCE(e.title, es.exam_title) AS exam_title,
-            COALESCE(e.subject, 'Civil Engineering') AS subject,
-            COALESCE(es.term, e.academic_period, 'General') AS academic_period,
-            es.correct_count AS score,
-            es.total_items,
-            es.percentage,
-            es.status,
-            es.created_at AS date_taken,
-            es.published_at AS published_date
-        FROM exam_submissions es
-        LEFT JOIN exams e ON es.exam_id = e.id
-        WHERE {$whereClause}
-        GROUP BY es.id
-        ORDER BY es.created_at DESC
-    ");
-    $stmt->execute($params);
-    $records = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $records = array_map(function ($r) {
+        return $r + ['submission_id' => $r['id'], 'academic_period' => $r['term'], 'date_taken' => $r['created_at'], 'published_date' => $r['published_at']];
+    }, StudentResultService::results((int)$student_id, $selected_term, $selected_subject));
 
     $filename = "student_published_history_" . date('Ymd_His') . ".csv";
 

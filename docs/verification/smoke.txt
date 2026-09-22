@@ -1,0 +1,26 @@
+===================================================================
+   QUESTBANK v2.2-RC1 — MAINTAINER PRACTICAL SMOKE TEST SUITE    
+===================================================================
+
+  [TEST] Authentication & Role Authorization...
+    [✓] All 7 demo accounts verified (Role + Password Hash + Reset Flag)
+  [TEST] Server-Side Exam Scoring Engine...
+    [✓] Scoring engine calculation verified (Single item evaluation correct & incorrect)
+  [TEST] Result Publication & Student Privacy Boundaries...
+    [✓] Result publication and student privacy boundaries verified
+  [TEST] Database Migration Integrity & Password Safety...
+    [✓] Database migration smoke test passed (0 password modifications across migrations)
+  [TEST] OCR Camera Scanner Upload & Security Validation...
+    [✓] Valid camera capture JPEG passes server-side security & dimension checks
+    [✓] Spoofed PHP payload disguised as camera JPEG is rejected by magic byte validation
+    [✓] Corrupted JPEG binary capture is rejected by image decoder validation
+    [✓] Oversized camera capture (>10MB) is rejected by FileValidationService
+    [✓] Exam-specific student eligibility resolver verified (Eligible student accepted)
+    [✓] Injected/unauthorized student ID is safely rejected by server-side eligibility check
+    [✓] Camera scan submission successfully processed through OCR & scoring pipeline into Pending Review
+
+===================================================================
+RESULTS: 5/5 PASSED, 0/5 FAILED
+===================================================================
+
+[SUCCESS] All QuestBank core subsystem smoke tests passed cleanly!

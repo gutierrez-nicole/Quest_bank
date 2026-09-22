@@ -3,6 +3,9 @@ require_once __DIR__ . '/../app/bootstrap.php';
 
 AuthService::enforceRole('student');
 $pdo = getDBConnection();
+$publishedSql = StudentResultService::publishedSql();
+$barePublishedSql = StudentResultService::publishedSql('exam_submissions');
+$termSql = StudentResultService::termSql();
 
 try {
     $student_id = getCurrentUserId();
@@ -13,16 +16,15 @@ try {
         $answers = json_decode($_POST['answers'] ?? '{}', true);
 
         try {
+            validateCSRFToken();
+            ExamService::assertStudentCanAttempt($student_id, $exam_id);
             require_once __DIR__ . '/../app/services/EvaluationService.php';
             $evalRes = EvaluationService::evaluateAndSaveSubmission($exam_id, $student_id, is_array($answers) ? $answers : [], 'online');
 
             if ($evalRes['success']) {
                 echo json_encode([
                     'success' => true,
-                    'submission_id' => $evalRes['submission_id'],
-                    'total_score' => $evalRes['total_score'] ?? $evalRes['total_awarded_points'] ?? 0,
-                    'percentage' => $evalRes['percentage'],
-                    'status' => $evalRes['status']
+                    'submission_id' => $evalRes['submission_id']
                 ]);
             } else {
                 echo json_encode(['success' => false, 'error' => $evalRes['error'] ?? 'Evaluation failed']);
@@ -42,8 +44,8 @@ try {
                 SELECT es.*, COALESCE(e.title, es.exam_title) as exam_name, e.subject, u.fullname as teacher_name
                 FROM exam_submissions es
                 LEFT JOIN exams e ON es.exam_id = e.id
-                LEFT JOIN users u ON (es.teacher_id = u.id OR e.teacher_id = u.id)
-                WHERE es.id = ? AND es.student_id = ? AND es.review_status = 'published'
+                LEFT JOIN users u ON u.id = COALESCE(es.teacher_id, e.teacher_id)
+                WHERE es.id = ? AND es.student_id = ? AND {$publishedSql}
             ");
             $stmtSub->execute([$sub_id, $student_id]);
             $sub = $stmtSub->fetch(PDO::FETCH_ASSOC);
@@ -111,6 +113,7 @@ try {
         header('Content-Type: application/json');
         $exam_id = intval($_POST['exam_id'] ?? 0);
         try {
+            ExamService::assertStudentCanAttempt($student_id, $exam_id);
             $stmtEx = $pdo->prepare("SELECT id, title, subject, specialization, time_limit, exam_category FROM exams WHERE id = ?");
             $stmtEx->execute([$exam_id]);
             $examInfo = $stmtEx->fetch(PDO::FETCH_ASSOC);
@@ -120,7 +123,7 @@ try {
                 exit;
             }
 
-            $stmtQ = $pdo->prepare("SELECT id, question_text, question_type, option_a, option_b, option_c, option_d, formula_latex, matching_pairs, points FROM exam_questions WHERE exam_id = ? ORDER BY id ASC");
+            $stmtQ = $pdo->prepare("SELECT id, question_text, question_type, option_a, option_b, option_c, option_d, matching_pairs, points FROM exam_questions WHERE exam_id = ? ORDER BY id ASC");
             $stmtQ->execute([$exam_id]);
             $rawQuestions = $stmtQ->fetchAll(PDO::FETCH_ASSOC);
 
@@ -145,8 +148,8 @@ try {
                     'opt_b' => $q['option_b'],
                     'opt_c' => $q['option_c'],
                     'opt_d' => $q['option_d'],
-                    'formula_latex' => $q['formula_latex'],
-                    'matching_pairs' => $matchingPairsParsed,
+                    'matching_prompts' => is_array($matchingPairsParsed) ? array_keys($matchingPairsParsed) : [],
+                    'matching_options' => is_array($matchingPairsParsed) ? ExamService::matchingOptions($matchingPairsParsed) : [],
                     'points' => floatval($q['points'] ?? 1)
                 ];
             }
@@ -191,7 +194,7 @@ try {
         $stmt = $pdo->prepare("
             SELECT AVG(percentage) 
             FROM exam_submissions 
-            WHERE student_id = ? AND review_status = 'published'
+            WHERE student_id = ? AND {$barePublishedSql}
         ");
         $stmt->execute([$student_id]);
         $avg = $stmt->fetchColumn();
@@ -205,9 +208,9 @@ try {
         $stmt = $pdo->prepare("
             SELECT 
                 COUNT(*) as total,
-                SUM(CASE WHEN percentage >= 75 THEN 1 ELSE 0 END) as passed
+                SUM(CASE WHEN status = 'Pass' THEN 1 ELSE 0 END) as passed
             FROM exam_submissions 
-            WHERE student_id = ? AND review_status = 'published'
+            WHERE student_id = ? AND {$barePublishedSql}
         ");
         $stmt->execute([$student_id]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -226,7 +229,7 @@ try {
         $stmt = $pdo->prepare("
             SELECT COUNT(*) 
             FROM exam_submissions 
-            WHERE student_id = ? AND review_status = 'published'
+            WHERE student_id = ? AND {$barePublishedSql}
         ");
         $stmt->execute([$student_id]);
         $exams_completed = (int)$stmt->fetchColumn();
@@ -242,7 +245,7 @@ try {
             FROM exam_submissions es
             JOIN users u ON es.student_id = u.id
             JOIN student_details sd ON u.id = sd.user_id
-            WHERE sd.course = ? AND sd.year_level = ? AND sd.section = ? AND es.review_status = 'published'
+            WHERE sd.course = ? AND sd.year_level = ? AND sd.section = ? AND {$publishedSql}
         ");
         $stmt->execute([
             $student['course'] ?? 'BSIT',
@@ -256,41 +259,9 @@ try {
     }
 
     
-    $strong_subjects = [];
-    try {
-        $stmt = $pdo->prepare("
-            SELECT 
-                es.exam_title as subject,
-                AVG(es.percentage) as avg_score
-            FROM exam_submissions es
-            WHERE es.student_id = ? AND es.review_status = 'published'
-            GROUP BY es.exam_title
-            ORDER BY avg_score DESC
-            LIMIT 2
-        ");
-        $stmt->execute([$student_id]);
-        $strong_subjects = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    } catch (PDOException $e) {
-        $strong_subjects = [];
-    }
-
-    $weak_subjects = [];
-    try {
-        $stmt = $pdo->prepare("
-            SELECT 
-                es.exam_title as subject,
-                AVG(es.percentage) as avg_score
-            FROM exam_submissions es
-            WHERE es.student_id = ? AND es.review_status = 'published'
-            GROUP BY es.exam_title
-            ORDER BY avg_score ASC
-            LIMIT 2
-        ");
-        $stmt->execute([$student_id]);
-        $weak_subjects = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    } catch (PDOException $e) {
-        $weak_subjects = [];
-    }
+    $subjectPerformance = StudentResultService::subjectPerformance((int)$student_id);
+    $strong_subjects = array_slice(array_values(array_filter($subjectPerformance, fn($r) => (float)$r['avg_score'] >= StudentResultService::MASTERY_THRESHOLD)), 0, 2);
+    $weak_subjects = array_slice(array_reverse(array_values(array_filter($subjectPerformance, fn($r) => (float)$r['avg_score'] < StudentResultService::MASTERY_THRESHOLD))), 0, 2);
 
     
     try {
@@ -304,7 +275,7 @@ try {
                 e.time_limit,
                 e.total_items
             FROM exams e
-            WHERE e.id NOT IN (
+            WHERE e.status = 'active' AND e.exam_category <> 'qualifying' AND e.id NOT IN (
                 SELECT exam_id FROM exam_submissions WHERE student_id = ? AND exam_id IS NOT NULL
             ) AND e.title NOT IN (
                 SELECT exam_title FROM exam_submissions WHERE student_id = ?
@@ -312,7 +283,7 @@ try {
             ORDER BY e.created_at DESC
         ");
         $stmt->execute([$student_id, $student_id]);
-        $pending_exams = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $pending_exams = array_values(array_filter($stmt->fetchAll(PDO::FETCH_ASSOC), fn($exam) => ExamService::checkStudentEligibility($student_id, $exam['id'])['eligible']));
     } catch (PDOException $e) {
         $pending_exams = [];
     }
@@ -323,10 +294,10 @@ try {
         $stmtQList = $pdo->prepare("
             SELECT e.*, 
                    (SELECT COUNT(*) FROM exam_submissions WHERE student_id = ? AND exam_id = e.id) as attempts_taken,
-                   (SELECT qualification_status FROM exam_submissions WHERE student_id = ? AND exam_id = e.id ORDER BY id DESC LIMIT 1) as latest_qual_status,
-                   (SELECT percentage FROM exam_submissions WHERE student_id = ? AND exam_id = e.id ORDER BY id DESC LIMIT 1) as latest_percentage
+                   (SELECT qualification_status FROM exam_submissions WHERE student_id = ? AND exam_id = e.id AND {$barePublishedSql} ORDER BY id DESC LIMIT 1) as latest_qual_status,
+                   (SELECT percentage FROM exam_submissions WHERE student_id = ? AND exam_id = e.id AND {$barePublishedSql} ORDER BY id DESC LIMIT 1) as latest_percentage
             FROM exams e
-            WHERE e.exam_category = 'qualifying'
+            WHERE e.exam_category = 'qualifying' AND e.status = 'active'
             ORDER BY e.id DESC
         ");
         $stmtQList->execute([$student_id, $student_id, $student_id]);
@@ -352,7 +323,7 @@ try {
                 AVG(es.percentage) as avg_score
             FROM exam_submissions es
             JOIN exams e ON es.exam_id = e.id
-            WHERE es.student_id = ? AND es.review_status = 'published'
+            WHERE es.student_id = ? AND {$publishedSql}
             GROUP BY e.id, e.title
             ORDER BY e.created_at ASC
             LIMIT 5
@@ -388,7 +359,7 @@ try {
                 es.created_at
             FROM exam_submissions es
             JOIN exams e ON es.exam_id = e.id
-            WHERE es.student_id = ? AND es.review_status = 'published'
+            WHERE es.student_id = ? AND {$publishedSql}
             ORDER BY es.created_at ASC
             LIMIT 5
         ");
@@ -421,7 +392,7 @@ try {
                 SUM(CASE WHEN percentage >= 60 AND percentage < 85 THEN 1 ELSE 0 END) as review,
                 SUM(CASE WHEN percentage < 60 THEN 1 ELSE 0 END) as unassessed
             FROM exam_submissions
-            WHERE student_id = ? AND review_status = 'published'
+            WHERE student_id = ? AND {$barePublishedSql}
         ");
         $stmt->execute([$student_id]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -450,7 +421,7 @@ try {
         $stmt = $pdo->prepare("
             SELECT AVG(percentage) as avg_score
             FROM exam_submissions
-            WHERE student_id = ? AND review_status = 'published'
+            WHERE student_id = ? AND {$barePublishedSql}
         ");
         $stmt->execute([$student_id]);
         $avg = $stmt->fetchColumn();
@@ -470,52 +441,9 @@ try {
     }
 
     
-    $selected_term = trim($_GET['term'] ?? 'All');
-    $exam_results = [];
-    try {
-        if (in_array($selected_term, ['Prelim', 'Midterm', 'Finals'])) {
-            $stmt = $pdo->prepare("
-                SELECT 
-                    es.id,
-                    COALESCE(e.title, es.exam_title) AS title,
-                    COALESCE(e.subject, 'Civil Engineering') AS subject,
-                    es.term,
-                    es.correct_count AS score,
-                    es.total_items,
-                    es.percentage,
-                    es.status,
-                    es.created_at
-                FROM exam_submissions es
-                LEFT JOIN exams e ON es.exam_id = e.id
-                WHERE es.student_id = ? AND es.review_status = 'published' AND es.term = ?
-                ORDER BY es.created_at DESC
-            ");
-            $stmt->execute([$student_id, $selected_term]);
-        } else {
-            $stmt = $pdo->prepare("
-                SELECT 
-                    es.id,
-                    COALESCE(e.title, es.exam_title) AS title,
-                    COALESCE(e.subject, 'Civil Engineering') AS subject,
-                    es.term,
-                    es.correct_count AS score,
-                    es.total_items,
-                    es.percentage,
-                    es.status,
-                    es.created_at
-                FROM exam_submissions es
-                LEFT JOIN exams e ON es.exam_id = e.id
-                WHERE es.student_id = ? AND es.review_status = 'published'
-                ORDER BY es.created_at DESC
-            ");
-            $stmt->execute([$student_id]);
-        }
-        $exam_results = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    } catch (PDOException $e) {
-        $exam_results = [];
-    }
+    $selected_term = StudentResultService::normalizeTerm($_GET['term'] ?? '') ?? 'All';
+    $exam_results = StudentResultService::results((int)$student_id, $selected_term);
 
-    
     // Priority 3: Student Performance Summary
     $student_performance_summary = [
         'total_published' => 0,
@@ -533,13 +461,13 @@ try {
         $stmtSum = $pdo->prepare("
             SELECT 
                 COUNT(*) as total_published,
-                SUM(CASE WHEN es.status = 'Pass' OR es.percentage >= 75 THEN 1 ELSE 0 END) as passed_count,
-                SUM(CASE WHEN es.status = 'Fail' OR es.percentage < 75 THEN 1 ELSE 0 END) as failed_count,
+                SUM(CASE WHEN es.status = 'Pass' THEN 1 ELSE 0 END) as passed_count,
+                SUM(CASE WHEN es.status = 'Fail' THEN 1 ELSE 0 END) as failed_count,
                 AVG(es.percentage) as avg_percentage,
                 MAX(es.percentage) as highest_score,
                 MIN(es.percentage) as lowest_score
             FROM exam_submissions es
-            WHERE es.student_id = ? AND es.review_status = 'published'
+            WHERE es.student_id = ? AND {$publishedSql}
         ");
         $stmtSum->execute([$student_id]);
         $sumRow = $stmtSum->fetch(PDO::FETCH_ASSOC);
@@ -563,7 +491,7 @@ try {
                 (SELECT COUNT(*) FROM exam_submissions WHERE student_id = ? AND exam_id = e.id) as attempts_used
             FROM exam_submissions es
             JOIN exams e ON es.exam_id = e.id
-            WHERE es.student_id = ? AND e.exam_category = 'qualifying' AND es.review_status = 'published'
+            WHERE es.student_id = ? AND e.exam_category = 'qualifying' AND {$publishedSql}
             ORDER BY es.id DESC LIMIT 1
         ");
         $stmtQualSum->execute([$student_id, $student_id]);
@@ -588,10 +516,10 @@ try {
                 AVG(es.percentage) as avg_score,
                 MAX(es.percentage) as highest_score,
                 MIN(es.percentage) as lowest_score,
-                ROUND((SUM(CASE WHEN es.status = 'Pass' OR es.percentage >= 75 THEN 1 ELSE 0 END) / COUNT(es.id)) * 100, 1) as pass_rate
+                ROUND((SUM(CASE WHEN es.status = 'Pass' THEN 1 ELSE 0 END) / COUNT(es.id)) * 100, 1) as pass_rate
             FROM exam_submissions es
             LEFT JOIN exams e ON es.exam_id = e.id
-            WHERE es.student_id = ? AND es.review_status = 'published'
+            WHERE es.student_id = ? AND {$publishedSql}
             GROUP BY COALESCE(e.subject, es.exam_title)
             ORDER BY avg_score DESC
         ");
@@ -604,11 +532,11 @@ try {
     // Priority 3: Student Exam History Filtered
     $hist_search = trim($_GET['search'] ?? '');
     $hist_subject = trim($_GET['subject'] ?? 'all');
-    $hist_period = trim($_GET['academic_period'] ?? $_GET['term'] ?? 'all');
+    $hist_period = StudentResultService::normalizeTerm($_GET['academic_period'] ?? $_GET['term'] ?? '') ?? 'all';
     $hist_semester = trim($_GET['semester'] ?? 'all');
     $hist_sy = trim($_GET['school_year'] ?? 'all');
 
-    $histWhere = "WHERE es.student_id = ? AND es.review_status = 'published'";
+    $histWhere = "WHERE es.student_id = ? AND {$publishedSql}";
     $histParams = [$student_id];
 
     if (!empty($hist_search)) {
@@ -619,26 +547,22 @@ try {
     }
 
     if ($hist_subject !== 'all') {
-        $histWhere .= " AND (COALESCE(e.subject, 'Civil Engineering') = ? OR es.subject = ?)";
-        $histParams[] = $hist_subject;
+        $histWhere .= " AND COALESCE(e.subject, 'Civil Engineering') = ?";
         $histParams[] = $hist_subject;
     }
 
     if ($hist_period !== 'all') {
-        $histWhere .= " AND (COALESCE(es.term, e.academic_period) = ? OR e.covered_periods LIKE ?)";
+        $histWhere .= " AND {$termSql} = ?";
         $histParams[] = $hist_period;
-        $histParams[] = "%{$hist_period}%";
     }
 
     if ($hist_semester !== 'all') {
-        $histWhere .= " AND (e.semester = ? OR EXISTS (SELECT 1 FROM lesson_materials lm WHERE lm.exam_id = e.id AND lm.semester = ?))";
-        $histParams[] = $hist_semester;
+        $histWhere .= " AND EXISTS (SELECT 1 FROM exam_schedules sch JOIN semesters sem ON sem.id = sch.semester_id WHERE sch.exam_id = e.id AND sem.semester_name = ?)";
         $histParams[] = $hist_semester;
     }
 
     if ($hist_sy !== 'all') {
-        $histWhere .= " AND (e.school_year = ? OR EXISTS (SELECT 1 FROM lesson_materials lm WHERE lm.exam_id = e.id AND lm.school_year = ?))";
-        $histParams[] = $hist_sy;
+        $histWhere .= " AND EXISTS (SELECT 1 FROM exam_schedules sch JOIN semesters sem ON sem.id = sch.semester_id JOIN school_years sy ON sy.id = sem.school_year_id WHERE sch.exam_id = e.id AND sy.school_year = ?)";
         $histParams[] = $hist_sy;
     }
 
@@ -650,10 +574,10 @@ try {
                 COALESCE(e.title, es.exam_title) AS title,
                 COALESCE(e.subject, 'Civil Engineering') AS subject,
                 COALESCE(uT.fullname, 'Course Professor') AS teacher_name,
-                COALESCE(es.term, e.academic_period, 'General') AS academic_period,
+                {$termSql} AS academic_period,
                 es.total_score,
-                es.correct_count AS score,
-                es.total_items,
+                es.total_score AS score,
+                COALESCE(es.total_possible_score, es.total_items) AS total_items,
                 es.percentage,
                 es.status,
                 es.created_at AS date_taken,
@@ -661,7 +585,7 @@ try {
                 e.exam_category
             FROM exam_submissions es
             LEFT JOIN exams e ON es.exam_id = e.id
-            LEFT JOIN users uT ON (es.teacher_id = uT.id OR e.teacher_id = uT.id)
+            LEFT JOIN users uT ON uT.id = COALESCE(es.teacher_id, e.teacher_id)
             $histWhere
             GROUP BY es.id
             ORDER BY es.created_at DESC
@@ -677,7 +601,7 @@ try {
     $student_leaderboard = [];
     try {
         $leader_subject = trim($_GET['leader_subject'] ?? 'all');
-        $lbWhere = "WHERE es.review_status = 'published'";
+        $lbWhere = "WHERE {$publishedSql}";
         $lbParams = [];
 
         if ($leader_subject !== 'all') {
@@ -998,7 +922,7 @@ try {
                             <?php foreach ($weak_subjects as $subject): ?>
                                 <div class="bg-white dark:bg-stone-900 p-3 rounded-xl border border-rose-100 dark:border-stone-800 flex justify-between items-center shadow-2xs">
                                     <span><?php echo htmlspecialchars($subject['subject']); ?></span>
-                                    <span class="text-rose-500 font-black"><?php echo number_format($subject['avg_score'], 1); ?>% Need Review</span>
+                                    <span class="text-rose-500 font-black"><?php echo number_format($subject['avg_score'], 1); ?>% Mastery — Review Needed</span>
                                 </div>
                             <?php endforeach; ?>
                         </div>
@@ -1058,7 +982,7 @@ try {
                                     $attemptsTaken = intval($qex['attempts_taken']);
                                     $maxAttempts = intval($qex['qualifying_max_attempts'] ?? 1);
                                     $remainingAttempts = max(0, $maxAttempts - $attemptsTaken);
-                                    $qualStatus = $qex['latest_qual_status'] ?? null;
+                                    $qualStatus = $qex['latest_qual_status'] ?? ($attemptsTaken > 0 ? 'pending' : null);
                                 ?>
                                 <div class="border border-stone-200 dark:border-stone-800 p-4 rounded-xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-stone-50/50 dark:bg-stone-800/30">
                                     <div class="space-y-1.5 flex-1">
@@ -1705,11 +1629,7 @@ try {
                     </div>
                 `;
             } else if (qType === 'matching') {
-                let pairs = q.matching_pairs;
-                if (typeof pairs === 'string') {
-                    try { pairs = JSON.parse(pairs); } catch(e) { pairs = null; }
-                }
-                if (pairs && typeof pairs === 'object') {
+                if (Array.isArray(q.matching_prompts) && q.matching_prompts.length > 0) {
                     let currentAnsObj = {};
                     if (selectedAns) {
                         if (typeof selectedAns === 'object') currentAnsObj = selectedAns;
@@ -1717,8 +1637,8 @@ try {
                             try { currentAnsObj = JSON.parse(selectedAns); } catch(e) { currentAnsObj = {}; }
                         }
                     }
-                    const premiseKeys = Object.keys(pairs);
-                    const targetValues = Object.values(pairs);
+                    const premiseKeys = q.matching_prompts;
+                    const targetValues = q.matching_options;
                     
                     html = '<div class="space-y-3">';
                     html += '<p class="text-xs font-bold text-stone-600 dark:text-stone-300">Match each item on the left with the correct option on the right:</p>';
@@ -1896,6 +1816,7 @@ try {
             closeSubmitModal();
             const formData = new FormData();
             formData.append('action', 'submit_online_exam');
+            formData.append('csrf_token', <?php echo json_encode(generateCSRFToken()); ?>);
             formData.append('exam_id', activeExamId);
             formData.append('answers', JSON.stringify(userAnswers));
 
@@ -2052,6 +1973,11 @@ try {
             });
         });
 
+        function escapeResultText(value) {
+            const span = document.createElement('span');
+            span.textContent = String(value ?? '');
+            return span.innerHTML;
+        }
         function openStudentBreakdownModal(subId) {
             var modal = document.getElementById('student_breakdown_modal');
             if (!modal) return;
@@ -2116,24 +2042,24 @@ try {
                             <div class="flex items-center justify-between">
                                 <span class="font-extrabold text-stone-800 dark:text-stone-100 text-[11px]">Question #${idx + 1}</span>
                                 <span class="px-2 py-0.5 rounded-full text-[10px] font-black ${isCorrect ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : (isReview ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800 border border-rose-300')}">
-                                    ${isCorrect ? '✓ Correct (' + (item.awarded_points || 1) + ' pt)' : (isReview ? '⚠ Under Review' : '✗ Incorrect (0 pt)')}
+                                    ${isCorrect ? '✓ Correct (' + Number(item.awarded_points) + ' pt)' : (isReview ? '⚠ Under Review' : (Number(item.awarded_points) > 0 ? 'Partial credit (' + Number(item.awarded_points) + ' pt)' : '✗ Incorrect (0 pt)'))}
                                 </span>
                             </div>
-                            ${item.question_text ? `<p class="font-bold text-stone-800 dark:text-stone-200 text-xs">${item.question_text}</p>` : ''}
+                            ${item.question_text ? `<p class="font-bold text-stone-800 dark:text-stone-200 text-xs">${escapeResultText(item.question_text)}</p>` : ''}
                             <div class="grid grid-cols-2 gap-2 text-[11px] pt-1">
                                 <div class="p-1.5 rounded bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700">
                                     <span class="text-stone-400 font-bold block text-[10px]">Your Answer:</span>
-                                    <strong class="${isCorrect ? 'text-emerald-700 font-black' : 'text-rose-700 font-black'}">${item.student_answer ? item.student_answer : '(No answer)'}</strong>
+                                    <strong class="${isCorrect ? 'text-emerald-700 font-black' : 'text-rose-700 font-black'}">${escapeResultText(item.student_answer || '(No answer)')}</strong>
                                 </div>
                                 <div class="p-1.5 rounded bg-white dark:bg-stone-800 border border-stone-200 dark:border-stone-700">
                                     <span class="text-stone-400 font-bold block text-[10px]">Correct Answer Key:</span>
-                                    <strong class="text-emerald-800 dark:text-emerald-400 font-black">${item.correct_answer || 'N/A'}</strong>
+                                    <strong class="text-emerald-800 dark:text-emerald-400 font-black">${escapeResultText(item.correct_answer || 'N/A')}</strong>
                                 </div>
                             </div>
                             ${item.explanation ? `
                                 <div class="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 text-[10.5px] text-stone-700 dark:text-stone-300">
                                     <span class="text-amber-800 dark:text-amber-400 font-bold block text-[10px] mb-0.5"><i class="fa-solid fa-lightbulb"></i> Solution / Explanation:</span>
-                                    <div class="font-mono leading-relaxed whitespace-pre-wrap">${item.explanation}</div>
+                                    <div class="font-mono leading-relaxed whitespace-pre-wrap">${escapeResultText(item.explanation)}</div>
                                 </div>
                             ` : ''}
                         `;

@@ -4,6 +4,7 @@ require_once __DIR__ . '/../app/services/NotificationService.php';
 
 AuthService::enforceRole('teacher');
 $pdo = getDBConnection();
+$publishedSql = StudentResultService::publishedSql();
 
 $request_msg = "";
 $notifications = [];
@@ -103,10 +104,6 @@ try {
         $stmt->execute([$teacher_id]);
         $total_exams = (int)$stmt->fetchColumn();
         
-        if ($total_exams == 0) {
-            $stmt = $pdo->query("SELECT COUNT(*) FROM exams");
-            $total_exams = (int)$stmt->fetchColumn();
-        }
     } catch (PDOException $e) {
         $total_exams = 0;
     }
@@ -116,21 +113,15 @@ try {
     $avg_percentage = 0;
     try {
         $stmt = $pdo->prepare("
-            SELECT COUNT(*), AVG(percentage) 
-            FROM exam_submissions 
-            WHERE teacher_id = ?
+            SELECT COUNT(*), AVG(CASE WHEN {$publishedSql} THEN es.percentage ELSE NULL END)
+            FROM exam_submissions es
+            WHERE es.teacher_id = ?
         ");
         $stmt->execute([$teacher_id]);
         $row = $stmt->fetch(PDO::FETCH_NUM);
         $total_checked = (int)($row[0] ?? 0);
         $avg_percentage = round((float)($row[1] ?? 0), 1);
         
-        if ($total_checked == 0) {
-            $stmt = $pdo->query("SELECT COUNT(*), AVG(percentage) FROM exam_submissions");
-            $row = $stmt->fetch(PDO::FETCH_NUM);
-            $total_checked = (int)($row[0] ?? 0);
-            $avg_percentage = round((float)($row[1] ?? 0), 1);
-        }
     } catch (PDOException $e) {
         $total_checked = 0;
         $avg_percentage = 0;
@@ -149,24 +140,12 @@ try {
                 SUM(CASE WHEN es.status = 'Fail' THEN 1 ELSE 0 END) AS fail_count
             FROM exam_submissions es
             LEFT JOIN student_details sd ON es.student_id = sd.user_id
-            WHERE es.teacher_id = ?
+            WHERE es.teacher_id = ? AND {$publishedSql}
             GROUP BY sd.section
         ");
         $stmt->execute([$teacher_id]);
         $secData = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
-        if (empty($secData)) {
-            $stmt = $pdo->query("
-                SELECT 
-                    sd.section AS section_name,
-                    SUM(CASE WHEN es.status = 'Pass' THEN 1 ELSE 0 END) AS pass_count,
-                    SUM(CASE WHEN es.status = 'Fail' THEN 1 ELSE 0 END) AS fail_count
-                FROM exam_submissions es
-                LEFT JOIN student_details sd ON es.student_id = sd.user_id
-                GROUP BY sd.section
-            ");
-            $secData = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        }
         
         if (!empty($secData)) {
             foreach ($secData as $row) {
@@ -199,15 +178,6 @@ try {
         $stmt->execute([$teacher_id]);
         $recent_submissions = $stmt->fetchAll(PDO::FETCH_ASSOC);
         
-        if (empty($recent_submissions)) {
-            $stmt = $pdo->query("
-                SELECT student_name, exam_title, percentage, status, created_at 
-                FROM exam_submissions 
-                ORDER BY created_at DESC 
-                LIMIT 5
-            ");
-            $recent_submissions = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        }
     } catch (PDOException $e) {
         $recent_submissions = [];
     }
@@ -219,22 +189,22 @@ try {
     $total_pending_qualifying = 0;
 
     try {
-        $stmtQEx = $pdo->prepare("SELECT COUNT(*) FROM exams WHERE teacher_id = ? AND exam_category = 'qualifying'");
+        $stmtQEx = $pdo->prepare("SELECT COUNT(*) FROM exams WHERE teacher_id = ? AND exam_category = 'qualifying' AND status = 'active'");
         $stmtQEx->execute([$teacher_id]);
         $total_qualifying_exams = (int)$stmtQEx->fetchColumn();
 
         $stmtQRes = $pdo->prepare("
-            SELECT qualification_status, COUNT(*) as cnt 
+            SELECT CASE WHEN {$publishedSql} THEN es.qualification_status ELSE 'pending' END AS visible_status, COUNT(*) as cnt
             FROM exam_submissions es 
             JOIN exams e ON es.exam_id = e.id 
             WHERE e.teacher_id = ? AND e.exam_category = 'qualifying'
-            GROUP BY qualification_status
+            GROUP BY visible_status
         ");
         $stmtQRes->execute([$teacher_id]);
         while ($r = $stmtQRes->fetch(PDO::FETCH_ASSOC)) {
-            if ($r['qualification_status'] === 'qualified') $total_qualified_students = (int)$r['cnt'];
-            elseif ($r['qualification_status'] === 'not_qualified') $total_not_qualified_students = (int)$r['cnt'];
-            elseif ($r['qualification_status'] === 'pending') $total_pending_qualifying = (int)$r['cnt'];
+            if ($r['visible_status'] === 'qualified') $total_qualified_students = (int)$r['cnt'];
+            elseif ($r['visible_status'] === 'not_qualified') $total_not_qualified_students = (int)$r['cnt'];
+            elseif ($r['visible_status'] === 'pending') $total_pending_qualifying = (int)$r['cnt'];
         }
     } catch (PDOException $e) {
         
@@ -380,7 +350,7 @@ try {
                 </div>
                 <div class="bg-white p-4 border border-stone-200 rounded-xl flex items-center justify-between shadow-sm hover:shadow-md transition-shadow">
                     <div>
-                        <p class="text-[10px] uppercase tracking-wider font-bold text-stone-400">OCR Scripts Checked</p>
+                        <p class="text-[10px] uppercase tracking-wider font-bold text-stone-400">Exam Submissions</p>
                         <h3 class="text-2xl font-black text-stone-800 mt-1"><?php echo number_format($total_checked); ?></h3>
                         <p class="text-[9px] text-purple-600 font-semibold mt-1">
                             <i class="fa-solid fa-check-double"></i> Graded
@@ -413,7 +383,7 @@ try {
 
                 <div class="bg-white p-4 border border-emerald-200 rounded-xl flex items-center justify-between shadow-sm">
                     <div>
-                        <p class="text-[10px] uppercase tracking-wider font-bold text-emerald-700">Qualified Students</p>
+                        <p class="text-[10px] uppercase tracking-wider font-bold text-emerald-700">Qualified Results</p>
                         <h3 class="text-2xl font-black text-emerald-600 mt-1"><?php echo number_format($total_qualified_students); ?></h3>
                         <p class="text-[9px] text-emerald-600 font-semibold mt-1"><i class="fa-solid fa-circle-check"></i> Passed Criteria</p>
                     </div>
@@ -422,7 +392,7 @@ try {
 
                 <div class="bg-white p-4 border border-rose-200 rounded-xl flex items-center justify-between shadow-sm">
                     <div>
-                        <p class="text-[10px] uppercase tracking-wider font-bold text-rose-700">Not Qualified</p>
+                        <p class="text-[10px] uppercase tracking-wider font-bold text-rose-700">Not Qualified Results</p>
                         <h3 class="text-2xl font-black text-rose-600 mt-1"><?php echo number_format($total_not_qualified_students); ?></h3>
                         <p class="text-[9px] text-rose-600 font-semibold mt-1"><i class="fa-solid fa-circle-xmark"></i> Below Benchmark</p>
                     </div>
@@ -498,7 +468,7 @@ try {
                 <div class="flex items-center justify-between mb-4 border-b pb-2">
                     <div>
                         <h3 class="text-sm font-bold text-stone-800"><i class="fa-solid fa-chart-column text-orange-500 mr-1.5"></i> Section Performance Comparison (Pass vs Fail)</h3>
-                        <p class="text-[11px] text-stone-400">Real-time data: Passing (≥75%) and failing (<75%) student ratios per section.</p>
+                        <p class="text-[11px] text-stone-400">Published exam outcomes per section, using each exam's configured passing score.</p>
                     </div>
                 </div>
                 <div class="h-64 w-full">

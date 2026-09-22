@@ -7,8 +7,62 @@ class ExamScoringService {
 
     
 
+    /** Normalize for comparison only: never replace the recorded student answer. */
+    public static function normalizeAnswer(string $answer): string {
+        $text = html_entity_decode(strip_tags($answer), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        return mb_strtolower(trim(preg_replace('/[\s\x{00a0}]+/u', ' ', $text)), 'UTF-8');
+    }
+
+    public static function numericAnswer(string $answer): ?float {
+        $text = self::normalizeAnswer($answer);
+        // Full-string match: no substring search or extraction from worked solutions.
+        if (!preg_match('/^(?:[a-z]\s*=\s*)?([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?)$/i', $text, $m)) return null;
+        $value = (float)$m[1];
+        return is_finite($value) ? $value : null;
+    }
+
+    public static function answersMatch(string $student, string $key, array $question = []): bool {
+        if (self::normalizeAnswer($key) === '') return false;
+        $a = self::numericAnswer($student);
+        $b = self::numericAnswer($key);
+        if ($a !== null && $b !== null && empty($question['expected_unit'])) {
+            $tolerance = max(0.0, (float)($question['tolerance'] ?? 0));
+            if ($tolerance > 0 && is_finite($tolerance)) return abs($a - $b) <= $tolerance;
+            // Exact decimal normalization avoids float rounding accepting adjacent large integers
+            // or treating a tiny nonzero answer as zero when no tolerance was configured.
+            $canonicalStudent = self::canonicalDecimal($student);
+            $canonicalKey = self::canonicalDecimal($key);
+            return $canonicalStudent !== null && $canonicalStudent === $canonicalKey;
+        }
+        return self::normalizeAnswer($student) === self::normalizeAnswer($key);
+    }
+
+    private static function canonicalDecimal(string $answer): ?string {
+        $text = preg_replace('/^[a-z]\s*=\s*/', '', self::normalizeAnswer($answer));
+        if (!preg_match('/^([+-]?)(\d*\.?\d+|\d+\.)(?:e([+-]?\d+))?$/', $text, $m)) return null;
+        $exponentText = $m[3] ?? '0';
+        if (strlen(ltrim($exponentText, '+-0')) > 4) return null;
+        $exponent = (int)$exponentText;
+        $decimal = strpos($m[2], '.');
+        if ($decimal !== false) $exponent -= strlen($m[2]) - $decimal - 1;
+        $digits = ltrim(str_replace('.', '', $m[2]), '0');
+        if ($digits === '') return '0';
+        $trimmed = rtrim($digits, '0');
+        $exponent += strlen($digits) - strlen($trimmed);
+        return ($m[1] === '-' ? '-' : '') . $trimmed . 'e' . $exponent;
+    }
+
+    private static function choiceLetter(string $answer, array $question): ?string {
+        $answer = self::normalizeAnswer($answer);
+        foreach (['a','b','c','d'] as $letter) {
+            $option = self::normalizeAnswer((string)($question['option_'.$letter] ?? $question['opt_'.$letter] ?? ''));
+            if ($answer === $letter || $answer === 'opt_'.$letter || ($option !== '' && ($answer === $option || $answer === $letter.'. '.$option || $answer === $letter.') '.$option))) return $letter;
+        }
+        return null;
+    }
+
     public static function evaluateSingleAnswer($question, $studentAnswerRaw) {
-        $qType = strtolower($question['type'] ?? strtolower($question['question_type'] ?? 'multiple_choice'));
+        $qType = strtolower(trim($question['question_type'] ?? $question['type'] ?? 'multiple_choice'));
         $correctAnswer = trim($question['correct_answer'] ?? '');
         $maxPoints = floatval($question['points'] ?? 1.00);
 
@@ -36,19 +90,11 @@ class ExamScoringService {
 
         switch ($qType) {
             case 'multiple_choice':
-                $normStudent = strtolower(trim($studentAnswerStr));
-                $normCorrect = strtolower(trim($correctAnswer));
-
-                $optToLetter = ['opt_a' => 'a', 'opt_b' => 'b', 'opt_c' => 'c', 'opt_d' => 'd'];
-                $sLetter = $optToLetter[$normStudent] ?? $normStudent;
-                $cLetter = $optToLetter[$normCorrect] ?? $normCorrect;
-
-                if ($sLetter === $cLetter || $normStudent === $normCorrect) {
-                    $isCorrect = true;
-                    $reason = 'Correct option selected.';
-                } else {
-                    $reason = "Selected '{$studentAnswerStr}', correct option is '{$correctAnswer}'.";
-                }
+                $sLetter = self::choiceLetter($studentAnswerStr, $question);
+                $cLetter = self::choiceLetter($correctAnswer, $question);
+                $isCorrect = ($sLetter !== null && $cLetter !== null) ? $sLetter === $cLetter : self::normalizeAnswer($studentAnswerStr) === self::normalizeAnswer($correctAnswer);
+                $isCorrect = $correctAnswer !== '' && $isCorrect;
+                $reason = $isCorrect ? 'Correct option selected.' : 'Selected option does not match the answer key.';
                 break;
 
             case 'true_false':
@@ -78,12 +124,12 @@ class ExamScoringService {
                 $normStudent = strtolower(preg_replace('/\s+/', ' ', trim($studentAnswerStr)));
                 $normCorrect = strtolower(preg_replace('/\s+/', ' ', trim($correctAnswer)));
 
-                if ($normStudent === $normCorrect) {
+                if (self::answersMatch($studentAnswerStr, $correctAnswer, $question)) {
                     $isCorrect = true;
-                    $reason = 'Exact match on identification term.';
+                    $reason = 'Answer matches the key after normalization.';
                 } else {
                     $acceptedList = array_map('trim', preg_split('/[,|]/', $normCorrect));
-                    if (in_array($normStudent, $acceptedList, true)) {
+                    if (count(array_filter($acceptedList, fn($key) => self::answersMatch($studentAnswerStr, $key, $question))) > 0) {
                         $isCorrect = true;
                         $reason = 'Match found in accepted answer list.';
                     } else {
@@ -115,14 +161,19 @@ class ExamScoringService {
                 break;
 
             case 'problem_solving':
-                $requiresReview = true;
-                $reason = 'Manual teacher evaluation required for problem solving item.';
+                if (empty($question['rubric_json']) && empty($question['partial_credit_enabled']) && empty($question['expected_unit']) && self::numericAnswer($correctAnswer) !== null && self::numericAnswer($studentAnswerStr) !== null) {
+                    $isCorrect = self::answersMatch($studentAnswerStr, $correctAnswer, $question);
+                    $reason = $isCorrect ? 'Numeric final answer matches the key.' : 'Numeric final answer does not match the key.';
+                } else {
+                    $requiresReview = true;
+                    $reason = 'Teacher evaluation required for worked solutions, rubrics or non-numeric responses.';
+                }
                 break;
 
             case 'math_formula':
                 $normStudent = strtolower(preg_replace('/\s+/', '', trim($studentAnswerStr)));
                 $normCorrect = strtolower(preg_replace('/\s+/', '', trim($correctAnswer)));
-                if (!empty($normCorrect) && $normStudent === $normCorrect) {
+                if ($normCorrect !== '' && (self::answersMatch($studentAnswerStr, $correctAnswer, $question) || $normStudent === $normCorrect)) {
                     $isCorrect = true;
                     $reason = 'Exact formula expression match.';
                 } else {
@@ -238,9 +289,12 @@ class ExamScoringService {
             $percentage = ($totalPossiblePoints > 0) ? round(($totalAwardedPoints / $totalPossiblePoints) * 100, 2) : 0.00;
             $passOrFail = ($percentage >= $passingThreshold) ? 'Pass' : 'Fail';
 
-            $ocrConf = floatval($fileMeta['ocr_confidence'] ?? 100.00);
-            $manualRev = intval($fileMeta['suggested_manual_review'] ?? 0);
-            $reviewStatus = ($reviewRequiredCount > 0 || $ocrConf < 75.00 || $manualRev === 1) ? 'pending_review' : 'finalized';
+            $isOcr = $uploadType !== 'online';
+            $ocrConf = $isOcr && isset($fileMeta['ocr_confidence']) ? (float)$fileMeta['ocr_confidence'] : null;
+            if ($ocrConf !== null && (!is_finite($ocrConf) || $ocrConf < 0 || $ocrConf > 100)) $ocrConf = null;
+            $ocrIncomplete = $isOcr && (trim($fileMeta['ocr_text'] ?? '') === '' || ($fileMeta['ocr_status'] ?? 'failed') !== 'completed' || ($ocrConf !== null && $ocrConf < 75.0) || ($ocrConf === null && ($fileMeta['extraction_mode'] ?? '') !== 'native_pdf_text'));
+            $manualRev = (int)($ocrIncomplete || !empty($fileMeta['suggested_manual_review']));
+            $reviewStatus = ($reviewRequiredCount > 0 || $manualRev === 1) ? 'pending_review' : 'finalized';
 
             $studentName = 'Guest Student';
             if ($studentIdDb) {
@@ -296,9 +350,9 @@ class ExamScoringService {
                 $percentage,
                 $passOrFail,
                 $fileMeta['ocr_text'] ?? null,
-                $fileMeta['ocr_confidence'] ?? 100.00,
-                $fileMeta['ocr_status'] ?? 'completed',
-                $fileMeta['suggested_manual_review'] ?? 0,
+                $ocrConf,
+                $isOcr ? ($fileMeta['ocr_status'] ?? 'failed') : 'pending',
+                $manualRev,
                 $fileMeta['page_count'] ?? 1,
                 json_encode($itemResults),
                 $reviewStatus,
@@ -309,6 +363,11 @@ class ExamScoringService {
             ]);
 
             $submissionId = $pdo->lastInsertId();
+            $pdo->prepare("UPDATE exam_submissions SET original_ocr_text = ?, corrected_ocr_text = ?, extraction_mode = ?, per_page_ocr_metadata = ?, ocr_error = ? WHERE id = ?")
+                ->execute([$isOcr ? ($fileMeta['ocr_text'] ?? null) : null, $fileMeta['corrected_ocr_text'] ?? null,
+                    $isOcr ? ($fileMeta['extraction_mode'] ?? 'unknown') : 'not_applicable',
+                    isset($fileMeta['pages']) ? json_encode($fileMeta['pages']) : null, $fileMeta['ocr_error'] ?? null, $submissionId]);
+
 
             $stmtAnswer = $pdo->prepare("
                 INSERT INTO submission_answers (
