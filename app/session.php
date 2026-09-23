@@ -30,6 +30,14 @@ function verifySessionAndPolicy() {
     $scriptPath = $_SERVER['PHP_SELF'] ?? $_SERVER['SCRIPT_NAME'] ?? '';
     $rel = preg_match('#/(admin|teacher|student|api|tests)/#', $scriptPath) ? '../' : '';
 
+    $account = getDBConnection()->prepare("SELECT status FROM users WHERE id = ?");
+    $account->execute([$userId]);
+    if ($account->fetchColumn() !== 'active') {
+        SessionManagementService::destroyCurrentSession('terminated');
+        header("Location: " . $rel . "index.php?msg=session_ended");
+        exit();
+    }
+
     // 1. Session Status Enforcement
     if (!SessionManagementService::validateCurrentSession($userId)) {
         SessionManagementService::destroyCurrentSession('terminated');

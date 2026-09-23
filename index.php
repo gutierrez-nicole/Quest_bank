@@ -21,6 +21,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'logout') {
 $error_msg = "";
 $success_msg = "";
 $active_form = "login";
+$registrationTeachers = getDBConnection()->query("SELECT id, fullname FROM users WHERE role='teacher' AND status='active' ORDER BY fullname")->fetchAll(PDO::FETCH_ASSOC);
 
 if (isset($_GET['msg']) && $_GET['msg'] === 'session_ended') {
     $error_msg = "Session ended by administrator. Please log in again.";
@@ -60,7 +61,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $user = $stmt->fetch();
 
             if ($user && password_verify($password, $user['password'])) {
-                if ($maintenanceMode && $user['role'] !== 'admin') {
+                if (($user['status'] ?? 'active') !== 'active') {
+                    $error_msg = $user['status'] === 'pending' ? 'Your account is pending teacher approval. Please contact your teacher.' : 'Your account is not active. Please contact your teacher or administrator.';
+                } elseif ($maintenanceMode && $user['role'] !== 'admin') {
                     $error_msg = "System is currently under maintenance. Student and Teacher portal access is temporarily offline.";
                 } else {
                     regenerateSecureSession();
@@ -111,6 +114,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 try {
                     $pdo->beginTransaction();
+                    $approvalTeacher = (int)($_POST['teacher_id'] ?? 0);
+                    $teacherCheck = $pdo->prepare("SELECT id FROM users WHERE id=? AND role='teacher' AND status='active'");
+                    $teacherCheck->execute([$approvalTeacher]);
+                    if (!$teacherCheck->fetchColumn()) throw new Exception('Please select your teacher for approval.');
 
                     $check_stmt = $pdo->prepare("SELECT id FROM users WHERE email = ? OR username = ?");
                     $check_stmt->execute([$email, $username]);
@@ -118,7 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         throw new Exception("Username or Email already exists.");
                     }
 
-                    $stmt = $pdo->prepare("INSERT INTO users (fullname, username, email, password, role) VALUES (?, ?, ?, ?, ?)");
+                    $stmt = $pdo->prepare("INSERT INTO users (fullname, username, email, password, role, status) VALUES (?, ?, ?, ?, ?, 'pending')");
                     $stmt->execute([$fullname, $username, $email, $hashed_password, $role]);
                     $user_id = $pdo->lastInsertId();
 
@@ -134,8 +141,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt_student = $pdo->prepare("INSERT INTO student_details (user_id, student_number, course, year_level, section) VALUES (?, ?, ?, ?, ?)");
                     $stmt_student->execute([$user_id, $student_number, $course, $year_level, $section]);
 
+                    $request = $pdo->prepare("INSERT INTO student_requests (student_id, teacher_id, student_number, student_name, subject_name) VALUES (?, ?, ?, ?, 'Account approval')");
+                    $request->execute([$user_id, $approvalTeacher, $student_number, $fullname]);
                     $pdo->commit();
-                    $success_msg = "Student account registered successfully! You can now sign in.";
+                    $success_msg = "Registration submitted. Your teacher must accept your request in Student Roster before you can sign in.";
                     $active_form = "login";
                 } catch (Exception $e) {
                     $pdo->rollBack();
@@ -342,6 +351,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </div>
                     </div>
 
+                    <label class="block text-xs font-bold">Teacher for approval
+                        <select name="teacher_id" required class="w-full border rounded-lg p-2 text-xs text-stone-800 bg-white">
+                            <option value="">Choose your teacher</option>
+                            <?php foreach ($registrationTeachers as $registrationTeacher): ?>
+                            <option value="<?php echo (int)$registrationTeacher['id']; ?>"><?php echo htmlspecialchars($registrationTeacher['fullname']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </label>
                     <div id="student-fields" class="space-y-3 border-l-2 border-orange-500 pl-3 py-1">
                         <div class="grid grid-cols-2 gap-3">
                             <div>

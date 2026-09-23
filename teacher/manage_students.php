@@ -16,39 +16,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['handle_request'])) {
     $action_type = $_POST['action_type'] ?? '';
 
     if ($request_id > 0 && in_array($action_type, ['accept', 'reject'])) {
-        $status = ($action_type === 'accept') ? 'accepted' : 'rejected';
-        $stmt = $pdo->prepare("UPDATE student_requests SET status = ? WHERE id = ? AND teacher_id = ?");
-        $stmt->execute([$status, $request_id, $teacher_id]);
-
-        if ($action_type === 'accept') {
-            $reqStmt = $pdo->prepare("SELECT * FROM student_requests WHERE id = ?");
-            $reqStmt->execute([$request_id]);
-            $req = $reqStmt->fetch();
-            if ($req) {
-                $secId = $req['section_id'] ?? null;
-                if (!$secId) {
-                    $secStmt = $pdo->prepare("SELECT id FROM sections WHERE teacher_id = ? LIMIT 1");
-                    $secStmt->execute([$teacher_id]);
-                    $secId = $secStmt->fetchColumn();
-                    if (!$secId) {
-                        $insSec = $pdo->prepare("INSERT INTO sections (teacher_id, section_name, course_name, academic_year) VALUES (?, ?, ?, ?)");
-                        $insSec->execute([$teacher_id, "BSCE 4-A", "BS Civil Engineering", "2025-2026"]);
-                        $secId = $pdo->lastInsertId();
-                    }
+        try {
+            $pdo->beginTransaction();
+            $reqStmt = $pdo->prepare("SELECT * FROM student_requests WHERE id=? AND teacher_id=? AND status='pending' FOR UPDATE");
+            $reqStmt->execute([$request_id, $teacher_id]);
+            $req = $reqStmt->fetch(PDO::FETCH_ASSOC);
+            if (!$req) throw new RuntimeException('Pending request not found for your account.');
+            if ($action_type === 'accept') {
+                $requestedSection = $req['section_id'] ?: (int)($_POST['approval_section_id'] ?? 0);
+                $secStmt = $pdo->prepare("SELECT id FROM sections WHERE teacher_id=? AND id=?");
+                $secStmt->execute([$teacher_id, $requestedSection]);
+                $secId = $secStmt->fetchColumn();
+                if (!$secId) throw new RuntimeException('Select a section belonging to your roster before accepting this student.');
+                $check = $pdo->prepare("SELECT id FROM students WHERE teacher_id=? AND student_number=?");
+                $check->execute([$teacher_id, $req['student_number']]);
+                if (!$check->fetchColumn()) {
+                    $pdo->prepare("INSERT INTO students (teacher_id, section_id, student_number, fullname) VALUES (?, ?, ?, ?)")
+                        ->execute([$teacher_id, $secId, $req['student_number'], $req['student_name']]);
                 }
-
-                $checkRoster = $pdo->prepare("SELECT COUNT(*) FROM students WHERE student_number = ? AND teacher_id = ?");
-                $checkRoster->execute([$req['student_number'], $teacher_id]);
-                if ($checkRoster->fetchColumn() == 0) {
-                    $insRoster = $pdo->prepare("INSERT INTO students (teacher_id, section_id, student_number, fullname) VALUES (?, ?, ?, ?)");
-                    $insRoster->execute([$teacher_id, $secId, $req['student_number'], $req['student_name']]);
-                }
-                logActivity("Accepted student request for '{$req['student_name']}' ({$req['student_number']}) into section roster.");
+                $pdo->prepare("UPDATE users SET status='active' WHERE id=? AND role='student' AND status='pending'")->execute([$req['student_id']]);
             }
-        } else {
-            logActivity("Rejected student request ID {$request_id}.");
+            $pdo->prepare("UPDATE student_requests SET status=? WHERE id=? AND teacher_id=?")
+                ->execute([$action_type === 'accept' ? 'accepted' : 'rejected', $request_id, $teacher_id]);
+            $pdo->commit();
+            $success_msg = $action_type === 'accept' ? 'Student accepted into the roster. Pending account is now approved for sign-in.' : 'Request rejected. Account access has not been enabled.';
+            logActivity('Student request '.$request_id.' '.$action_type.' by teacher '.$teacher_id);
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            $error_msg = 'Unable to update request: '.htmlspecialchars($e->getMessage());
         }
-        $success_msg = "Student join request successfully " . ($action_type === 'accept' ? 'accepted and added to section roster' : 'rejected') . "!";
     }
 }
 
@@ -92,9 +88,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_student'])) {
             }
 
             
-            $secStmt = $pdo->prepare("SELECT section_name, course_name FROM sections WHERE id = ?");
-            $secStmt->execute([$section_id]);
+            $secStmt = $pdo->prepare("SELECT section_name, course_name FROM sections WHERE id = ? AND teacher_id = ?");
+            $secStmt->execute([$section_id, $teacher_id]);
             $secInfo = $secStmt->fetch(PDO::FETCH_ASSOC);
+            if (!$secInfo) throw new RuntimeException('Select a section belonging to your account.');
+            $pdo->beginTransaction();
+            $newAccount = false;
             $section_name = $secInfo['section_name'] ?? 'BSCE 4-A';
             $course_name = $secInfo['course_name'] ?? 'BS Civil Engineering';
 
@@ -105,12 +104,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_student'])) {
 
             if (!$user_id) {
                 $passHash = password_hash($student_password, PASSWORD_DEFAULT);
-                $insUsr = $pdo->prepare("INSERT INTO users (username, fullname, email, password, role, force_password_reset) VALUES (?, ?, ?, ?, 'student', 0)");
+                $insUsr = $pdo->prepare("INSERT INTO users (username, fullname, email, password, role, force_password_reset, status) VALUES (?, ?, ?, ?, 'student', 0, 'pending')");
                 $insUsr->execute([$student_number, $fullname, $email, $passHash]);
                 $user_id = $pdo->lastInsertId();
+                $newAccount = true;
             }
 
-            
+            $roleCheck = $pdo->prepare("SELECT role FROM users WHERE id=?");
+            $roleCheck->execute([$user_id]);
+            if ($roleCheck->fetchColumn() !== 'student') throw new RuntimeException('This account is not a student.');
+
             $insDetails = $pdo->prepare("
                 INSERT INTO student_details (user_id, student_number, course, year_level, section) 
                 VALUES (?, ?, ?, '3rd Year', ?) 
@@ -126,9 +129,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_student'])) {
                 $stmt->execute([$teacher_id, $section_id, $student_number, $fullname, $email]);
             }
 
+            if ($newAccount) {
+                $pdo->prepare("INSERT INTO student_requests (student_id, teacher_id, section_id, student_number, student_name, subject_name) VALUES (?, ?, ?, ?, ?, 'Account approval')")
+                    ->execute([$user_id, $teacher_id, $section_id, $student_number, $fullname]);
+            }
+            $pdo->commit();
             logActivity("Enrolled student '{$fullname}' ({$student_number}) into section '{$section_name}'.");
             $success_msg = "Student '{$fullname}' enrolled successfully! Login Username: <strong>{$student_number}</strong> | Default Password: <strong>{$student_password}</strong>";
-        } catch (PDOException $e) {
+            if ($newAccount) $success_msg .= " Account pending approval: accept the request below before the student can sign in.";
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
             $error_msg = "Error adding student: " . $e->getMessage();
         }
     } else {
@@ -275,6 +285,14 @@ try {
                                         <?php echo csrfInputField(); ?>
                                         <input type="hidden" name="request_id" value="<?php echo $req['id']; ?>">
                                         <input type="hidden" name="action_type" value="accept">
+                                        <?php if (empty($req['section_id'])): ?>
+                                        <select name="approval_section_id" required aria-label="Section for student approval" class="border rounded-lg p-2 text-xs max-w-40">
+                                            <option value="">Choose section</option>
+                                            <?php foreach ($sections as $approvalSection): ?>
+                                            <option value="<?php echo (int)$approvalSection['id']; ?>"><?php echo htmlspecialchars($approvalSection['section_name']); ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                        <?php endif; ?>
                                         <button type="submit" name="handle_request" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl shadow-sm">
                                             <i class="fa-solid fa-check mr-1"></i> Accept
                                         </button>

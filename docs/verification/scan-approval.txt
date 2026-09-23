@@ -1,0 +1,23 @@
+PASS: Existing active login
+PASS: Existing active login
+PASS: Public registration awaits approval
+PASS: Account stored pending
+PASS: Pending login blocked
+PASS: Other teacher cannot approve request
+PASS: Pending request visible in roster
+PASS: Owner acceptance activates student
+PASS: Existing active login
+PASS: Approved student accesses dashboard
+PASS: Existing session cannot bypass pending status
+PASS: Teacher-created account awaits acceptance
+PASS: Teacher-created request is queued
+PASS: Stable action field and always-visible result panel
+PASS: Three 2.55 MB pages processed and saved
+PASS: Scanned submission retains pending status
+PASS: Result panel identifies saved submission
+PASS: Saved scan appears in teacher Reports
+PASS: Pending scanned result remains private
+PASS: Oversized request shows actionable error
+PASS: One oversized page rejects whole batch
+PASS: Failed uploads do not save partial or duplicate results
+Completed 22 scan and approval checks.

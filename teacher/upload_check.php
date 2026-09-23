@@ -39,9 +39,14 @@ try {
 $success_msg = "";
 $error_msg = "";
 $evaluation_summary = null;
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && empty($_POST) && (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0) {
+    http_response_code(413);
+    $error_msg = 'Upload exceeds the server request limit ('.ini_get('post_max_size').'). Reduce image sizes or ask the server administrator to increase post_max_size and upload_max_filesize.';
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading'])) {
     validateCSRFToken();
+    try {
 
     $exam_id = intval($_POST['exam_id'] ?? 0);
     $student_id = intval($_POST['student_id'] ?? 0);
@@ -80,7 +85,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
             ];
         }
 
-        if (empty($rawUploadedFiles)) {
+        $uploadErrors = $_FILES['exam_files']['error'] ?? [$_FILES['exam_file']['error'] ?? UPLOAD_ERR_NO_FILE];
+        foreach ((array)$uploadErrors as $uploadError) {
+            if ((int)$uploadError !== UPLOAD_ERR_OK) {
+                $error_msg = in_array((int)$uploadError, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)
+                    ? 'A page exceeds the server file limit ('.ini_get('upload_max_filesize').'). Reduce its size and retry.'
+                    : 'One or more pages could not be uploaded. Please select all pages and retry.';
+                break;
+            }
+        }
+        if ($error_msg !== '') {
+            // Reject the entire upload rather than silently scoring only some pages.
+        } elseif (empty($rawUploadedFiles)) {
             $error_msg = "Please attach at least one valid answer sheet page or camera capture (JPG, PNG, PDF).";
         } else {
             $upload_dir = __DIR__ . '/../uploads/ocr_sheets/';
@@ -165,12 +181,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
                     logActivity("Processed multi-page OCR grading ({$pageCount} pages) for submission #{$evalRes['submission_id']} (Exam #{$exam_id}).", $teacher_id);
                     $success_msg = "Answer sheet ({$pageCount} page(s)) processed & scored server-side! Submission #{$evalRes['submission_id']} saved as Pending Review.";
                     $evaluation_summary = $evalRes;
+                    if (($ocrRes['status'] ?? '') !== 'completed' || !empty($ocrRes['suggested_manual_review'])) {
+                        $evaluation_summary['ocr_notice'] = 'OCR needs teacher verification. Compare the recognized answers with the original pages before finalizing this result.';
+                    }
 
                 } catch (Exception $e) {
-                    $error_msg = "Scoring Error: " . $e->getMessage();
+                    error_log('OCR scoring failed: '.$e->getMessage());
+                    $error_msg = 'The result could not be saved. Ask the server administrator to check the database migration and server log, then retry.';
                 }
             }
         }
+    }
+    } catch (Throwable $e) {
+        error_log('OCR processing failed: '.$e->getMessage());
+        $error_msg = 'Processing failed. Your result was not confirmed saved. Check the server OCR configuration and log before retrying.';
     }
 }
 ?>
@@ -217,6 +241,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
 
         <div class="flex-grow overflow-y-auto p-6 space-y-6">
 
+            <div id="ocrFeedback" role="status" aria-live="polite">
             <?php if (!empty($success_msg)): ?>
                 <div class="bg-emerald-50 border-l-4 border-emerald-500 p-4 rounded-xl text-xs font-semibold text-emerald-800 flex items-center justify-between">
                     <span class="flex items-center gap-2"><i class="fa-solid fa-circle-check text-emerald-600 text-sm"></i> <?php echo $success_msg; ?></span>
@@ -226,18 +251,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
 
             <?php if (!empty($error_msg)): ?>
                 <div class="bg-rose-50 border-l-4 border-rose-500 p-4 rounded-xl text-xs font-semibold text-rose-800 flex items-center justify-between">
-                    <span class="flex items-center gap-2"><i class="fa-solid fa-circle-exclamation text-rose-600 text-sm"></i> <?php echo $error_msg; ?></span>
+                    <span class="flex items-center gap-2"><i class="fa-solid fa-circle-exclamation text-rose-600 text-sm"></i> <?php echo htmlspecialchars($error_msg); ?></span>
                     <button onclick="this.parentElement.remove();" class="text-rose-500 hover:text-rose-800"><i class="fa-solid fa-xmark"></i></button>
                 </div>
             <?php endif; ?>
 
-            <div class="bg-white border border-stone-200 rounded-2xl p-6 shadow-sm max-w-3xl space-y-6">
+            </div>
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+            <div class="bg-white border border-stone-200 rounded-2xl p-4 sm:p-6 shadow-sm min-w-0 space-y-6">
                 <h3 class="text-sm font-extrabold text-stone-800 border-b border-stone-100 pb-3 flex items-center gap-2">
                     <i class="fa-solid fa-file-arrow-up text-orange-600"></i> Process Student Answer Sheet
                 </h3>
 
                 <form action="upload_check.php" method="POST" enctype="multipart/form-data" class="space-y-4" id="ocrUploadForm">
                     <?php echo csrfInputField(); ?>
+                    <input type="hidden" name="process_ocr_grading" value="1">
 
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
@@ -305,22 +333,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
                         </div>
                     </div>
 
-                    <button type="submit" name="process_ocr_grading" class="w-full bg-orange-gradient text-white font-bold text-xs py-3 rounded-xl shadow hover:opacity-95 transition-all flex items-center justify-center gap-2">
+                    <button type="submit" class="w-full bg-orange-gradient text-white font-bold text-xs py-3 rounded-xl shadow hover:opacity-95 transition-all flex items-center justify-center gap-2">
                         <i class="fa-solid fa-microchip"></i> Process & Grade Server-Side
                     </button>
                 </form>
             </div>
 
+            <section id="ocrResult" tabindex="-1" aria-live="polite" class="min-w-0">
             <?php if ($evaluation_summary): ?>
                 <div class="bg-white border border-stone-200 rounded-2xl p-6 shadow-sm space-y-4 max-w-3xl animate-fadeIn">
                     <div class="flex items-center justify-between border-b border-stone-100 pb-3">
-                        <h4 class="text-sm font-extrabold text-stone-800">Server-Calculated Submission Summary</h4>
+                        <h4 class="text-sm font-extrabold text-stone-800">Initial Scan Result — Pending Review</h4>
                         <span class="px-3 py-1 rounded-xl text-xs font-black uppercase bg-orange-100 text-orange-800">
                             Status: <?php echo htmlspecialchars($evaluation_summary['status']); ?>
                         </span>
                     </div>
 
-                    <div class="grid grid-cols-3 gap-4 text-center">
+                    <p class="text-sm font-semibold"><?php echo htmlspecialchars($examObj['title']); ?> — <?php echo htmlspecialchars($eligibleStudents[array_search($student_id, $eligibleIds)]['fullname'] ?? 'Selected student'); ?></p>
+                    <p class="text-xs text-amber-800">Saved for teacher review. This result is not yet published to the student.</p>
+                    <?php if (!empty($evaluation_summary['ocr_notice'])): ?>
+                    <p class="text-xs bg-amber-50 border border-amber-200 p-3 rounded-xl text-amber-900"><?php echo htmlspecialchars($evaluation_summary['ocr_notice']); ?></p>
+                    <?php endif; ?>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
                         <div class="p-3 bg-stone-50 rounded-xl border border-stone-200">
                             <p class="text-[10px] uppercase font-bold text-stone-400">Awarded Points</p>
                             <p class="text-lg font-black text-stone-800"><?php echo number_format($evaluation_summary['total_awarded_points'], 2); ?> / <?php echo number_format($evaluation_summary['total_possible_points'], 2); ?></p>
@@ -391,8 +425,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
                         </a>
                     </div>
                 </div>
+            <?php else: ?>
+                <div class="bg-white border border-dashed border-orange-200 rounded-2xl p-6 text-sm text-stone-500">
+                    <h3 class="font-bold text-stone-800 mb-2">Scan Result</h3>
+                    Select an exam and student, add every answer-sheet page, then click Process &amp; Grade. The saved result will appear here.
+                </div>
             <?php endif; ?>
-
+            </section>
+            </div>
         </div>
     </main>
 
@@ -1093,28 +1133,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
 
             const form = this;
             const submitBtn = form.querySelector('button[type="submit"]');
+            if (submitBtn.disabled) { e.preventDefault(); return; }
             submitBtn.disabled = true;
             submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i> Submitting & Processing Multi-Page OCR...';
-
-            if (window.DataTransfer) {
-                try {
-                    const dt = new DataTransfer();
-                    if (capturedPages.length > 0) {
-                        capturedPages.forEach((p) => {
-                            const f = (p.blob instanceof File) ? p.blob : new File([p.blob], p.filename, { type: 'image/jpeg' });
-                            dt.items.add(f);
-                        });
-                    } else if (selectedFileObjects.length > 0) {
-                        selectedFileObjects.forEach((f) => {
-                            dt.items.add(f);
-                        });
-                    }
-                    document.getElementById('examFileInput').files = dt.files;
-                    return true;
-                } catch (dtErr) {
-                    console.warn("DataTransfer population fallback to FormData fetch:", dtErr);
-                }
-            }
 
             e.preventDefault();
 
@@ -1132,7 +1153,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
                 });
             }
 
-            formData.append('process_ocr_grading', '1');
+            formData.set('process_ocr_grading', '1');
 
             fetch('upload_check.php', {
                 method: 'POST',
@@ -1140,12 +1161,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_ocr_grading']
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest'
                 }
-            }).then(r => r.text()).then(html => {
-                document.documentElement.innerHTML = html;
-                window.scrollTo(0, 0);
+            }).then(async r => {
+                const html = await r.text();
+                if (r.redirected) throw new Error('Your session may have expired. Sign in again before retrying.');
+                const page = new DOMParser().parseFromString(html, 'text/html');
+                const feedback = page.getElementById('ocrFeedback');
+                const result = page.getElementById('ocrResult');
+                if (!feedback || !result) throw new Error('Server could not process the upload (HTTP ' + r.status + '). Check upload limits and the server log.');
+                document.getElementById('ocrFeedback').innerHTML = feedback.innerHTML;
+                document.getElementById('ocrResult').innerHTML = result.innerHTML;
+                const saved = result.textContent.includes('Submission ID:');
+                const target = document.getElementById(saved ? 'ocrResult' : 'ocrFeedback');
+                target.scrollIntoView({behavior: 'smooth', block: 'start'});
+                if (saved) {
+                    capturedPages = [];
+                    selectedFileObjects = [];
+                    document.getElementById('examFileInput').value = '';
+                    renderPagesTray();
+                }
             }).catch(err => {
                 console.error("Multi-page upload submission error:", err);
-                alert("Network or upload error occurred. Please try again.");
+                const feedback = document.getElementById('ocrFeedback');
+                feedback.textContent = err.message + ' Your selected pages remain available. Check Reports before retrying if the connection was interrupted.';
+                feedback.scrollIntoView({behavior: 'smooth', block: 'start'});
+            }).finally(() => {
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = '<i class="fa-solid fa-microchip mr-2"></i> Process & Grade Server-Side';
             });

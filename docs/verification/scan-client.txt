@@ -1,0 +1,4 @@
+PASS: success preserves action, sends all pages, handles result, prevents duplicate and restores button
+PASS: limit preserves action, sends all pages, handles result, prevents duplicate and restores button
+PASS: network preserves action, sends all pages, handles result, prevents duplicate and restores button
+PASS: expired preserves action, sends all pages, handles result, prevents duplicate and restores button
